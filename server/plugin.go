@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 	"net/url"
-	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -392,6 +392,69 @@ func (p *Plugin) UserHasUpdated(_ *plugin.Context, user *model.User, _ *model.Us
 	if err := p.mattermostToMatrixBridge.SyncUserToMatrix(user); err != nil {
 		p.logger.LogError("Failed to sync user update to Matrix", "user_id", user.Id, "username", user.Username, "error", err)
 	}
+}
+
+// ChannelHasBeenCreated is called when a new channel is created in Mattermost
+func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.matrixClient == nil {
+		return
+	}
+
+	// We support bridging Public (Open) and Private channels
+	isPublic := channel.Type == model.ChannelTypeOpen
+	if !isPublic && channel.Type != model.ChannelTypePrivate {
+		// Ignore DMs, GM, etc. for now, only handle standard channels
+		return
+	}
+
+	p.logger.LogInfo("New channel created, creating Matrix room", "channel_id", channel.Id, "channel_name", channel.Name, "type", channel.Type)
+
+	// Extract Server Domain from MatrixServerURL
+	serverDomain := "example.com"
+	if u, err := url.Parse(config.MatrixServerURL); err == nil {
+		host := u.Host
+		if strings.Contains(host, ":") {
+			host = strings.Split(host, ":")[0]
+		}
+		serverDomain = host
+	}
+
+	// Prepare room details
+	roomName := channel.DisplayName
+	if roomName == "" {
+		roomName = channel.Name
+	}
+	topic := channel.Header
+	if topic == "" {
+		topic = channel.Purpose
+	}
+
+	// Create the Matrix room
+	// Note: isPublic flag controls visibility and presets (PublicChat vs PrivateChat)
+	roomID, err := p.matrixClient.CreateRoom(roomName, topic, serverDomain, isPublic, channel.Id)
+	if err != nil {
+		p.logger.LogError("Failed to create Matrix room for new channel", "channel_name", channel.Name, "error", err)
+		return
+	}
+
+	p.logger.LogInfo("Created Matrix room for new channel", "room_id", roomID, "channel_name", channel.Name)
+
+	// Automatically map the created room to this channel (both directions)
+	mappingKey := kvstore.BuildChannelMappingKey(channel.Id)
+	if err := p.kvstore.Set(mappingKey, []byte(roomID)); err != nil {
+		p.logger.LogError("Failed to save channel mapping", "error", err, "channel_id", channel.Id, "room_id", roomID)
+	}
+
+	// Store reverse mapping: room_mapping_<roomID> -> channelID
+	roomMappingKey := kvstore.BuildRoomMappingKey(roomID)
+	if err := p.kvstore.Set(roomMappingKey, []byte(channel.Id)); err != nil {
+		p.logger.LogError("Failed to save reverse room mapping", "error", err, "channel_id", channel.Id, "room_id", roomID)
+	}
+
+	// For private channels, we should ideally invite the creator or members currently in it.
+	// However, ChannelHasBeenCreated fires before members are added in some contexts, or just for the creator.
+	// The UserHasJoinedChannel hook will handle adding users as they are added to the channel.
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/

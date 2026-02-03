@@ -258,8 +258,8 @@ const (
 	mapUserCommandDesc   = "Map a local Mattermost user to a specific Matrix user ID (e.g. for admins)"
 	mapUserCommandHint   = "[mattermost_username] [matrix_user_id]"
 	mapUserCommandUsage  = "Usage: /matrix map_user @username @user:server.com"
-	mapUserSuccess       = "✅ Successfully mapped Mattermost user `@{0}` to Matrix user `{1}`"
-	mapUserFailed        = "❌ Failed to map user: {0}"
+	mapUserSuccess       = "✅ Successfully mapped Mattermost user `@%s` to Matrix user `%s`"
+	mapUserFailed        = "❌ Failed to map user: %s"
 	mapUserInvalidMatrix = "❌ Invalid Matrix User ID. Must look like `@user:server.com`"
 )
 
