@@ -253,6 +253,14 @@ const (
 	testCommandNextSteps = "\n📋 **Next Steps:**\n" +
 		"   • Use `/matrix create \"Room Name\"` to create a Matrix room\n" +
 		"   • The channel will be automatically configured for syncing\n"
+
+	// Map User messages
+	mapUserCommandDesc   = "Map a local Mattermost user to a specific Matrix user ID (e.g. for admins)"
+	mapUserCommandHint   = "[mattermost_username] [matrix_user_id]"
+	mapUserCommandUsage  = "Usage: /matrix map_user @username @user:server.com"
+	mapUserSuccess       = "✅ Successfully mapped Mattermost user `@{0}` to Matrix user `{1}`"
+	mapUserFailed        = "❌ Failed to map user: {0}"
+	mapUserInvalidMatrix = "❌ Invalid Matrix User ID. Must look like `@user:server.com`"
 )
 
 // NewCommandHandler creates and registers all slash commands for the Matrix Bridge plugin.
@@ -275,6 +283,12 @@ func NewCommandHandler(plugin PluginAccessor) Command {
 	mapCmd := model.NewAutocompleteData("map", mapCommandHint, mapCommandDesc)
 	mapCmd.AddTextArgument("Matrix room alias or room ID", "[room_alias|room_id]", "")
 	matrixData.AddCommand(mapCmd)
+
+	// Map User command
+	mapUserCmd := model.NewAutocompleteData("map_user", mapUserCommandHint, mapUserCommandDesc)
+	mapUserCmd.AddTextArgument("Mattermost username", "[username]", "")
+	mapUserCmd.AddTextArgument("Matrix User ID", "[matrix_id]", "")
+	matrixData.AddCommand(mapUserCmd)
 
 	// Unmap command
 	matrixData.AddCommand(model.NewAutocompleteData("unmap", unmapCommandHint, unmapCommandDesc))
@@ -326,6 +340,49 @@ func (c *Handler) getMatrixClientOrError() (*matrix.Client, *model.CommandRespon
 		}
 	}
 	return matrixClient, nil
+}
+
+func (c *Handler) executeMapUserCommand(args *model.CommandArgs, username, matrixUserID string) *model.CommandResponse {
+	// 1. Parse the username (remove leading @ if present).
+	username = strings.TrimPrefix(username, "@")
+
+	// 2. Parse the Matrix User ID (must start with @).
+	if !strings.HasPrefix(matrixUserID, "@") || !strings.Contains(matrixUserID, ":") {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         mapUserInvalidMatrix,
+		}
+	}
+
+	// 3. Lookup the Mattermost user by username
+	user, appErr := c.client.User.GetByUsername(username)
+	if appErr != nil {
+		c.client.Log.Warn("Failed to find user for mapping", "error", appErr, "username", username)
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         fmt.Sprintf(mapUserFailed, "User not found or error accessing database"),
+		}
+	}
+
+	// 4. Map the user ID in the KVStore
+	// Key: ghost_user_<mmUserID> -> Value: <matrixUserID>
+	// This overrides the ghost user lookup to point to a real Matrix user
+	key := kvstore.BuildGhostUserKey(user.Id)
+	if err := c.kvstore.Set(key, []byte(matrixUserID)); err != nil {
+		c.client.Log.Error("Failed to save user mapping", "error", err, "user_id", user.Id, "matrix_user_id", matrixUserID)
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         fmt.Sprintf(mapUserFailed, "Failed to save to KVStore"),
+		}
+	}
+
+	c.client.Log.Info("Successfully mapped Mattermost user to Matrix user", "username", username, "user_id", user.Id, "matrix_user_id", matrixUserID)
+
+	// 5. Return success message.
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         fmt.Sprintf(mapUserSuccess, username, matrixUserID),
+	}
 }
 
 func (c *Handler) executeMapCommand(args *model.CommandArgs, roomIdentifier string) *model.CommandResponse {
@@ -829,6 +886,16 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		}
 		roomID := fields[2]
 		return c.executeMapCommand(args, roomID)
+	case "map_user":
+		if len(fields) < 4 {
+			return &model.CommandResponse{
+				ResponseType: model.CommandResponseTypeEphemeral,
+				Text:         mapUserCommandUsage,
+			}
+		}
+		username := fields[2]
+		matrixUserID := fields[3]
+		return c.executeMapUserCommand(args, username, matrixUserID)
 	case "unmap":
 		return c.executeUnmapCommand(args)
 	case "list":

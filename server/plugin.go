@@ -2,6 +2,8 @@ package main
 
 import (
 	"net/http"
+	"net/url"
+	"fmt"
 	"sync"
 	"time"
 
@@ -355,6 +357,40 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 		} else {
 			p.logger.LogInfo("Successfully joined ghost user to Matrix room", "ghost_user_id", ghostUserID, "room_id", resolvedRoomID, "mattermost_user_id", user.Id, "username", user.Username)
 		}
+	}
+}
+
+// UserHasBeenCreated is called when a new user is created in Mattermost
+func (p *Plugin) UserHasBeenCreated(_ *plugin.Context, user *model.User) {
+	if user.IsBot {
+		return
+	}
+
+	config := p.getConfiguration()
+	if !config.EnableSync {
+		return
+	}
+
+	p.logger.LogDebug("User created, ensuring Matrix ghost user exists", "user_id", user.Id, "username", user.Username)
+	if _, err := p.CreateOrGetGhostUser(user.Id); err != nil {
+		p.logger.LogError("Failed to create ghost user for new user", "user_id", user.Id, "username", user.Username, "error", err)
+	}
+}
+
+// UserHasUpdated is called when a user is updated in Mattermost
+func (p *Plugin) UserHasUpdated(_ *plugin.Context, user *model.User, _ *model.User) {
+	if user.IsBot {
+		return
+	}
+
+	config := p.getConfiguration()
+	if !config.EnableSync {
+		return
+	}
+
+	p.logger.LogDebug("User updated, syncing to Matrix", "user_id", user.Id, "username", user.Username)
+	if err := p.mattermostToMatrixBridge.SyncUserToMatrix(user); err != nil {
+		p.logger.LogError("Failed to sync user update to Matrix", "user_id", user.Id, "username", user.Username, "error", err)
 	}
 }
 

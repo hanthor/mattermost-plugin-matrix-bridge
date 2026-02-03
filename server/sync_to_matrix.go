@@ -243,15 +243,38 @@ func (b *MattermostToMatrixBridge) SyncUserToMatrix(user *model.User) error {
 
 	b.logger.LogDebug("Found ghost user for user sync", "user_id", user.Id, "ghost_user_id", ghostUserID)
 
+	// If the user isn't a ghost (doesn't start with defined prefix), do not attempt to update profile.
+	// This supports custom mapping to real Matrix users without errors.
+	if !strings.HasPrefix(ghostUserID, "@_mattermost_") {
+		b.logger.LogDebug("Skipping profile sync for non-ghost user", "user_id", user.Id, "ghost_user_id", ghostUserID)
+		return nil
+	}
+
 	// Update display name
 	displayName := user.GetDisplayName(model.ShowFullName)
 	if displayName != "" {
 		err := b.matrixClient.SetDisplayName(ghostUserID, displayName)
 		if err != nil {
 			b.logger.LogError("Failed to update ghost user display name", "error", err, "user_id", user.Id, "ghost_user_id", ghostUserID, "display_name", displayName)
-			return errors.Wrap(err, "failed to update ghost user display name on Matrix")
+			// Continue to avatar update even if display name fails
+		} else {
+			b.logger.LogDebug("Updated ghost user display name", "user_id", user.Id, "ghost_user_id", ghostUserID, "display_name", displayName)
 		}
-		b.logger.LogDebug("Updated ghost user display name", "user_id", user.Id, "ghost_user_id", ghostUserID, "display_name", displayName)
+	}
+
+	// Update avatar
+	if imageData, appErr := b.API.GetProfileImage(user.Id); appErr == nil && len(imageData) > 0 {
+		// Upload avatar to Matrix
+		mxcURI, err := b.matrixClient.UploadAvatarFromData(imageData, "image/png")
+		if err != nil {
+			b.logger.LogError("Failed to upload avatar for user update", "error", err, "user_id", user.Id)
+		} else {
+			if err := b.matrixClient.SetAvatarURL(ghostUserID, mxcURI); err != nil {
+				b.logger.LogError("Failed to set avatar URL for user update", "error", err, "user_id", user.Id)
+			} else {
+				b.logger.LogDebug("Updated ghost user avatar", "user_id", user.Id, "ghost_user_id", ghostUserID)
+			}
+		}
 	}
 
 	return nil
