@@ -40,6 +40,7 @@ type BridgeUtilsConfig struct {
 	MaxProfileImageSize int64
 	MaxFileSize         int64
 	ConfigGetter        ConfigurationGetter
+	Metrics             *Metrics
 }
 
 // BridgeUtils contains common utilities used by both bridge types
@@ -52,6 +53,7 @@ type BridgeUtils struct {
 	maxProfileImageSize int64
 	maxFileSize         int64
 	configGetter        ConfigurationGetter
+	metrics             *Metrics
 }
 
 // NewBridgeUtils creates a new BridgeUtils instance
@@ -65,6 +67,7 @@ func NewBridgeUtils(config BridgeUtilsConfig) *BridgeUtils {
 		maxProfileImageSize: config.MaxProfileImageSize,
 		maxFileSize:         config.MaxFileSize,
 		configGetter:        config.ConfigGetter,
+		metrics:             config.Metrics,
 	}
 }
 

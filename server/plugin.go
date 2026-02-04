@@ -47,6 +47,9 @@ type Plugin struct {
 	// pendingFiles tracks uploaded files awaiting their posts
 	pendingFiles *PendingFileTracker
 
+	// metrics collects telemetry and performance data
+	metrics *Metrics
+
 	// remoteID is the identifier returned by RegisterPluginForSharedChannels
 	remoteID string
 
@@ -93,6 +96,7 @@ func (p *Plugin) OnActivate() error {
 
 	p.postTracker = NewPostTracker(DefaultPostTrackerMaxEntries)
 	p.pendingFiles = NewPendingFileTracker()
+	p.metrics = NewMetrics()
 
 	// Initialize file size limits with default values
 	p.maxProfileImageSize = DefaultMaxProfileImageSize
@@ -167,6 +171,7 @@ func (p *Plugin) initBridges() {
 		MaxProfileImageSize: p.maxProfileImageSize,
 		MaxFileSize:         p.maxFileSize,
 		ConfigGetter:        p,
+		Metrics:             p.metrics,
 	})
 
 	// Create bridge instances
@@ -227,6 +232,31 @@ func (p *Plugin) GetKVStore() kvstore.KVStore {
 // GetConfiguration returns the plugin configuration
 func (p *Plugin) GetConfiguration() command.Configuration {
 	return p.getConfiguration()
+}
+
+// GetMetrics returns the metrics collector wrapped to satisfy the command interface
+func (p *Plugin) GetMetrics() interface {
+	GetMessagesToMatrix() uint64
+	GetMessagesFromMatrix() uint64
+	GetMessageSyncErrors() uint64
+	GetMessageEditsSynced() uint64
+	GetReactionsAdded() uint64
+	GetReactionsRemoved() uint64
+	GetGhostUsersCreated() uint64
+	GetRoomsCreated() uint64
+	GetChannelsCreated() uint64
+	GetUsersSynced() uint64
+	GetMatrixAPICalls() uint64
+	GetMatrixAPIErrors() uint64
+	GetMatrixAPIRetries() uint64
+	GetMessageLatencyAvg() float64
+	GetMessageLatencyMax() uint64
+	GetAPILatencyAvg() float64
+	GetAPILatencyMax() uint64
+	GetErrorsByType() map[string]uint64
+	GetUptime() time.Duration
+} {
+	return p.metrics
 }
 
 // CreateOrGetGhostUser gets an existing ghost user or creates a new one for a Mattermost user

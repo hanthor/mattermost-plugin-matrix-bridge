@@ -102,6 +102,10 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 	} else {
 		b.logger.LogDebug("Created new ghost user", "mattermost_user_id", userID, "ghost_user_id", ghostUser.UserID)
 	}
+	
+	// Record ghost user creation
+	b.metrics.RecordGhostUserCreated()
+	
 	return ghostUser.UserID, nil
 }
 
@@ -497,6 +501,10 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	}
 
 	b.logger.LogDebug("Successfully created post in Matrix", "post_id", post.Id, "ghost_user_id", ghostUserID, "event_id", sendResponse.EventID)
+	
+	// Record successful message sync
+	b.metrics.RecordMessageToMatrix()
+	
 	return nil
 }
 

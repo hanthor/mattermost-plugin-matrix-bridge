@@ -270,12 +270,23 @@ func NewClientWithRateLimit(serverURL, asToken, remoteID string, api plugin.API,
 
 // NewClientWithLoggerAndRateLimit creates a new Matrix client with custom logger and rate limiting.
 func NewClientWithLoggerAndRateLimit(serverURL, asToken, remoteID string, logger Logger, rateLimitConfig RateLimitConfig) *Client {
+	// Configure HTTP transport with connection pooling for better performance
+	transport := &http.Transport{
+		MaxIdleConns:        100,              // Maximum idle connections across all hosts
+		MaxIdleConnsPerHost: 10,               // Maximum idle connections per host
+		MaxConnsPerHost:     50,               // Maximum connections per host (including active)
+		IdleConnTimeout:     90 * time.Second, // How long idle connections stay open
+		DisableKeepAlives:   false,            // Enable HTTP keep-alive
+		ForceAttemptHTTP2:   true,             // Try HTTP/2 if available
+	}
+
 	client := &Client{
 		serverURL: serverURL,
 		asToken:   asToken,
 		remoteID:  remoteID,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: transport,
 		},
 		logger:          logger,
 		rateLimitConfig: rateLimitConfig,

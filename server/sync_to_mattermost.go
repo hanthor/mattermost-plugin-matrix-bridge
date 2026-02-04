@@ -159,6 +159,10 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 	b.storeMatrixEventPostMapping(event.EventID, createdPost.Id)
 
 	b.logger.LogDebug("Successfully synced Matrix message to Mattermost", "matrix_event_id", event.EventID, "mattermost_post_id", createdPost.Id, "sender", event.Sender, "channel_id", channelID)
+	
+	// Record successful message sync from Matrix
+	b.metrics.RecordMessageFromMatrix()
+	
 	return nil
 }
 
