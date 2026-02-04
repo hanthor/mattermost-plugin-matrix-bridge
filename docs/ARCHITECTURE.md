@@ -741,13 +741,29 @@ Possible metrics to track:
 
 ## Future Enhancements
 
-### Planned Features
-- Message edit/delete sync
-- Reaction bridging
+### Features (Implementation Status)
+
+#### ✅ Implemented (Just Need Hook Wiring)
+- **Message edit sync** - Logic exists in `SyncPostToMatrix`, just needs `MessageHasBeenUpdated` hook
+- **Reaction bridging** - Full implementation in `SyncReactionToMatrix`, needs `ReactionHasBeenAdded`/`ReactionHasBeenRemoved` hooks
+- **Threaded conversations** - Already working! Checks `post.RootId` and uses Matrix thread relations
+
+#### 🚧 Partially Implemented
+- **Message deletion sync** - Reaction removal works, post deletion needs hook implementation
+
+#### 📋 Planned
 - Typing indicators
-- Read receipts
-- Threaded conversations
+- Read receipts  
 - Presence sync
+- End-to-end encryption (E2EE) - requires significant work, see below
+
+#### ❌ Not Feasible
+- **E2EE Support** - Fundamentally incompatible with bridge architecture
+  - Would require Olm/Megolm crypto implementation
+  - Messages must be decrypted at bridge (defeats E2EE purpose)
+  - Stored unencrypted in Mattermost
+  - Security/compliance concerns
+  - **Recommendation**: Don't bridge E2EE rooms, use unencrypted rooms for bridging
 
 ### Technical Improvements
 - Caching layer

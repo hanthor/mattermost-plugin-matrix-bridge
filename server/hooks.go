@@ -2,8 +2,65 @@ package main
 
 import (
 	"github.com/mattermost/mattermost/server/public/model"
+	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
 )
+
+// ReactionHasBeenAdded is called when a reaction is added to a post
+func (p *Plugin) ReactionHasBeenAdded(_ *plugin.Context, reaction *model.Reaction) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.matrixClient == nil {
+		return
+	}
+
+	// Get the post to determine the channel
+	post, appErr := p.API.GetPost(reaction.PostId)
+	if appErr != nil {
+		p.logger.LogError("Failed to get post for reaction", "error", appErr, "post_id", reaction.PostId)
+		return
+	}
+
+	if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(reaction, post.ChannelId); err != nil {
+		p.logger.LogError("Failed to sync reaction addition to Matrix", "error", err, "post_id", reaction.PostId, "user_id", reaction.UserId)
+	}
+}
+
+// ReactionHasBeenRemoved is called when a reaction is removed from a post
+func (p *Plugin) ReactionHasBeenRemoved(_ *plugin.Context, reaction *model.Reaction) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.matrixClient == nil {
+		return
+	}
+
+	// Get the post to determine the channel
+	post, appErr := p.API.GetPost(reaction.PostId)
+	if appErr != nil {
+		p.logger.LogError("Failed to get post for reaction removal", "error", appErr, "post_id", reaction.PostId)
+		return
+	}
+
+	if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(reaction, post.ChannelId); err != nil {
+		p.logger.LogError("Failed to sync reaction removal to Matrix", "error", err, "post_id", reaction.PostId, "user_id", reaction.UserId)
+	}
+}
+
+// MessageHasBeenUpdated is called when a post is edited
+func (p *Plugin) MessageHasBeenUpdated(_ *plugin.Context, newPost, oldPost *model.Post) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.matrixClient == nil {
+		return
+	}
+
+	// Skip if the post originated from Matrix to prevent loops
+	if newPost.GetRemoteID() == p.remoteID {
+		return
+	}
+
+	if err := p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId); err != nil {
+		p.logger.LogError("Failed to sync post edit to Matrix", "error", err, "post_id", newPost.Id)
+	}
+}
+
 
 // OnSharedChannelsSyncMsg is called when messages need to be synced from Mattermost to Matrix
 func (p *Plugin) OnSharedChannelsSyncMsg(msg *model.SyncMsg, _ *model.RemoteCluster) (model.SyncResponse, error) {
