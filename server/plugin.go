@@ -452,9 +452,44 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 		p.logger.LogError("Failed to save reverse room mapping", "error", err, "channel_id", channel.Id, "room_id", roomID)
 	}
 
-	// For private channels, we should ideally invite the creator or members currently in it.
-	// However, ChannelHasBeenCreated fires before members are added in some contexts, or just for the creator.
-	// The UserHasJoinedChannel hook will handle adding users as they are added to the channel.
+	// If the channel belongs to a team, add it to the team's Matrix space
+	if channel.TeamId != "" {
+		// Look up Space ID for the team
+		spaceIDBytes, err := p.kvstore.Get(kvstore.BuildTeamMappingKey(channel.TeamId))
+		if err == nil && spaceIDBytes != nil {
+			spaceID := string(spaceIDBytes)
+			if err := p.matrixClient.AddSpaceChild(spaceID, roomID, []string{serverDomain}); err != nil {
+				p.logger.LogError("Failed to add room to team space", "error", err, "space_id", spaceID, "room_id", roomID)
+			} else {
+				p.logger.LogDebug("Added room to team space", "space_id", spaceID, "room_id", roomID)
+			}
+		}
+	}
+}
+
+// TeamHasBeenCreated is called when a new team is created in Mattermost
+func (p *Plugin) TeamHasBeenCreated(_ *plugin.Context, team *model.Team) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.matrixClient == nil {
+		return
+	}
+
+	p.logger.LogInfo("New team created, creating Matrix space", "team_id", team.Id, "team_name", team.Name)
+
+	// Create Matrix Space
+	// Note: CreateSpace automatically handles server domain for alias creation
+	spaceID, err := p.matrixClient.CreateSpace(team.DisplayName, team.Description, team.Name)
+	if err != nil {
+		p.logger.LogError("Failed to create Matrix space for team", "team_name", team.Name, "error", err)
+		return
+	}
+
+	p.logger.LogInfo("Created Matrix space for new team", "space_id", spaceID, "team_name", team.Name)
+
+	// Save mapping
+	if err := p.kvstore.Set(kvstore.BuildTeamMappingKey(team.Id), []byte(spaceID)); err != nil {
+		p.logger.LogError("Failed to save team mapping", "error", err, "team_id", team.Id, "space_id", spaceID)
+	}
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/

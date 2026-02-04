@@ -1088,6 +1088,150 @@ func (c *Client) CreateDirectRoom(ghostUserIDs []string, roomName string) (strin
 	return response.RoomID, nil
 }
 
+// CreateSpace creates a new Matrix space.
+// It returns the space RoomID.
+func (c *Client) CreateSpace(name, topic, aliasLocalPart string) (string, error) {
+	if c.serverURL == "" || c.asToken == "" {
+		return "", errors.New("matrix client not configured")
+	}
+
+	// Apply rate limiting for room creation
+	if err := c.waitForRateLimit(c.roomCreationLimiter, "Space creation"); err != nil {
+		return "", err
+	}
+
+	c.logger.LogDebug("Creating Matrix space", "name", name, "alias_local_part", aliasLocalPart)
+
+	roomData := map[string]any{
+		"name":  name,
+		"topic": topic,
+		"creation_content": map[string]any{
+			"type": "m.space",
+		},
+		"preset":     "public_chat",
+		"visibility": "public",
+		"power_level_content_override": map[string]any{
+			"invite": 0,
+		},
+	}
+
+	if aliasLocalPart != "" {
+		// Try to extract server domain to construct full alias
+		domain, err := c.extractServerDomain()
+		if err == nil && domain != "" {
+			roomData["room_alias_name"] = aliasLocalPart
+		}
+	}
+
+	jsonData, err := json.Marshal(roomData)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to marshal space creation data")
+	}
+
+	url := c.serverURL + "/_matrix/client/v3/createRoom"
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create space creation request")
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to send space creation request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read space creation response")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		matrixErr := parseMatrixError(resp.StatusCode, body)
+		if IsRateLimitError(matrixErr) {
+			c.logger.LogWarn("Matrix space creation rate limited", "status_code", resp.StatusCode)
+			return "", matrixErr
+		}
+		c.logger.LogError("Matrix space creation failed", "status_code", resp.StatusCode, "response", string(body))
+		return "", matrixErr
+	}
+
+	var response struct {
+		RoomID string `json:"room_id"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", errors.Wrap(err, "failed to unmarshal space creation response")
+	}
+
+	c.logger.LogInfo("Matrix space created successfully", "room_id", response.RoomID, "name", name)
+
+	// Join the application service bot to the space
+	if err := c.JoinRoom(response.RoomID); err != nil {
+		c.logger.LogWarn("Failed to join application service bot to created space", "room_id", response.RoomID, "error", err)
+	}
+
+	return response.RoomID, nil
+}
+
+// AddSpaceChild adds a child room to a parent space using m.space.child state event.
+func (c *Client) AddSpaceChild(spaceID, childRoomID string, via []string) error {
+	if c.serverURL == "" || c.asToken == "" {
+		return errors.New("matrix client not configured")
+	}
+
+	if len(via) == 0 {
+		// Try to add our own server domain if none provided
+		domain, err := c.extractServerDomain()
+		if err == nil && domain != "" {
+			via = []string{domain}
+		}
+	}
+
+	c.logger.LogDebug("Adding child to space", "space_id", spaceID, "child_room_id", childRoomID, "via", via)
+
+	content := map[string]any{
+		"via": via,
+	}
+
+	// Create request for PUT /_matrix/client/v3/rooms/{roomId}/state/{eventType}/{stateKey}
+	urlPath := fmt.Sprintf("/_matrix/client/v3/rooms/%s/state/m.space.child/%s", url.PathEscape(spaceID), url.PathEscape(childRoomID))
+	fullURL := c.serverURL + urlPath
+
+	jsonData, err := json.Marshal(content)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal space child content")
+	}
+
+	req, err := http.NewRequest("PUT", fullURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return errors.Wrap(err, "failed to create space child request")
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send space child request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "failed to read space child response")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to add space child: %d %s", resp.StatusCode, string(body))
+	}
+
+	c.logger.LogInfo("Successfully added child to space", "space_id", spaceID, "child_room_id", childRoomID)
+	return nil
+}
+
 // extractServerDomain extracts the hostname from the Matrix server URL
 func (c *Client) extractServerDomain() (string, error) {
 	// Use explicit server domain if set (for testing)

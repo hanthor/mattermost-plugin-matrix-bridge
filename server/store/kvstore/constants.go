@@ -34,6 +34,9 @@ const (
 	KeyPrefixLegacyDMMapping = "dm_mapping_"
 	// KeyPrefixLegacyMatrixDMMapping was the old prefix for Matrix DM mappings (migrated to room_mapping_)
 	KeyPrefixLegacyMatrixDMMapping = "matrix_dm_mapping_"
+
+	// KeyPrefixTeamMapping is the prefix for Mattermost team ID -> Matrix space mappings
+	KeyPrefixTeamMapping = "team_mapping_"
 )
 
 // Helper functions for building KV store keys
@@ -76,4 +79,9 @@ func BuildMatrixEventPostKey(matrixEventID string) string {
 // BuildMatrixReactionKey creates a key for Matrix reaction storage
 func BuildMatrixReactionKey(reactionEventID string) string {
 	return KeyPrefixMatrixReaction + reactionEventID
+}
+
+// BuildTeamMappingKey creates a key for team -> space mapping
+func BuildTeamMappingKey(teamID string) string {
+	return KeyPrefixTeamMapping + teamID
 }
