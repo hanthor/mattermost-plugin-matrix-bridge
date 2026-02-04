@@ -56,6 +56,11 @@ type PluginAccessor interface {
 	// Migration access
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
+
+	// Backfill synchronization
+	SyncUser(userID string) error
+	SyncTeam(teamID string) error
+	SyncChannel(channelID string) error
 }
 
 // sanitizeShareName creates a valid ShareName matching the regex: ^[a-z0-9]+([a-z\-\_0-9]+|(__)?)[a-z0-9]*$
@@ -193,12 +198,14 @@ const (
 	matrixCommandTrigger = "matrix"
 
 	// Main command usage
-	matrixCommandUsage = "Usage: /matrix [test|create|map|unmap|list|status|migrate] [room_name|room_alias|room_id]"
+	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|migrate] [room_name|room_alias|room_id]"
 
 	// Subcommand descriptions for autocomplete
 	testCommandDesc    = "Test Matrix server connection and configuration"
 	createCommandDesc  = "Create a new Matrix room and map to current channel (uses channel name if room name not provided)"
 	createCommandHint  = "[room_name] [publish=true|false]"
+	joinCommandDesc    = "Join an existing Matrix room with the bridge bot"
+	joinCommandHint    = "[room_alias|room_id] [create_channel=true|false]"
 	mapCommandDesc     = "Map current channel to Matrix room (prefer #alias:server.com)"
 	mapCommandHint     = "[room_alias|room_id]"
 	unmapCommandDesc   = "Remove mapping between current channel and Matrix room, and uninvite plugin from shared channel"
@@ -209,6 +216,7 @@ const (
 
 	// Map command usage and validation
 	mapCommandUsage     = "Usage: /matrix map [room_alias|room_id]\nExample: /matrix map #test-sync:synapse-mydomain.com"
+	joinCommandUsage    = "Usage: /matrix join [room_alias|room_id] [create_channel=true|false]\nExample: /matrix join #community:matrix.org\nExample: /matrix join #community:matrix.org create_channel=true"
 	roomIdentifierError = "Invalid room identifier format. Use either:\n• Room alias: `#roomname:server.com` (preferred for joining)\n• Room ID: `!roomid:server.com`"
 
 	// Error messages
@@ -238,9 +246,11 @@ const (
 	getStartedHelp = "**Get Started:**\n" +
 		"• `/matrix create` - Create new Matrix room using channel name and map to current channel\n" +
 		"• `/matrix create [room_name]` - Create new Matrix room with custom name and map to current channel\n" +
+		"• `/matrix join [room_alias]` - Join an existing Matrix room with the bridge bot\n" +
 		"• `/matrix map [room_alias|room_id]` - Map current channel to existing Matrix room\n"
 
 	commandsHelp = "**Commands:**\n" +
+		"• `/matrix join [room_alias|room_id]` - Join existing Matrix room with bridge bot\n" +
 		"• `/matrix map [room_alias|room_id]` - Map current channel to Matrix room\n" +
 		"• `/matrix create` - Create new Matrix room using channel name and map to current channel\n" +
 		"• `/matrix create [room_name]` - Create new Matrix room with custom name and map to current channel\n" +
@@ -261,6 +271,13 @@ const (
 	mapUserSuccess       = "✅ Successfully mapped Mattermost user `@%s` to Matrix user `%s`"
 	mapUserFailed        = "❌ Failed to map user: %s"
 	mapUserInvalidMatrix = "❌ Invalid Matrix User ID. Must look like `@user:server.com`"
+
+	// Backfill messages
+	backfillCommandDesc  = "Backfill existing data to Matrix (users, teams, channels)"
+	backfillCommandHint  = "[users|teams|channels|all]"
+	backfillCommandUsage = "Usage: /matrix backfill [users|teams|channels|all]"
+	backfillStarted      = "🔄 **Backfill started** for: %s. This may take a while. Check server logs for progress."
+	backfillInvalidMode  = "❌ Invalid backfill mode. Use: users, teams, channels, or all"
 )
 
 // NewCommandHandler creates and registers all slash commands for the Matrix Bridge plugin.
@@ -279,6 +296,12 @@ func NewCommandHandler(plugin PluginAccessor) Command {
 	createCmd.AddTextArgument("Optional publish flag", "[publish=true|false]", "")
 	matrixData.AddCommand(createCmd)
 
+	// Join command with argument completion
+	joinCmd := model.NewAutocompleteData("join", joinCommandHint, joinCommandDesc)
+	joinCmd.AddTextArgument("Matrix room alias or room ID", "[room_alias|room_id]", "")
+	joinCmd.AddTextArgument("Optional create channel flag", "[create_channel=true|false]", "")
+	matrixData.AddCommand(joinCmd)
+
 	// Map command with argument completion
 	mapCmd := model.NewAutocompleteData("map", mapCommandHint, mapCommandDesc)
 	mapCmd.AddTextArgument("Matrix room alias or room ID", "[room_alias|room_id]", "")
@@ -289,6 +312,11 @@ func NewCommandHandler(plugin PluginAccessor) Command {
 	mapUserCmd.AddTextArgument("Mattermost username", "[username]", "")
 	mapUserCmd.AddTextArgument("Matrix User ID", "[matrix_id]", "")
 	matrixData.AddCommand(mapUserCmd)
+
+	// Backfill command
+	backfillCmd := model.NewAutocompleteData("backfill", backfillCommandHint, backfillCommandDesc)
+	backfillCmd.AddTextArgument("Mode", "[users|teams|channels|all]", "")
+	matrixData.AddCommand(backfillCmd)
 
 	// Unmap command
 	matrixData.AddCommand(model.NewAutocompleteData("unmap", unmapCommandHint, unmapCommandDesc))
@@ -382,6 +410,125 @@ func (c *Handler) executeMapUserCommand(args *model.CommandArgs, username, matri
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         fmt.Sprintf(mapUserSuccess, username, matrixUserID),
+	}
+}
+
+func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier string, createChannel bool) *model.CommandResponse {
+	// Get current Matrix client and fail fast if not configured
+	matrixClient, errResponse := c.getMatrixClientOrError()
+	if errResponse != nil {
+		return errResponse
+	}
+
+	// Validate room identifier format (should start with ! or # and contain a colon)
+	if (!strings.HasPrefix(roomIdentifier, "!") && !strings.HasPrefix(roomIdentifier, "#")) || !strings.Contains(roomIdentifier, ":") {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         roomIdentifierError,
+		}
+	}
+
+	c.client.Log.Info("Joining Matrix room", "room_identifier", roomIdentifier, "user_id", args.UserId, "create_channel", createChannel)
+
+	// Join the AS bot to establish bridge presence
+	if err := matrixClient.JoinRoom(roomIdentifier); err != nil {
+		c.client.Log.Error("Failed to join Matrix room as AS bot", "error", err, "room_identifier", roomIdentifier)
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         fmt.Sprintf("❌ Failed to join Matrix room: %s\n\nMake sure:\n• The room exists\n• The room is public, or the bridge has been invited\n• The room identifier is correct", err.Error()),
+		}
+	}
+
+	c.client.Log.Info("Successfully joined Matrix room as AS bot", "room_identifier", roomIdentifier)
+
+	// Join the command issuer's ghost user for immediate messaging capability
+	user, appErr := c.client.User.Get(args.UserId)
+	if appErr == nil {
+		ghostUserID, err := c.plugin.CreateOrGetGhostUser(user.Id)
+		if err == nil {
+			if err := matrixClient.InviteAndJoinGhostUser(roomIdentifier, ghostUserID); err != nil {
+				c.client.Log.Warn("Failed to join ghost user to room", "error", err, "ghost_user_id", ghostUserID, "room_identifier", roomIdentifier)
+			} else {
+				c.client.Log.Info("Successfully joined ghost user to room", "ghost_user_id", ghostUserID, "room_identifier", roomIdentifier)
+			}
+		}
+	}
+
+	var responseText strings.Builder
+	responseText.WriteString(fmt.Sprintf("✅ **Successfully joined Matrix room** `%s`\n\n", roomIdentifier))
+
+	// If createChannel is true, create a new Mattermost channel and map it to this room
+	if createChannel {
+		// Extract room name from identifier for channel name
+		var channelName string
+		if strings.HasPrefix(roomIdentifier, "#") {
+			// Extract local part from room alias (#name:server.com -> name)
+			parts := strings.Split(roomIdentifier[1:], ":")
+			if len(parts) > 0 {
+				channelName = parts[0]
+			}
+		}
+
+		if channelName == "" {
+			channelName = "matrix-room"
+		}
+
+		// Create the channel
+		channel := &model.Channel{
+			TeamId:      args.TeamId,
+			Type:        model.ChannelTypeOpen,
+			DisplayName: strings.Title(strings.ReplaceAll(channelName, "-", " ")),
+			Name:        channelName,
+			Header:      fmt.Sprintf("Bridged to Matrix room: %s", roomIdentifier),
+		}
+
+		createdChannel, appErr := c.pluginAPI.CreateChannel(channel)
+		if appErr != nil {
+			c.client.Log.Error("Failed to create channel for Matrix room", "error", appErr, "channel_name", channelName)
+			responseText.WriteString(fmt.Sprintf("⚠️ Failed to create Mattermost channel: %s\n\n", appErr.Error()))
+			responseText.WriteString(fmt.Sprintf("You can manually map an existing channel using:\n`/matrix map %s`", roomIdentifier))
+		} else {
+			// Save mapping
+			mappingKey := kvstore.BuildChannelMappingKey(createdChannel.Id)
+			if err := c.kvstore.Set(mappingKey, []byte(roomIdentifier)); err != nil {
+				c.client.Log.Error("Failed to save channel mapping", "error", err, "channel_id", createdChannel.Id, "room_identifier", roomIdentifier)
+			}
+
+			// Store reverse mapping
+			roomMappingKey := kvstore.BuildRoomMappingKey(roomIdentifier)
+			if err := c.kvstore.Set(roomMappingKey, []byte(createdChannel.Id)); err != nil {
+				c.client.Log.Error("Failed to save room mapping", "error", err, "room_identifier", roomIdentifier, "channel_id", createdChannel.Id)
+			}
+
+			// If roomIdentifier is an alias, also resolve to room ID and store that mapping
+			if strings.HasPrefix(roomIdentifier, "#") {
+				if resolvedRoomID, err := matrixClient.ResolveRoomAlias(roomIdentifier); err == nil {
+					roomIDMappingKey := kvstore.BuildRoomMappingKey(resolvedRoomID)
+					if err := c.kvstore.Set(roomIDMappingKey, []byte(createdChannel.Id)); err != nil {
+						c.client.Log.Error("Failed to save room ID mapping", "error", err, "room_id", resolvedRoomID, "channel_id", createdChannel.Id)
+					}
+				}
+			}
+
+			c.client.Log.Info("Created and mapped channel for Matrix room", "channel_id", createdChannel.Id, "channel_name", createdChannel.Name, "room_identifier", roomIdentifier)
+
+			responseText.WriteString(fmt.Sprintf("✅ **Created Mattermost channel** ~%s\n\n", createdChannel.Name))
+			responseText.WriteString(fmt.Sprintf("Messages between the Matrix room and Mattermost channel will now sync automatically."))
+
+			// Add user to the channel
+			if _, appErr := c.client.Channel.AddUser(createdChannel.Id, args.UserId, args.UserId); appErr != nil {
+				c.client.Log.Warn("Failed to add user to created channel", "error", appErr, "channel_id", createdChannel.Id, "user_id", args.UserId)
+			}
+		}
+	} else {
+		responseText.WriteString("**Next Steps:**\n")
+		responseText.WriteString(fmt.Sprintf("• Use `/matrix map %s` in a channel to bridge it to this room\n", roomIdentifier))
+		responseText.WriteString(fmt.Sprintf("• Or use `/matrix join %s create_channel=true` to auto-create a bridged channel", roomIdentifier))
+	}
+
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         responseText.String(),
 	}
 }
 
@@ -826,6 +973,25 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 	switch subcommand {
 	case "test":
 		return c.executeTestCommand(args)
+	case "join":
+		if len(fields) < 3 {
+			return &model.CommandResponse{
+				ResponseType: model.CommandResponseTypeEphemeral,
+				Text:         joinCommandUsage,
+			}
+		}
+		roomIdentifier := fields[2]
+		createChannel := false
+		if len(fields) >= 4 {
+			arg := fields[3]
+			if strings.HasPrefix(arg, "create_channel=") {
+				createChannelValue := strings.TrimPrefix(arg, "create_channel=")
+				createChannel = createChannelValue == "true"
+			} else if arg == "true" || arg == "false" {
+				createChannel = arg == "true"
+			}
+		}
+		return c.executeJoinCommand(args, roomIdentifier, createChannel)
 	case "create":
 		// Parse room name and optional publish parameter
 		var roomName string
@@ -896,6 +1062,15 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		username := fields[2]
 		matrixUserID := fields[3]
 		return c.executeMapUserCommand(args, username, matrixUserID)
+	case "backfill":
+		if len(fields) < 3 {
+			return &model.CommandResponse{
+				ResponseType: model.CommandResponseTypeEphemeral,
+				Text:         backfillCommandUsage,
+			}
+		}
+		mode := fields[2]
+		return c.executeBackfillCommand(args, mode)
 	case "unmap":
 		return c.executeUnmapCommand(args)
 	case "list":
@@ -1070,6 +1245,113 @@ func (c *Handler) executeTestCommand(_ *model.CommandArgs) *model.CommandRespons
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         responseText.String(),
+	}
+}
+
+func (c *Handler) executeBackfillCommand(args *model.CommandArgs, mode string) *model.CommandResponse {
+	if mode != "users" && mode != "teams" && mode != "channels" && mode != "all" {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "Invalid mode. Available modes: users, teams, channels, all",
+		}
+	}
+
+	go func() {
+		if mode == "users" || mode == "all" {
+			c.backfillUsers()
+		}
+		if mode == "teams" || mode == "all" {
+			c.backfillTeams()
+		}
+		if mode == "channels" || mode == "all" {
+			c.backfillChannels()
+		}
+	}()
+
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         fmt.Sprintf("Backfill started for mode: %s. This process runs in the background. Check server logs for progress/errors.", mode),
+	}
+}
+
+func (c *Handler) backfillUsers() {
+	page := 0
+	perPage := 100
+	for {
+		users, err := c.client.User.List(&model.UserGetOptions{Page: page, PerPage: perPage})
+		if err != nil {
+			c.plugin.GetPluginAPI().LogError("Failed to list users for backfill", "error", err)
+			return
+		}
+		if len(users) == 0 {
+			break
+		}
+
+		for _, u := range users {
+			if u.DeleteAt != 0 || u.IsBot {
+				continue
+			}
+			if err := c.plugin.SyncUser(u.Id); err != nil {
+				c.plugin.GetPluginAPI().LogError("Failed to sync user", "user_id", u.Id, "error", err)
+			}
+		}
+		page++
+	}
+}
+
+func (c *Handler) backfillTeams() {
+	// GetTeams returns all teams in the system
+	teams, err := c.plugin.GetPluginAPI().GetTeams()
+	if err != nil {
+		c.plugin.GetPluginAPI().LogError("Failed to list teams for backfill", "error", err)
+		return
+	}
+
+	for _, t := range teams {
+		if t.DeleteAt != 0 {
+			continue
+		}
+		if err := c.plugin.SyncTeam(t.Id); err != nil {
+			c.plugin.GetPluginAPI().LogError("Failed to sync team", "team_id", t.Id, "error", err)
+		}
+	}
+}
+
+func (c *Handler) backfillChannels() {
+	// GetTeams returns all teams in the system
+	teams, err := c.plugin.GetPluginAPI().GetTeams()
+	if err != nil {
+		c.plugin.GetPluginAPI().LogError("Failed to list teams for backfill channels", "error", err)
+		return
+	}
+
+	for _, t := range teams {
+		c.backfillChannelsForTeam(t.Id)
+	}
+}
+
+func (c *Handler) backfillChannelsForTeam(teamID string) {
+	page := 0
+	perPage := 100
+	for {
+		channels, err := c.plugin.GetPluginAPI().GetPublicChannelsForTeam(teamID, page, perPage)
+		if err != nil {
+			c.plugin.GetPluginAPI().LogError("Failed to list channels for backfill", "team_id", teamID, "error", err)
+			break
+		}
+		if len(channels) == 0 {
+			break
+		}
+
+		for _, ch := range channels {
+			if ch.DeleteAt != 0 {
+				continue
+			}
+			if err := c.plugin.SyncChannel(ch.Id); err != nil {
+				c.plugin.GetPluginAPI().LogError("Failed to sync channel", "channel_id", ch.Id, "error", err)
+			}
+		}
+		page++
 	}
 }
 

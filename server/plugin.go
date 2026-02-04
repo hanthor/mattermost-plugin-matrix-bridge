@@ -492,4 +492,44 @@ func (p *Plugin) TeamHasBeenCreated(_ *plugin.Context, team *model.Team) {
 	}
 }
 
+// SyncUser syncs a Mattermost user to Matrix
+func (p *Plugin) SyncUser(userID string) error {
+	user, err := p.API.GetUser(userID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get user")
+	}
+
+	if _, err := p.CreateOrGetGhostUser(userID); err != nil {
+		return errors.Wrap(err, "failed to ensure ghost user")
+	}
+
+	if err := p.mattermostToMatrixBridge.SyncUserToMatrix(user); err != nil {
+		return errors.Wrap(err, "failed to sync user profile")
+	}
+
+	return nil
+}
+
+// SyncTeam syncs a Mattermost team to Matrix (Space)
+func (p *Plugin) SyncTeam(teamID string) error {
+	team, err := p.API.GetTeam(teamID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get team")
+	}
+
+	p.TeamHasBeenCreated(nil, team)
+	return nil
+}
+
+// SyncChannel syncs a Mattermost channel to Matrix (Room)
+func (p *Plugin) SyncChannel(channelID string) error {
+	channel, err := p.API.GetChannel(channelID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get channel")
+	}
+
+	p.ChannelHasBeenCreated(nil, channel)
+	return nil
+}
+
 // See https://developers.mattermost.com/extend/plugins/server/reference/

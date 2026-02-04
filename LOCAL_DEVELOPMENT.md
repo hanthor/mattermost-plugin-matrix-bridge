@@ -133,6 +133,11 @@ docker exec -u mattermost mattermost-plugin-matrix-bridge-mattermost-1 \
 3. The command should create a corresponding Matrix room
 4. Type `/matrix status` to check the bridge health
 
+**Joining Existing Matrix Rooms:**
+You can also join existing Matrix rooms from Mattermost:
+- `/matrix join #room:server.com` - Join a room with the bridge bot
+- `/matrix join #room:server.com create_channel=true` - Join and auto-create a bridged Mattermost channel
+
 ## Testing with Element Web
 
 Element Web provides a nice UI to verify the Matrix side of the bridge:
