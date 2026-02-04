@@ -5,7 +5,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Move to the project root directory
+cd "$SCRIPT_DIR/.."
 
 # Colors for output
 RED='\033[0;31m'
@@ -78,6 +79,13 @@ generate_tokens() {
     echo "$AS_TOKEN" > .as_token
     echo "$HS_TOKEN" > .hs_token
     
+    # Export for docker-compose
+    export MATRIX_AS_TOKEN="$AS_TOKEN"
+    export MATRIX_HS_TOKEN="$HS_TOKEN"
+    export MATRIX_SERVER_URL="http://synapse:8008"
+    export ENABLE_SYNC="true"
+    export RATE_LIMITING_MODE="automatic"
+    
     print_success "Tokens generated and saved to .as_token and .hs_token"
     echo ""
     echo "Application Service Token: $AS_TOKEN"
@@ -95,12 +103,12 @@ update_registration() {
     # Use sed to update the registration file
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
-        sed -i '' "s/as_token: CHANGE_ME_AS_TOKEN/as_token: $AS_TOKEN/" docker/mattermost-bridge-registration.yaml
-        sed -i '' "s/hs_token: CHANGE_ME_HS_TOKEN/hs_token: $HS_TOKEN/" docker/mattermost-bridge-registration.yaml
+        sed -i '' "s/as_token: .*/as_token: $AS_TOKEN/" docker/mattermost-bridge-registration.yaml
+        sed -i '' "s/hs_token: .*/hs_token: $HS_TOKEN/" docker/mattermost-bridge-registration.yaml
     else
         # Linux
-        sed -i "s/as_token: CHANGE_ME_AS_TOKEN/as_token: $AS_TOKEN/" docker/mattermost-bridge-registration.yaml
-        sed -i "s/hs_token: CHANGE_ME_HS_TOKEN/hs_token: $HS_TOKEN/" docker/mattermost-bridge-registration.yaml
+        sed -i "s/as_token: .*/as_token: $AS_TOKEN/" docker/mattermost-bridge-registration.yaml
+        sed -i "s/hs_token: .*/hs_token: $HS_TOKEN/" docker/mattermost-bridge-registration.yaml
     fi
     
     print_success "Registration file updated"
@@ -109,6 +117,15 @@ update_registration() {
 # Start Docker services
 start_services() {
     print_step "Starting Docker services..."
+    
+    # Export tokens for docker-compose if they exist
+    if [ -f .as_token ] && [ -f .hs_token ]; then
+        export MATRIX_AS_TOKEN=$(cat .as_token)
+        export MATRIX_HS_TOKEN=$(cat .hs_token)
+        export MATRIX_SERVER_URL="http://synapse:8008"
+        export ENABLE_SYNC="true"
+        export RATE_LIMITING_MODE="automatic"
+    fi
     
     docker compose down -v 2>/dev/null || true
     docker compose up -d
@@ -119,7 +136,7 @@ start_services() {
     # Wait for Mattermost
     echo -n "Waiting for Mattermost..."
     for i in {1..60}; do
-        if curl -s http://localhost:8065/api/v4/system/ping > /dev/null 2>&1; then
+        if curl -s http://localhost:8066/api/v4/system/ping > /dev/null 2>&1; then
             echo " Ready!"
             break
         fi
@@ -206,29 +223,77 @@ install_plugin() {
     # Copy plugin to container
     docker cp "$PLUGIN_FILE" "$CONTAINER":/tmp/plugin.tar.gz
     
-    # Install via API (using admin token)
-    # First, generate a token
-    TOKEN_OUTPUT=$(docker exec -u mattermost "$CONTAINER" /mattermost/bin/mmctl --local token generate admin bridge-setup --json 2>/dev/null | head -n1)
-    ADMIN_TOKEN=$(echo "$TOKEN_OUTPUT" | jq -r '.[0].token // .[].token // .token' 2>/dev/null || echo "")
-    
-    if [ -n "$ADMIN_TOKEN" ]; then
-        # Upload plugin via API
-        curl -s -X POST \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -F "plugin=@$PLUGIN_FILE" \
-            http://localhost:8065/api/v4/plugins > /dev/null
+    # Install using mmctl (more reliable than API)
+    print_step "Installing plugin using mmctl..."
+    if docker exec -u mattermost "$CONTAINER" /mattermost/bin/mmctl --local plugin add /tmp/plugin.tar.gz 2>/dev/null; then
+        print_success "Plugin installed"
         
         # Enable plugin
-        curl -s -X POST \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            http://localhost:8065/api/v4/plugins/com.mattermost.plugin-matrix-bridge/enable > /dev/null
-        
-        print_success "Plugin installed and enabled"
+        print_step "Enabling plugin..."
+        if docker exec -u mattermost "$CONTAINER" /mattermost/bin/mmctl --local plugin enable com.mattermost.plugin-matrix-bridge 2>/dev/null; then
+            print_success "Plugin enabled"
+        else
+            print_warning "Could not enable plugin. Enable it manually via System Console."
+        fi
     else
-        print_warning "Could not get admin token. Install plugin manually via System Console."
+        print_warning "Could not install plugin. Install it manually via System Console."
     fi
 }
+
+# Configure plugin via API
+configure_plugin() {
+    print_step "Configuring plugin..."
+    
+    # Wait for Mattermost to be fully ready
+    sleep 3
+    
+    # Get auth token
+    TOKEN=$(curl -s -X POST "http://localhost:8066/api/v4/users/login" \
+        -H "Content-Type: application/json" \
+        -d '{"login_id":"admin","password":"Admin123!"}' \
+        -D /tmp/mm_headers.txt 2>/dev/null | jq -r '.id' 2>/dev/null)
+    
+    AUTH_TOKEN=$(cat /tmp/mm_headers.txt 2>/dev/null | grep -i "token:" | awk '{print $2}' | tr -d '\r\n')
+    
+    if [ -z "$AUTH_TOKEN" ]; then
+        print_warning "Could not get auth token. Configure plugin manually."
+        return 1
+    fi
+    
+    # Get current config
+    CURRENT_CONFIG=$(curl -s -X GET "http://localhost:8066/api/v4/config" \
+        -H "Authorization: Bearer $AUTH_TOKEN" 2>/dev/null)
+    
+    # Update plugin settings
+    UPDATED_CONFIG=$(echo "$CURRENT_CONFIG" | jq \
+        --arg server_url "http://synapse:8008" \
+        --arg as_token "$AS_TOKEN" \
+        --arg hs_token "$HS_TOKEN" \
+        '.PluginSettings.Plugins["com.mattermost.plugin-matrix-bridge"] = {
+            "matrixserverurl": $server_url,
+            "matrixastoken": $as_token,
+            "matrixhstoken": $hs_token,
+            "enablesync": true,
+            "ratelimitingmode": "automatic"
+        }')
+    
+    # Apply configuration
+    if curl -s -X PUT "http://localhost:8066/api/v4/config" \
+        -H "Authorization: Bearer $AUTH_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$UPDATED_CONFIG" > /dev/null 2>&1; then
+        print_success "Plugin configured"
+        rm -f /tmp/mm_headers.txt
+        return 0
+    else
+        print_warning "Could not configure plugin. Configure manually via System Console."
+        rm -f /tmp/mm_headers.txt
+        return 1
+    fi
+}
+
+# Note: Plugin configuration must be done via System Console UI
+# mmctl config set doesn't work for plugin settings
 
 # Print final instructions
 print_instructions() {
@@ -238,24 +303,27 @@ print_instructions() {
     echo "=========================================="
     echo ""
     echo "Services running:"
-    echo "  - Mattermost:    http://localhost:8065"
+    echo "  - Mattermost:    http://localhost:8066"
     echo "  - Matrix/Synapse: http://localhost:8888"
-    echo "  - Element Web:   http://localhost:8080"
+    echo "  - Element Web:   http://localhost:8081"
     echo ""
     echo "Credentials:"
     echo "  Mattermost: admin / Admin123!"
     echo "  Matrix:     admin / admin123"
     echo ""
     echo "Next steps:"
-    echo "  1. Log into Mattermost at http://localhost:8065"
-    echo "  2. Go to System Console → Plugins → Matrix Bridge"
-    echo "  3. Set Matrix Server URL to: http://synapse:8008"
-    echo "  4. Copy the tokens from .as_token and .hs_token files"
-    echo "  5. Enable Message Sync"
-    echo "  6. Create a channel and use /matrix create \"Room Name\""
+    echo "  1. Log into Mattermost at http://localhost:8066"
+    echo "  2. Plugin is automatically pre-configured with:"
+    echo "     ✓ Matrix Server URL: http://synapse:8008"
+    echo "     ✓ Tokens: Auto-configured from registration file"
+    echo "     ✓ Message Sync: Enabled"
+    echo "  3. Create a channel and use /matrix create \"Room Name\""
+    echo "  4. Or use /matrix test to verify connectivity"
+    echo ""
+    echo "To view/modify settings: System Console → Plugins → Matrix Bridge"
     echo ""
     echo "To test Matrix directly:"
-    echo "  - Open Element Web at http://localhost:8080"
+    echo "  - Open Element Web at http://localhost:8081"
     echo "  - Log in with the Matrix admin credentials"
     echo ""
     echo "Tokens (also saved in files):"
@@ -293,6 +361,7 @@ main() {
     setup_mattermost
     setup_synapse
     install_plugin
+    configure_plugin
     print_instructions
 }
 

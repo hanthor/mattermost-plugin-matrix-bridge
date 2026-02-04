@@ -15,7 +15,7 @@ as_token: 3ede8005d958202feb44354a4b485ad323df4710311981ece60ddbf724af26d9
 # IMPORTANT: Generate this in Mattermost plugin settings and copy here
 hs_token: 7edce377072ab4375495e8560f8aa63f1abac29bfcf83294b3f07ae020c8b05d
 
-# The localpart of the bridge bot user (@_mattermost_bridge:synapse)
+# The localpart of the bridge bot user (@_mattermost_bridge:test.local)
 sender_localpart: _mattermost_bridge
 
 # Rate limiting for this application service
@@ -26,12 +26,16 @@ namespaces:
   # Users created by the bridge (ghost users for Mattermost users)
   users:
     - exclusive: true
-      regex: "@_mattermost_.*:synapse"
+      regex: "@_mattermost_.*:test\\.local"
+    - exclusive: true
+      regex: "@.*:test\\.local"
   
   # Room aliases created by the bridge
   aliases:
     - exclusive: true
-      regex: "#_mattermost_.*:synapse"
+      regex: "#_mattermost_.*:test\\.local"
+    - exclusive: true
+      regex: "#.*:test\\.local"
   
   # Rooms - empty means the bridge doesn't exclusively own any room IDs
   rooms: []

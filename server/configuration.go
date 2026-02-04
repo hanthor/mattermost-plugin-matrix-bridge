@@ -29,6 +29,10 @@ type configuration struct {
 	EnableSync           bool   `json:"enable_sync"`
 	MatrixUsernamePrefix string `json:"matrix_username_prefix"`
 	RateLimitingMode     string `json:"rate_limiting_mode"`
+	EnableMirrorMode     bool   `json:"enable_mirror_mode"`     // Hijack Matrix server to mirror Mattermost
+	MatrixServerDomain   string `json:"matrix_server_domain"`   // e.g. "synapse" for @user:synapse
+	MirrorModePassword   string `json:"mirror_mode_password"`   // Default password for auto-created users
+	SyncUserProfiles     bool   `json:"sync_user_profiles"`     // Sync display names and avatars
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -94,6 +98,14 @@ func (p *Plugin) OnConfigurationChange() error {
 		return errors.Wrap(err, "failed to load plugin configuration")
 	}
 
+	// Log configuration to debug Mirror Mode setting
+	p.API.LogInfo("Configuration loaded", 
+		"enable_mirror_mode", configuration.EnableMirrorMode,
+		"sync_user_profiles", configuration.SyncUserProfiles,
+		"mirror_mode_password", configuration.MirrorModePassword,
+		"matrix_server_domain", configuration.MatrixServerDomain,
+	)
+
 	// Validate required configuration
 	if err := p.validateConfiguration(configuration); err != nil {
 		return errors.Wrap(err, "invalid plugin configuration")
@@ -146,4 +158,9 @@ func (c *configuration) GetMatrixUsernamePrefixForServer(_ string) string {
 	// For now, return the global prefix
 	// In the future, this could check a map of server-specific prefixes
 	return c.GetMatrixUsernamePrefix()
+}
+
+// GetEnableMirrorMode returns whether Mirror Mode is enabled
+func (c *configuration) GetEnableMirrorMode() bool {
+	return c.EnableMirrorMode
 }

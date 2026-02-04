@@ -822,7 +822,8 @@ func (c *Client) joinGhostUserWithFallback(roomID, ghostUserID string) error {
 
 // CreateRoom creates a new Matrix room with the specified name, topic, and settings.
 // Returns the room ID or alias on success.
-func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, mattermostChannelID string) (string, error) {
+// If skipPrefix is true, no _mattermost_ prefix is added (for Mirror Mode)
+func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, mattermostChannelID string, skipPrefix bool, teamName string) (string, error) {
 	if c.serverURL == "" || c.asToken == "" {
 		return "", errors.New("matrix client not configured")
 	}
@@ -832,15 +833,31 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 		return "", err
 	}
 
-	c.logger.LogDebug("Creating Matrix room", "name", name, "topic", topic, "server_domain", serverDomain)
+	c.logger.LogDebug("Creating Matrix room", "name", name, "topic", topic, "server_domain", serverDomain, "skip_prefix", skipPrefix, "team_name", teamName)
 
-	// Create room alias using reserved Application Service namespace
+	// Create room alias - include team name to avoid collisions across teams
 	alias := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 	alias = strings.ReplaceAll(alias, "_", "-")
-	// Use _mattermost_ prefix for namespace reservation
+	
+	// Prepend team name if available to avoid alias collisions
+	// (e.g., multiple teams can have "town-square" channels)
+	if teamName != "" {
+		teamSlug := strings.ToLower(strings.ReplaceAll(teamName, " ", "-"))
+		teamSlug = strings.ReplaceAll(teamSlug, "_", "-")
+		alias = teamSlug + "-" + alias
+	}
+	
+	// In Mirror Mode (skipPrefix=true), use clean aliases without prefix
+	// Otherwise use _mattermost_ prefix for namespace reservation
 	roomAlias := ""
 	if serverDomain != "" {
-		roomAlias = "#_mattermost_" + alias + ":" + serverDomain
+		if skipPrefix {
+			roomAlias = "#" + alias + ":" + serverDomain
+			c.logger.LogInfo("Mirror Mode: Creating room with clean alias", "room_alias", roomAlias, "skip_prefix", skipPrefix)
+		} else {
+			roomAlias = "#_mattermost_" + alias + ":" + serverDomain
+			c.logger.LogInfo("Standard Mode: Creating room with _mattermost_ prefix", "room_alias", roomAlias, "skip_prefix", skipPrefix)
+		}
 	}
 
 	// Set room visibility and rules based on publish parameter
@@ -904,7 +921,11 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 
 	// Add room alias if we have a server domain
 	if roomAlias != "" {
-		roomData["room_alias_name"] = "_mattermost_" + alias // Include namespace prefix in local part
+		if skipPrefix {
+			roomData["room_alias_name"] = alias // Clean alias in Mirror Mode
+		} else {
+			roomData["room_alias_name"] = "_mattermost_" + alias // Namespace prefix for normal mode
+		}
 	}
 
 	jsonData, err := json.Marshal(roomData)
@@ -2640,4 +2661,170 @@ func (c *Client) RemoveMattermostChannelID(roomID string) error {
 	}
 
 	return nil
+}
+
+// RegisterUserWithASToken creates a Matrix user using Application Service authentication
+// This bypasses normal registration restrictions and allows creating users in the AS namespace
+func (c *Client) RegisterUserWithASToken(username, password string) (*RegisterResponse, error) {
+	if c.asToken == "" {
+		return nil, errors.New("Application Service token not configured")
+	}
+
+	// Apply rate limiting
+	if err := c.waitForRateLimit(c.registrationLimiter, "Mirror mode user registration"); err != nil {
+		return nil, err
+	}
+
+	// Register user with AS token authentication
+	userData := map[string]any{
+		"type":     "m.login.application_service",
+		"username": username,
+	}
+
+	if password != "" {
+		userData["password"] = password
+	}
+
+	url := fmt.Sprintf("%s/_matrix/client/v3/register?access_token=%s", c.serverURL, url.QueryEscape(c.asToken))
+
+	jsonData, err := json.Marshal(userData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal registration data")
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create registration request")
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to send registration request")
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read registration response")
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		// Check if user already exists
+		if resp.StatusCode == http.StatusBadRequest {
+			var errResp map[string]any
+			if json.Unmarshal(bodyBytes, &errResp) == nil {
+				if errCode, ok := errResp["errcode"].(string); ok && errCode == "M_USER_IN_USE" {
+					// User already exists, return a success-like response
+					userID := fmt.Sprintf("@%s:%s", username, c.getServerName())
+					return &RegisterResponse{
+						UserID: userID,
+					}, nil
+				}
+			}
+		}
+		return nil, errors.Errorf("registration failed: HTTP %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var response RegisterResponse
+	if err := json.Unmarshal(bodyBytes, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal registration response")
+	}
+
+	return &response, nil
+}
+
+// SetUserDisplayName sets the display name for a Matrix user using AS authentication
+func (c *Client) SetUserDisplayName(userID, displayName string) error {
+	if c.asToken == "" {
+		return errors.New("Application Service token not configured")
+	}
+
+	url := fmt.Sprintf("%s/_matrix/client/v3/profile/%s/displayname?user_id=%s&access_token=%s",
+		c.serverURL,
+		url.PathEscape(userID),
+		url.QueryEscape(userID),
+		url.QueryEscape(c.asToken))
+
+	data := map[string]string{
+		"displayname": displayName,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal display name data")
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return errors.Wrap(err, "failed to create display name request")
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send display name request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("failed to set display name: HTTP %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+
+// SetUserAvatar sets the avatar for a Matrix user using AS authentication
+func (c *Client) SetUserAvatar(userID, avatarURL string) error {
+	if c.asToken == "" {
+		return errors.New("Application Service token not configured")
+	}
+
+	url := fmt.Sprintf("%s/_matrix/client/v3/profile/%s/avatar_url?user_id=%s&access_token=%s",
+		c.serverURL,
+		url.PathEscape(userID),
+		url.QueryEscape(userID),
+		url.QueryEscape(c.asToken))
+
+	data := map[string]string{
+		"avatar_url": avatarURL,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal avatar data")
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return errors.Wrap(err, "failed to create avatar request")
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send avatar request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("failed to set avatar: HTTP %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+
+// getServerName extracts the server name from the server URL or returns a default
+func (c *Client) getServerName() string {
+	// Try to parse server name from URL
+	if c.serverURL != "" {
+		// Default to "synapse" for local development
+		return "synapse"
+	}
+	return "matrix.org"
 }

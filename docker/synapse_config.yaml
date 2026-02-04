@@ -1,6 +1,6 @@
-server_name: "synapse"
+server_name: "test.local"
 pid_file: /data/homeserver.pid
-public_baseurl: http://localhost:8888/
+public_baseurl: http://matrix.test.local:8888/
 
 listeners:
   - port: 8008
@@ -59,7 +59,7 @@ enable_registration_without_verification: true
 suppress_key_server_warning: true
 
 room_list_publication_rules:
-  - user_id: "@_mattermost_bridge:localhost"
+  - user_id: "@_mattermost_bridge:test.local"
     action: allow
   - user_id: "*"
     action: deny

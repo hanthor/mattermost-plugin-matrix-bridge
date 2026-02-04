@@ -19,6 +19,7 @@ import (
 type Configuration interface {
 	GetMatrixServerURL() string
 	GetMatrixUsernamePrefixForServer(serverURL string) string
+	GetEnableMirrorMode() bool
 }
 
 // MetricsSummary holds a snapshot of all metrics at a point in time.
@@ -854,10 +855,23 @@ func (c *Handler) executeCreateRoomCommand(args *model.CommandArgs, roomName str
 
 	topic := fmt.Sprintf("Matrix room for Mattermost channel: %s", channelName)
 
+	// Get team name to include in room alias (prevents collisions across teams)
+	teamName := ""
+	if args.TeamId != "" {
+		if team, err := c.pluginAPI.GetTeam(args.TeamId); err == nil && team != nil {
+			teamName = team.Name
+		}
+	}
+
 	// Create the Matrix room
 	// Extract server domain from Matrix server URL
 	serverDomain := c.extractServerDomain()
-	roomID, err := matrixClient.CreateRoom(roomName, topic, serverDomain, publish, args.ChannelId)
+	
+	// In Mirror Mode, use clean room names without _mattermost_ prefix
+	config := c.plugin.GetConfiguration()
+	skipPrefix := config.GetEnableMirrorMode()
+	
+	roomID, err := matrixClient.CreateRoom(roomName, topic, serverDomain, publish, args.ChannelId, skipPrefix, teamName)
 	if err != nil {
 		c.client.Log.Error("Failed to create Matrix room", "error", err, "room_name", roomName)
 		return &model.CommandResponse{

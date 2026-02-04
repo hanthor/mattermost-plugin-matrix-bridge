@@ -12,25 +12,22 @@ const HomeserverConfig: React.FC<Props> = ({label, helpText}) => {
     const [matrixDomain, setMatrixDomain] = useState<string>('MYSERVER_DOMAIN');
 
     useEffect(() => {
-        const serverUrlInput = document.querySelector('input[id$="matrix_server_url"]') as HTMLInputElement;
+        // Use matrix_server_domain instead of extracting from matrix_server_url
+        // matrix_server_domain is the server_name used in Matrix IDs (@user:domain)
+        // matrix_server_url is just the API endpoint
+        const serverDomainInput = document.querySelector('input[id$="matrix_server_domain"]') as HTMLInputElement;
 
-        const updateMatrixDomain = (serverUrl: string) => {
-            if (serverUrl) {
-                try {
-                    const url = new URL(serverUrl);
-                    setMatrixDomain(url.hostname);
-                } catch (e) {
-                    // Invalid URL, keep placeholder
-                    setMatrixDomain('MYSERVER_DOMAIN');
-                }
+        const updateMatrixDomain = (domain: string) => {
+            if (domain && domain.trim()) {
+                setMatrixDomain(domain.trim());
             } else {
                 setMatrixDomain('MYSERVER_DOMAIN');
             }
         };
 
-        if (serverUrlInput) {
+        if (serverDomainInput) {
             // Set initial value
-            updateMatrixDomain(serverUrlInput.value?.trim() || '');
+            updateMatrixDomain(serverDomainInput.value?.trim() || '');
 
             const handleInputChange = (event: Event) => {
                 const target = event.target as HTMLInputElement;
@@ -38,12 +35,12 @@ const HomeserverConfig: React.FC<Props> = ({label, helpText}) => {
             };
 
             // Listen for both input and change events to catch all updates
-            serverUrlInput.addEventListener('input', handleInputChange);
-            serverUrlInput.addEventListener('change', handleInputChange);
+            serverDomainInput.addEventListener('input', handleInputChange);
+            serverDomainInput.addEventListener('change', handleInputChange);
 
             return () => {
-                serverUrlInput.removeEventListener('input', handleInputChange);
-                serverUrlInput.removeEventListener('change', handleInputChange);
+                serverDomainInput.removeEventListener('input', handleInputChange);
+                serverDomainInput.removeEventListener('change', handleInputChange);
             };
         }
 
@@ -137,11 +134,11 @@ const HomeserverConfig: React.FC<Props> = ({label, helpText}) => {
                 <div style={{fontSize: '13px', color: '#666', marginTop: '8px'}}>
                     {matrixDomain === 'MYSERVER_DOMAIN' ? (
                         <span style={{color: '#d04444'}}>
-                            {'⚠️ Enter your Matrix Server URL above to see the correct domain'}
+                            {'⚠️ Set the Matrix Server Domain field above to see the correct configuration'}
                         </span>
                     ) : (
                         <span style={{color: '#28a745'}}>
-                            {'✓ Using domain: '}
+                            {'✓ Using server_name: '}
                             <strong>{matrixDomain}</strong>
                         </span>
                     )}

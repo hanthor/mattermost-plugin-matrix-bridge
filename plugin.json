@@ -52,6 +52,36 @@
                 "default": false
             },
             {
+                "key": "enable_mirror_mode",
+                "display_name": "Enable Mirror Mode (Experimental)",
+                "type": "bool",
+                "help_text": "⚠️ ADVANCED: Completely hijacks the Matrix server to mirror Mattermost. Automatically creates real Matrix users (@username:domain) and syncs profiles. Requires a DEDICATED Matrix server. Users will be able to login to Matrix/Element with the configured password.",
+                "default": false
+            },
+            {
+                "key": "matrix_server_domain",
+                "display_name": "Matrix Server Domain",
+                "type": "text",
+                "help_text": "The Matrix server domain (e.g., 'synapse' for @user:synapse). Used for Mirror Mode.",
+                "placeholder": "synapse",
+                "default": "synapse"
+            },
+            {
+                "key": "mirror_mode_password",
+                "display_name": "Mirror Mode Default Password",
+                "type": "text",
+                "help_text": "Default password for auto-created Matrix users in Mirror Mode. Users can login to Element with their Mattermost username and this password. Leave empty to generate unique passwords per user.",
+                "placeholder": "changeme123",
+                "default": ""
+            },
+            {
+                "key": "sync_user_profiles",
+                "display_name": "Sync User Profiles",
+                "type": "bool",
+                "help_text": "Automatically sync display names and avatars from Mattermost to Matrix in Mirror Mode.",
+                "default": true
+            },
+            {
                 "key": "rate_limiting_mode",
                 "display_name": "Matrix Rate Limiting",
                 "type": "dropdown",

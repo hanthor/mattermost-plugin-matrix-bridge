@@ -1,8 +1,8 @@
 {
     "default_server_config": {
         "m.homeserver": {
-            "base_url": "http://localhost:8888",
-            "server_name": "localhost"
+            "base_url": "http://matrix.test.local:8888",
+            "server_name": "test.local"
         },
         "m.identity_server": {
             "base_url": ""
@@ -22,7 +22,7 @@
     "default_federate": true,
     "default_theme": "light",
     "room_directory": {
-        "servers": ["localhost"]
+        "servers": ["test.local"]
     },
     "setting_defaults": {
         "breadcrumbs": true

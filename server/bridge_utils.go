@@ -41,6 +41,9 @@ type BridgeUtilsConfig struct {
 	MaxFileSize         int64
 	ConfigGetter        ConfigurationGetter
 	Metrics             *Metrics
+	GhostUserCache      *Cache
+	RoomMappingCache    *Cache
+	RoomMembershipCache *Cache
 }
 
 // BridgeUtils contains common utilities used by both bridge types
@@ -54,6 +57,9 @@ type BridgeUtils struct {
 	maxFileSize         int64
 	configGetter        ConfigurationGetter
 	metrics             *Metrics
+	ghostUserCache      *Cache
+	roomMappingCache    *Cache
+	roomMembershipCache *Cache
 }
 
 // NewBridgeUtils creates a new BridgeUtils instance
@@ -68,6 +74,9 @@ func NewBridgeUtils(config BridgeUtilsConfig) *BridgeUtils {
 		maxFileSize:         config.MaxFileSize,
 		configGetter:        config.ConfigGetter,
 		metrics:             config.Metrics,
+		ghostUserCache:      config.GhostUserCache,
+		roomMappingCache:    config.RoomMappingCache,
+		roomMembershipCache: config.RoomMembershipCache,
 	}
 }
 
@@ -75,12 +84,28 @@ func NewBridgeUtils(config BridgeUtilsConfig) *BridgeUtils {
 
 // GetMatrixRoomID retrieves the Matrix room ID for a given Mattermost channel ID
 func (s *BridgeUtils) GetMatrixRoomID(channelID string) (string, error) {
-	roomID, err := s.kvstore.Get(kvstore.BuildChannelMappingKey(channelID))
+	mappingKey := kvstore.BuildChannelMappingKey(channelID)
+
+	// Check cache first
+	if s.roomMappingCache != nil {
+		if roomID, found := s.roomMappingCache.Get(mappingKey); found {
+			return roomID, nil
+		}
+	}
+
+	// Fall back to KV store
+	roomID, err := s.kvstore.Get(mappingKey)
 	if err != nil {
 		// KV store error (typically key not found) - unmapped channels are expected
 		return "", nil
 	}
-	return string(roomID), nil
+
+	roomIDStr := string(roomID)
+	// Populate cache
+	if s.roomMappingCache != nil {
+		s.roomMappingCache.Set(mappingKey, roomIDStr)
+	}
+	return roomIDStr, nil
 }
 
 func (s *BridgeUtils) setChannelRoomMapping(channelID, matrixRoomIdentifier string) error {
@@ -97,9 +122,15 @@ func (s *BridgeUtils) setChannelRoomMapping(channelID, matrixRoomIdentifier stri
 	}
 
 	// Store forward mapping: channel_mapping_<channelID> -> room_id (always room ID)
-	err = s.kvstore.Set(kvstore.BuildChannelMappingKey(channelID), []byte(roomID))
+	forwardKey := kvstore.BuildChannelMappingKey(channelID)
+	err = s.kvstore.Set(forwardKey, []byte(roomID))
 	if err != nil {
 		return errors.Wrap(err, "failed to store channel room mapping")
+	}
+	
+	// Update cache
+	if s.roomMappingCache != nil {
+		s.roomMappingCache.Set(forwardKey, roomID)
 	}
 
 	// Store reverse mapping for the room ID

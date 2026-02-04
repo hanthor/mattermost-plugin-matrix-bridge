@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -50,6 +51,17 @@ type Plugin struct {
 	// metrics collects telemetry and performance data
 	metrics *Metrics
 
+	// Caches for frequently accessed data
+	ghostUserCache      *Cache
+	roomMappingCache    *Cache
+	roomMembershipCache *Cache
+
+	// Event queue for asynchronous task processing
+	eventQueue *EventQueue
+
+	// Batcher for grouping reactions
+	reactionBatcher *Batcher
+
 	// remoteID is the identifier returned by RegisterPluginForSharedChannels
 	remoteID string
 
@@ -98,9 +110,24 @@ func (p *Plugin) OnActivate() error {
 	p.pendingFiles = NewPendingFileTracker()
 	p.metrics = NewMetrics()
 
+	// Initialize caches with reasonable defaults
+	// Ghost users: 1000 entries, 1 hour TTL (rarely change once created)
+	p.ghostUserCache = NewCache(1000, 1*time.Hour)
+	// Room mappings: 500 entries, 1 hour TTL (channels/rooms don't change often)
+	p.roomMappingCache = NewCache(500, 1*time.Hour)
+	// Room membership: 2000 entries, 15 minute TTL (users can leave/join)
+	p.roomMembershipCache = NewCache(2000, 15*time.Minute)
+
 	// Initialize file size limits with default values
 	p.maxProfileImageSize = DefaultMaxProfileImageSize
 	p.maxFileSize = DefaultMaxFileSize
+
+	// Initialize event queue: 4 workers, 1000 buffer
+	p.eventQueue = NewEventQueue(4, 1000, p.logger, p.metrics)
+	p.eventQueue.Start()
+
+	// Initialize reaction batcher with 100ms timeout
+	p.reactionBatcher = NewBatcher(100*time.Millisecond, p.processReactionBatch)
 
 	p.initMatrixClient()
 
@@ -136,6 +163,12 @@ func (p *Plugin) OnActivate() error {
 
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
+	if p.reactionBatcher != nil {
+		p.reactionBatcher.FlushAll()
+	}
+	if p.eventQueue != nil {
+		p.eventQueue.Stop()
+	}
 	if p.backgroundJob != nil {
 		if err := p.backgroundJob.Close(); err != nil {
 			p.logger.LogError("Failed to close background job", "err", err)
@@ -172,6 +205,9 @@ func (p *Plugin) initBridges() {
 		MaxFileSize:         p.maxFileSize,
 		ConfigGetter:        p,
 		Metrics:             p.metrics,
+		GhostUserCache:      p.ghostUserCache,
+		RoomMappingCache:    p.roomMappingCache,
+		RoomMembershipCache: p.roomMembershipCache,
 	})
 
 	// Create bridge instances
@@ -367,11 +403,47 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 			p.logger.LogError("Failed to invite remote user to Matrix room", "error", err, "user_id", user.Id, "username", user.Username, "channel_id", channelMember.ChannelId)
 		}
 	} else {
-		// This is a local Mattermost user - create ghost user and join them to the Matrix room
-		ghostUserID, err := p.CreateOrGetGhostUser(user.Id)
-		if err != nil {
-			p.logger.LogError("Failed to create or get ghost user", "error", err, "user_id", user.Id, "username", user.Username)
-			return
+		// This is a local Mattermost user
+		var matrixUserID string
+		
+		if config.EnableMirrorMode {
+			// Mirror Mode: Create or use real Matrix user based on username
+			serverDomain := config.MatrixServerDomain
+			if serverDomain == "" {
+				serverDomain = "synapse" // Default to "synapse" if not configured
+			}
+			matrixUserID = fmt.Sprintf("@%s:%s", user.Username, serverDomain)
+			p.logger.LogDebug("Mirror mode: Adding Mattermost user to Matrix", "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
+			
+			// Auto-create the user if needed (will be idempotent)
+			password := config.MirrorModePassword
+			if password == "" {
+				password = "mattermost-mirror-" + user.Id
+			}
+			
+			_, err := p.matrixClient.RegisterUserWithASToken(user.Username, password)
+			if err != nil {
+				p.logger.LogWarn("Failed to register Matrix user (may already exist)", "error", err, "matrix_user_id", matrixUserID)
+				// Continue anyway - user likely exists
+			}
+			
+			// Sync profile if enabled
+			if config.SyncUserProfiles {
+				displayName := user.GetDisplayName(model.ShowFullName)
+				if displayName != "" {
+					if err := p.matrixClient.SetUserDisplayName(matrixUserID, displayName); err != nil {
+						p.logger.LogWarn("Failed to sync display name", "error", err, "matrix_user_id", matrixUserID)
+					}
+				}
+			}
+		} else {
+			// Ghost mode: create ghost user
+			ghostUserID, err := p.CreateOrGetGhostUser(user.Id)
+			if err != nil {
+				p.logger.LogError("Failed to create or get ghost user", "error", err, "user_id", user.Id, "username", user.Username)
+				return
+			}
+			matrixUserID = ghostUserID
 		}
 
 		// Resolve room alias to room ID if needed
@@ -381,11 +453,11 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 			return
 		}
 
-		// Try to join the ghost user to the Matrix room (handles both public and private rooms)
-		if err := p.matrixClient.InviteAndJoinGhostUser(resolvedRoomID, ghostUserID); err != nil {
-			p.logger.LogError("Failed to join ghost user to Matrix room", "error", err, "ghost_user_id", ghostUserID, "room_id", resolvedRoomID, "mattermost_user_id", user.Id)
+		// Try to join the user to the Matrix room (handles both public and private rooms)
+		if err := p.matrixClient.InviteAndJoinGhostUser(resolvedRoomID, matrixUserID); err != nil {
+			p.logger.LogError("Failed to join user to Matrix room", "error", err, "matrix_user_id", matrixUserID, "room_id", resolvedRoomID, "mattermost_user_id", user.Id)
 		} else {
-			p.logger.LogInfo("Successfully joined ghost user to Matrix room", "ghost_user_id", ghostUserID, "room_id", resolvedRoomID, "mattermost_user_id", user.Id, "username", user.Username)
+			p.logger.LogInfo("Successfully joined user to Matrix room", "matrix_user_id", matrixUserID, "room_id", resolvedRoomID, "mattermost_user_id", user.Id, "username", user.Username, "mirror_mode", config.EnableMirrorMode)
 		}
 	}
 }
@@ -440,14 +512,19 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 
 	p.logger.LogInfo("New channel created, creating Matrix room", "channel_id", channel.Id, "channel_name", channel.Name, "type", channel.Type)
 
-	// Extract Server Domain from MatrixServerURL
-	serverDomain := "example.com"
-	if u, err := url.Parse(config.MatrixServerURL); err == nil {
-		host := u.Host
-		if strings.Contains(host, ":") {
-			host = strings.Split(host, ":")[0]
+	// Use the configured Matrix server domain (the server_name, not the URL domain)
+	serverDomain := config.MatrixServerDomain
+	if serverDomain == "" {
+		// Fallback: extract from MatrixServerURL if not configured
+		if u, err := url.Parse(config.MatrixServerURL); err == nil {
+			host := u.Host
+			if strings.Contains(host, ":") {
+				host = strings.Split(host, ":")[0]
+			}
+			serverDomain = host
+		} else {
+			serverDomain = "example.com"
 		}
-		serverDomain = host
 	}
 
 	// Prepare room details
@@ -460,9 +537,19 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 		topic = channel.Purpose
 	}
 
+	// Get team name to include in room alias (prevents collisions across teams)
+	teamName := ""
+	if channel.TeamId != "" {
+		if team, err := p.API.GetTeam(channel.TeamId); err == nil && team != nil {
+			teamName = team.Name
+		}
+	}
+
 	// Create the Matrix room
 	// Note: isPublic flag controls visibility and presets (PublicChat vs PrivateChat)
-	roomID, err := p.matrixClient.CreateRoom(roomName, topic, serverDomain, isPublic, channel.Id)
+	// In Mirror Mode, skip the _mattermost_ prefix for clean room names
+	p.logger.LogInfo("Creating Matrix room", "channel_name", channel.Name, "team_name", teamName, "mirror_mode_enabled", config.EnableMirrorMode, "skip_prefix", config.EnableMirrorMode)
+	roomID, err := p.matrixClient.CreateRoom(roomName, topic, serverDomain, isPublic, channel.Id, config.EnableMirrorMode, teamName)
 	if err != nil {
 		p.logger.LogError("Failed to create Matrix room for new channel", "channel_name", channel.Name, "error", err)
 		return
@@ -494,6 +581,35 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 				p.logger.LogDebug("Added room to team space", "space_id", spaceID, "room_id", roomID)
 			}
 		}
+	}
+}
+
+// MessageHasBeenPosted is called when a new message is posted in Mattermost
+func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.mattermostToMatrixBridge == nil {
+		return
+	}
+
+	// Skip bot posts to avoid loops
+	if post.UserId == "" || post.Props["from_matrix"] == "true" {
+		return
+	}
+
+	// Check if this channel is mapped to a Matrix room
+	mappingKey := kvstore.BuildChannelMappingKey(post.ChannelId)
+	roomIDBytes, err := p.kvstore.Get(mappingKey)
+	if err != nil || roomIDBytes == nil {
+		// No mapping - channel not synced
+		return
+	}
+
+	roomID := string(roomIDBytes)
+	p.logger.LogDebug("Syncing message to Matrix", "channel_id", post.ChannelId, "room_id", roomID, "post_id", post.Id)
+
+	// Sync the post to Matrix
+	if err := p.mattermostToMatrixBridge.SyncPostToMatrix(post, post.ChannelId); err != nil {
+		p.logger.LogError("Failed to sync message to Matrix", "error", err, "post_id", post.Id, "room_id", roomID)
 	}
 }
 

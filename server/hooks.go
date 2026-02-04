@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
+
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
 )
+
+type reactionBatchItem struct {
+	reaction  *model.Reaction
+	channelID string
+}
 
 // ReactionHasBeenAdded is called when a reaction is added to a post
 func (p *Plugin) ReactionHasBeenAdded(_ *plugin.Context, reaction *model.Reaction) {
@@ -20,9 +27,10 @@ func (p *Plugin) ReactionHasBeenAdded(_ *plugin.Context, reaction *model.Reactio
 		return
 	}
 
-	if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(reaction, post.ChannelId); err != nil {
-		p.logger.LogError("Failed to sync reaction addition to Matrix", "error", err, "post_id", reaction.PostId, "user_id", reaction.UserId)
-	}
+	p.reactionBatcher.Add(reaction.PostId, reactionBatchItem{
+		reaction:  reaction,
+		channelID: post.ChannelId,
+	})
 }
 
 // ReactionHasBeenRemoved is called when a reaction is removed from a post
@@ -39,8 +47,33 @@ func (p *Plugin) ReactionHasBeenRemoved(_ *plugin.Context, reaction *model.React
 		return
 	}
 
-	if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(reaction, post.ChannelId); err != nil {
-		p.logger.LogError("Failed to sync reaction removal to Matrix", "error", err, "post_id", reaction.PostId, "user_id", reaction.UserId)
+	p.reactionBatcher.Add(reaction.PostId, reactionBatchItem{
+		reaction:  reaction,
+		channelID: post.ChannelId,
+	})
+}
+
+func (p *Plugin) processReactionBatch(postID string, items []any) {
+	// Enqueue a single task that processes all reactions in the batch
+	if err := p.eventQueue.Enqueue(Task{
+		ID:   "reaction-batch-" + postID,
+		Type: "mattermost-reaction-batch",
+		Execute: func(ctx context.Context) error {
+			for _, item := range items {
+				batchItem := item.(reactionBatchItem)
+				if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(batchItem.reaction, batchItem.channelID); err != nil {
+					p.logger.LogError("Failed to sync reaction in batch", "error", err, "post_id", postID)
+				}
+			}
+			return nil
+		},
+	}); err != nil {
+		p.logger.LogError("Failed to enqueue reaction batch", "error", err, "post_id", postID)
+		// Fallback to processing immediately if queue is full
+		for _, item := range items {
+			batchItem := item.(reactionBatchItem)
+			_ = p.mattermostToMatrixBridge.SyncReactionToMatrix(batchItem.reaction, batchItem.channelID)
+		}
 	}
 }
 
@@ -56,8 +89,15 @@ func (p *Plugin) MessageHasBeenUpdated(_ *plugin.Context, newPost, oldPost *mode
 		return
 	}
 
-	if err := p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId); err != nil {
-		p.logger.LogError("Failed to sync post edit to Matrix", "error", err, "post_id", newPost.Id)
+	if err := p.eventQueue.Enqueue(Task{
+		ID:   "post-edit-" + newPost.Id,
+		Type: "mattermost-post-edit",
+		Execute: func(ctx context.Context) error {
+			return p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId)
+		},
+	}); err != nil {
+		p.logger.LogError("Failed to enqueue post edit", "error", err, "post_id", newPost.Id)
+		_ = p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId)
 	}
 }
 
@@ -91,15 +131,18 @@ func (p *Plugin) OnSharedChannelsSyncMsg(msg *model.SyncMsg, _ *model.RemoteClus
 	}
 
 	// Then process post sync events
+	var postsToSync []*model.Post
 	for _, post := range msg.Posts {
 		// Skip syncing posts that originated from Matrix to prevent loops, except for deletions
 		if post.GetRemoteID() == p.remoteID && post.DeleteAt == 0 {
 			continue
 		}
+		postsToSync = append(postsToSync, post)
+	}
 
-		if err := p.mattermostToMatrixBridge.SyncPostToMatrix(post, msg.ChannelId); err != nil {
-			p.logger.LogError("Failed to sync post to Matrix", "error", err, "post_id", post.Id)
-			continue
+	if len(postsToSync) > 0 {
+		if err := p.mattermostToMatrixBridge.SyncPostsToMatrix(postsToSync, msg.ChannelId); err != nil {
+			p.logger.LogError("Failed to sync posts batch to Matrix", "error", err, "channel_id", msg.ChannelId)
 		}
 	}
 
@@ -110,10 +153,10 @@ func (p *Plugin) OnSharedChannelsSyncMsg(msg *model.SyncMsg, _ *model.RemoteClus
 			continue
 		}
 
-		if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(reaction, msg.ChannelId); err != nil {
-			p.logger.LogError("Failed to sync reaction to Matrix", "error", err, "reaction_user_id", reaction.UserId, "reaction_emoji", reaction.EmojiName)
-			continue
-		}
+		p.reactionBatcher.Add(reaction.PostId, reactionBatchItem{
+			reaction:  reaction,
+			channelID: msg.ChannelId,
+		})
 	}
 
 	return model.SyncResponse{}, nil

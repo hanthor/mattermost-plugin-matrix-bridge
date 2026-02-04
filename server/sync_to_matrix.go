@@ -45,11 +45,95 @@ func NewMattermostToMatrixBridge(utils *BridgeUtils, fileTracker FileTracker, po
 
 func (b *MattermostToMatrixBridge) getGhostUser(userID string) (string, bool) {
 	ghostUserKey := kvstore.BuildGhostUserKey(userID)
+
+	// Check cache first
+	if b.ghostUserCache != nil {
+		if ghostUserID, found := b.ghostUserCache.Get(ghostUserKey); found {
+			return ghostUserID, true
+		}
+	}
+
+	// Fall back to KV store
 	ghostUserIDBytes, err := b.kvstore.Get(ghostUserKey)
 	if err == nil && len(ghostUserIDBytes) > 0 {
-		return string(ghostUserIDBytes), true
+		ghostUserID := string(ghostUserIDBytes)
+		// Populate cache
+		if b.ghostUserCache != nil {
+			b.ghostUserCache.Set(ghostUserKey, ghostUserID)
+		}
+		return ghostUserID, true
 	}
 	return "", false
+}
+
+// GetMatrixUserID returns the Matrix user ID for a Mattermost user
+// If Mirror Mode is enabled, creates and returns real Matrix user, otherwise returns ghost user ID
+func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error) {
+	config := b.configGetter.getConfiguration()
+	
+	if config.EnableMirrorMode {
+		// Mirror Mode: Create or get real Matrix user based on username
+		user, appErr := b.API.GetUser(userID)
+		if appErr != nil {
+			return "", errors.Wrap(appErr, "failed to get Mattermost user for mirror mode")
+		}
+		
+		serverDomain := config.MatrixServerDomain
+		if serverDomain == "" {
+			serverDomain = "synapse" // Default to "synapse" if not configured
+		}
+		
+		matrixUserID := fmt.Sprintf("@%s:%s", user.Username, serverDomain)
+		
+		// Check if user already exists in our tracking
+		existingUserID, err := b.kvstore.Get(fmt.Sprintf("mirror_user_%s", userID))
+		if err == nil && len(existingUserID) > 0 {
+			b.logger.LogDebug("Using existing mirrored Matrix user", "mattermost_user_id", userID, "matrix_user_id", matrixUserID)
+			return matrixUserID, nil
+		}
+		
+		// Create the Matrix user
+		password := config.MirrorModePassword
+		if password == "" {
+			password = "mattermost-mirror-" + userID // Generate a default password
+		}
+		
+		b.logger.LogInfo("Creating Matrix user in mirror mode", "mattermost_user_id", userID, "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
+		
+		regResp, err := b.matrixClient.RegisterUserWithASToken(user.Username, password)
+		if err != nil {
+			b.logger.LogWarn("Failed to register Matrix user, may already exist", "error", err, "matrix_user_id", matrixUserID)
+			// Continue anyway - user might already exist
+		} else {
+			b.logger.LogInfo("Successfully registered Matrix user", "matrix_user_id", regResp.UserID)
+		}
+		
+		// Sync user profile if enabled
+		if config.SyncUserProfiles {
+			// Set display name
+			displayName := user.GetDisplayName(model.ShowFullName)
+			if displayName != "" {
+				if err := b.matrixClient.SetUserDisplayName(matrixUserID, displayName); err != nil {
+					b.logger.LogWarn("Failed to set Matrix user display name", "error", err, "matrix_user_id", matrixUserID)
+				} else {
+					b.logger.LogDebug("Set Matrix user display name", "matrix_user_id", matrixUserID, "display_name", displayName)
+				}
+			}
+			
+			// TODO: Sync avatar - would need to upload Mattermost profile picture to Matrix
+			// This requires fetching the profile picture from Mattermost and uploading to Matrix media store
+		}
+		
+		// Track that we've created this user
+		if err := b.kvstore.Set(fmt.Sprintf("mirror_user_%s", userID), []byte(matrixUserID)); err != nil {
+			b.logger.LogWarn("Failed to track mirrored user", "error", err, "user_id", userID)
+		}
+		
+		return matrixUserID, nil
+	}
+	
+	// Ghost mode: create or get ghost user
+	return b.CreateOrGetGhostUser(userID)
 }
 
 // CreateOrGetGhostUser creates a new Matrix ghost user for a Mattermost user, or returns existing one
@@ -96,6 +180,11 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 		b.logger.LogWarn("Failed to cache ghost user ID", "error", err, "ghost_user_id", ghostUser.UserID)
 		// Continue anyway, the ghost user was created successfully
 	}
+	
+	// Also cache in memory
+	if b.ghostUserCache != nil {
+		b.ghostUserCache.Set(ghostUserKey, ghostUser.UserID)
+	}
 
 	if displayName != "" {
 		b.logger.LogDebug("Created new ghost user with display name", "mattermost_user_id", userID, "ghost_user_id", ghostUser.UserID, "display_name", displayName)
@@ -112,9 +201,21 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 func (b *MattermostToMatrixBridge) ensureGhostUserInRoom(ghostUserID, roomID, userID string) error {
 	// Check if we've already confirmed this ghost user is in this room
 	roomMembershipKey := kvstore.BuildGhostRoomKey(userID, roomID)
+
+	// Check cache first
+	if b.roomMembershipCache != nil {
+		if membership, found := b.roomMembershipCache.Get(roomMembershipKey); found && membership == "joined" {
+			return nil
+		}
+	}
+
+	// Fall back to KV store
 	membershipBytes, err := b.kvstore.Get(roomMembershipKey)
 	if err == nil && len(membershipBytes) > 0 && string(membershipBytes) == "joined" {
-		// Already confirmed this user is in the room
+		// Already confirmed this user is in the room, update cache
+		if b.roomMembershipCache != nil {
+			b.roomMembershipCache.Set(roomMembershipKey, "joined")
+		}
 		return nil
 	}
 
@@ -129,6 +230,11 @@ func (b *MattermostToMatrixBridge) ensureGhostUserInRoom(ghostUserID, roomID, us
 	if err != nil {
 		b.logger.LogWarn("Failed to cache room membership", "error", err, "ghost_user_id", ghostUserID, "room_id", roomID)
 		// Continue anyway, the join was successful
+	}
+
+	// Also cache in memory
+	if b.roomMembershipCache != nil {
+		b.roomMembershipCache.Set(roomMembershipKey, "joined")
 	}
 
 	b.logger.LogDebug("Ghost user joined room successfully", "ghost_user_id", ghostUserID, "room_id", roomID)
@@ -285,6 +391,102 @@ func (b *MattermostToMatrixBridge) SyncUserToMatrix(user *model.User) error {
 }
 
 // SyncPostToMatrix handles syncing a single post from Mattermost to Matrix
+// SyncPostsToMatrix syncs multiple posts to Matrix for a single channel, optimizing room resolution
+func (b *MattermostToMatrixBridge) SyncPostsToMatrix(posts []*model.Post, channelID string) error {
+	if len(posts) == 0 {
+		return nil
+	}
+
+	// Resolve room ID once for all posts
+	matrixRoomIdentifier, err := b.GetMatrixRoomID(channelID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get Matrix room identifier")
+	}
+
+	if matrixRoomIdentifier == "" {
+		// Might be a DM channel, handle individually or skip if not found
+		// For simplicity, if it's potentially a DM, we'll fall back to individual sync
+		for _, post := range posts {
+			if err := b.SyncPostToMatrix(post, channelID); err != nil {
+				b.logger.LogError("Failed to sync post in batch", "error", err, "post_id", post.Id)
+			}
+		}
+		return nil
+	}
+
+	// Resolve room alias to room ID once
+	matrixRoomID, err := b.matrixClient.ResolveRoomAlias(matrixRoomIdentifier)
+	if err != nil {
+		return errors.Wrap(err, "failed to resolve Matrix room identifier")
+	}
+
+	for _, post := range posts {
+		// For each post, we still need to check deletion and other per-post logic
+		// But we pass the resolved matrixRoomID to avoid re-resolving
+		if err := b.syncPostToMatrixWithResolvedRoom(post, channelID, matrixRoomID); err != nil {
+			b.logger.LogError("Failed to sync post in batch with resolved room", "error", err, "post_id", post.Id)
+		}
+	}
+
+	return nil
+}
+
+func (b *MattermostToMatrixBridge) syncPostToMatrixWithResolvedRoom(post *model.Post, channelID, matrixRoomID string) error {
+	// Check if this is a post deletion
+	if post.DeleteAt != 0 {
+		return b.deletePostFromMatrix(post, channelID)
+	}
+
+	user, appErr := b.API.GetUser(post.UserId)
+	if appErr != nil {
+		return errors.Wrap(appErr, "failed to get user")
+	}
+
+	// Check if this post already has a Matrix event ID (indicating it's an edit)
+	config := b.getConfiguration()
+	serverDomain := extractServerDomain(b.logger, config.MatrixServerURL)
+	propertyKey := "matrix_event_id_" + serverDomain
+
+	var existingEventID string
+	if post.Props != nil {
+		if eventID, ok := post.Props[propertyKey].(string); ok {
+			existingEventID = eventID
+		}
+	}
+
+	if existingEventID != "" {
+		// Check if this is a redundant edit from adding the Matrix event ID property
+		if storedUpdateAt, exists := b.postTracker.Get(post.Id); exists {
+			if post.UpdateAt == storedUpdateAt {
+				// This post's UpdateAt matches the timestamp we stored when adding Matrix event ID
+				// This is the redundant edit from adding the Matrix event ID property
+				b.postTracker.Delete(post.Id)
+				b.logger.LogDebug("Skipping redundant edit after post creation", "post_id", post.Id, "matrix_event_id", existingEventID, "stored_update_at", storedUpdateAt, "current_update_at", post.UpdateAt)
+				return nil
+			}
+			// This is a genuine edit that happened after we added the Matrix event ID
+			// Remove the tracking entry since we're processing a real edit now
+			b.postTracker.Delete(post.Id)
+			b.logger.LogDebug("Processing genuine edit after post creation", "post_id", post.Id, "matrix_event_id", existingEventID, "stored_update_at", storedUpdateAt, "current_update_at", post.UpdateAt)
+		}
+
+		// This is a genuine post edit - update the existing Matrix message
+		err := b.updatePostInMatrix(post, matrixRoomID, existingEventID, user)
+		if err != nil {
+			return errors.Wrap(err, "failed to update post in Matrix")
+		}
+		b.logger.LogDebug("Successfully updated post in Matrix", "post_id", post.Id, "matrix_event_id", existingEventID)
+	} else {
+		// This is a new post - create new Matrix message
+		err := b.createPostInMatrix(post, matrixRoomID, user, propertyKey)
+		if err != nil {
+			return errors.Wrap(err, "failed to create post in Matrix")
+		}
+		b.logger.LogDebug("Successfully created new post in Matrix", "post_id", post.Id)
+	}
+	return nil
+}
+
 func (b *MattermostToMatrixBridge) SyncPostToMatrix(post *model.Post, channelID string) error {
 	// Check if this is a post deletion
 	if post.DeleteAt != 0 {
@@ -323,75 +525,27 @@ func (b *MattermostToMatrixBridge) SyncPostToMatrix(post *model.Post, channelID 
 		return errors.Wrap(err, "failed to resolve Matrix room identifier")
 	}
 
-	user, appErr := b.API.GetUser(post.UserId)
-	if appErr != nil {
-		return errors.Wrap(appErr, "failed to get user")
-	}
-
-	// Check if this post already has a Matrix event ID (indicating it's an edit)
-	config := b.getConfiguration()
-	serverDomain := extractServerDomain(b.logger, config.MatrixServerURL)
-	propertyKey := "matrix_event_id_" + serverDomain
-
-	var existingEventID string
-	if post.Props != nil {
-		if eventID, ok := post.Props[propertyKey].(string); ok {
-			existingEventID = eventID
-		}
-	}
-
-	if existingEventID != "" {
-		// Check if this is a redundant edit from adding the Matrix event ID property
-		if storedUpdateAt, exists := b.postTracker.Get(post.Id); exists {
-			if post.UpdateAt == storedUpdateAt {
-				// This post's UpdateAt matches the timestamp we stored when adding Matrix event ID
-				// This is the redundant edit from adding the Matrix event ID property
-				b.postTracker.Delete(post.Id)
-				b.logger.LogDebug("Skipping redundant edit after post creation", "post_id", post.Id, "matrix_event_id", existingEventID, "stored_update_at", storedUpdateAt, "current_update_at", post.UpdateAt)
-				return nil
-			}
-			// This is a genuine edit that happened after we added the Matrix event ID
-			// Remove the tracking entry since we're processing a real edit now
-			b.postTracker.Delete(post.Id)
-			b.logger.LogDebug("Processing genuine edit after post creation", "post_id", post.Id, "matrix_event_id", existingEventID, "stored_update_at", storedUpdateAt, "current_update_at", post.UpdateAt)
-		}
-
-		// This is a genuine post edit - update the existing Matrix message
-		err = b.updatePostInMatrix(post, matrixRoomID, existingEventID, user)
-		if err != nil {
-			return errors.Wrap(err, "failed to update post in Matrix")
-		}
-		b.logger.LogDebug("Successfully updated post in Matrix", "post_id", post.Id, "matrix_event_id", existingEventID)
-	} else {
-		// This is a new post - create new Matrix message
-		err = b.createPostInMatrix(post, matrixRoomID, user, propertyKey)
-		if err != nil {
-			return errors.Wrap(err, "failed to create post in Matrix")
-		}
-		b.logger.LogDebug("Successfully created new post in Matrix", "post_id", post.Id)
-	}
-
-	return nil
+	return b.syncPostToMatrixWithResolvedRoom(post, channelID, matrixRoomID)
 }
 
 // createPostInMatrix creates a new post in Matrix and stores the event ID
 func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRoomID string, user *model.User, propertyKey string) error {
 	// Skip creating ghost users for Matrix-originated users to prevent loops
 	if user.IsRemote() {
-		b.logger.LogDebug("Skipping ghost user creation for remote user", "user_id", user.Id, "username", user.Username)
+		b.logger.LogDebug("Skipping Matrix sync for remote user", "user_id", user.Id, "username", user.Username)
 		return nil
 	}
 
-	// Create or get ghost user
-	ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
+	// Get Matrix user ID (either ghost or real user depending on config)
+	matrixUserID, err := b.GetMatrixUserID(user.Id)
 	if err != nil {
-		return errors.Wrap(err, "failed to create or get ghost user")
+		return errors.Wrap(err, "failed to get Matrix user ID")
 	}
 
-	// Ensure ghost user is joined to the room
-	err = b.ensureGhostUserInRoom(ghostUserID, matrixRoomID, user.Id)
+	// Ensure user is joined to the room
+	err = b.ensureGhostUserInRoom(matrixUserID, matrixRoomID, user.Id)
 	if err != nil {
-		return errors.Wrap(err, "failed to ensure ghost user is in room")
+		return errors.Wrap(err, "failed to ensure user is in room")
 	}
 
 	// Process mentions first on the original text
@@ -459,7 +613,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	// Send message using consolidated method
 	messageRequest := matrix.MessageRequest{
 		RoomID:        matrixRoomID,
-		GhostUserID:   ghostUserID,
+		GhostUserID:   matrixUserID,  // This can be either ghost or real user
 		Message:       finalPlainText,
 		HTMLMessage:   finalHTMLContent,
 		ThreadEventID: threadEventID,
@@ -470,7 +624,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 
 	sendResponse, err := b.matrixClient.SendMessage(messageRequest)
 	if err != nil {
-		return errors.Wrap(err, "failed to send message as ghost user")
+		return errors.Wrap(err, "failed to send message to Matrix")
 	}
 
 	if len(pendingFiles) > 0 {
@@ -500,7 +654,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		}
 	}
 
-	b.logger.LogDebug("Successfully created post in Matrix", "post_id", post.Id, "ghost_user_id", ghostUserID, "event_id", sendResponse.EventID)
+	b.logger.LogDebug("Successfully created post in Matrix", "post_id", post.Id, "matrix_user_id", matrixUserID, "event_id", sendResponse.EventID)
 	
 	// Record successful message sync
 	b.metrics.RecordMessageToMatrix()

@@ -69,9 +69,9 @@ docker compose up -d
 ```
 
 This starts:
-- **Mattermost** on http://localhost:8065
+- **Mattermost** on http://localhost:8066
 - **Matrix/Synapse** on http://localhost:8888
-- **Element Web** on http://localhost:8080 (optional Matrix client)
+- **Element Web** on http://localhost:8081 (optional Matrix client)
 - PostgreSQL databases for both services
 
 ### Step 5: Create Admin Users
@@ -111,7 +111,7 @@ docker exec -u mattermost mattermost-plugin-matrix-bridge-mattermost-1 \
 
 ### Step 7: Install the Plugin
 
-1. Log into Mattermost at http://localhost:8065 with `admin` / `Admin123!`
+1. Log into Mattermost at http://localhost:8066 with `admin` / `Admin123!`
 2. Go to **System Console** → **Plugins** → **Plugin Management**
 3. Upload the plugin from `dist/com.mattermost.plugin-matrix-bridge-*.tar.gz`
 4. Enable the plugin
@@ -142,7 +142,7 @@ You can also join existing Matrix rooms from Mattermost:
 
 Element Web provides a nice UI to verify the Matrix side of the bridge:
 
-1. Open http://localhost:8080
+1. Open http://localhost:8081
 2. Click "Sign In"
 3. Log in with `admin` / `admin123`
 4. Look for bridged rooms in your room list

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -143,12 +144,24 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 
 	p.logger.LogDebug("Processing Matrix transaction", "txn_id", txnID, "event_count", len(transaction.Events))
 
-	// Process each event in the transaction
+	// Process each event in the transaction asynchronously via the queue
 	for _, event := range transaction.Events {
-		if err := p.processMatrixEvent(event); err != nil {
-			p.logger.LogError("Failed to process Matrix event", "error", err, "event_id", event.EventID, "event_type", event.Type, "room_id", event.RoomID, "txn_id", txnID)
-			// Continue processing other events even if one fails
-			continue
+		e := event // local copy for closure
+		if err := p.eventQueue.Enqueue(Task{
+			ID:   fmt.Sprintf("matrix-event-%s", e.EventID),
+			Type: "matrix-event-" + e.Type,
+			Execute: func(ctx context.Context) error {
+				if processErr := p.processMatrixEvent(e); processErr != nil {
+					p.logger.LogError("Failed to process Matrix event in worker", "error", processErr, "event_id", e.EventID)
+					return processErr
+				}
+				return nil
+			},
+		}); err != nil {
+			p.logger.LogWarn("Event queue full, processing Matrix event synchronously", "event_id", e.EventID)
+			if processErr := p.processMatrixEvent(e); processErr != nil {
+				p.logger.LogError("Failed to process Matrix event synchronously", "error", processErr, "event_id", e.EventID)
+			}
 		}
 	}
 

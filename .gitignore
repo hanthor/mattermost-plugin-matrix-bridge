@@ -20,3 +20,15 @@ server/server.test
 
 # Matrix bridge registration file
 docker/mattermost-bridge-registration.yaml
+
+# Local production deployments (site-specific)
+local-production-*/
+
+# Generated tokens and test files
+scripts/.as_token
+scripts/.hs_token
+*.test
+test_*.sh
+test_*.txt
+configure_plugin.sh
+IMPROVEMENTS_SUMMARY.md

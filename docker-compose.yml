@@ -10,7 +10,7 @@ services:
       - MM_SQLSETTINGS_DRIVERNAME=postgres
       - MM_SQLSETTINGS_DATASOURCE=postgres://mattermost:mattermost@mattermost-db:5432/mattermost?sslmode=disable
       # Service settings
-      - MM_SERVICESETTINGS_SITEURL=http://localhost:8066
+      - MM_SERVICESETTINGS_SITEURL=http://chat.test.local:8066
       - MM_SERVICESETTINGS_ENABLELOCALMODE=true
       - MM_SERVICESETTINGS_LOCALMODESOCKETLOCATION=/var/tmp/mattermost_local.socket
       - MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS=true
@@ -21,6 +21,12 @@ services:
       # Plugin settings
       - MM_PLUGINSETTINGS_ENABLEUPLOADS=true
       - MM_PLUGINSETTINGS_AUTOMATICPREPACKAGEDPLUGINS=false
+      # Matrix Bridge Plugin Configuration
+      - MM_PLUGINSETTINGS_PLUGINS_COM_MATTERMOST_PLUGIN_MATRIX_BRIDGE_MATRIXSERVERURL=${MATRIX_SERVER_URL:-http://matrix.test.local:8008}
+      - MM_PLUGINSETTINGS_PLUGINS_COM_MATTERMOST_PLUGIN_MATRIX_BRIDGE_MATRIXASTOKEN=${MATRIX_AS_TOKEN:-}
+      - MM_PLUGINSETTINGS_PLUGINS_COM_MATTERMOST_PLUGIN_MATRIX_BRIDGE_MATRIXHSTOKEN=${MATRIX_HS_TOKEN:-}
+      - MM_PLUGINSETTINGS_PLUGINS_COM_MATTERMOST_PLUGIN_MATRIX_BRIDGE_ENABLESYNC=${ENABLE_SYNC:-true}
+      - MM_PLUGINSETTINGS_PLUGINS_COM_MATTERMOST_PLUGIN_MATRIX_BRIDGE_RATELIMITINGMODE=${RATE_LIMITING_MODE:-automatic}
       # License settings - use trial license for shared channels
       - MM_TEAMSETTINGS_MAXUSERSPERTEAM=10000
     volumes:
@@ -37,6 +43,9 @@ services:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "chat.test.local:127.0.0.1"
+      - "matrix.test.local:127.0.0.1"
+      - "test.local:127.0.0.1"
 
   mattermost-db:
     image: postgres:15-alpine
@@ -70,7 +79,7 @@ services:
     image: matrixdotorg/synapse:latest
     restart: unless-stopped
     environment:
-      - SYNAPSE_SERVER_NAME=localhost
+      - SYNAPSE_SERVER_NAME=test.local
       - SYNAPSE_REPORT_STATS=no
       - UID=991
       - GID=991
@@ -86,6 +95,9 @@ services:
       - synapse-db
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "chat.test.local:127.0.0.1"
+      - "matrix.test.local:127.0.0.1"
+      - "test.local:127.0.0.1"
 
   synapse-db:
     image: postgres:15-alpine
@@ -112,7 +124,7 @@ services:
     volumes:
       - ./docker/element-config.json:/app/config.json:ro
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - synapse
 

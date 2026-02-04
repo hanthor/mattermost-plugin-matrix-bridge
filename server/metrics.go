@@ -56,66 +56,69 @@ func NewMetrics() *Metrics {
 
 // Message sync metrics
 func (m *Metrics) RecordMessageToMatrix() {
-	m.messagesToMatrix.Add(1)
+	if m != nil { m.messagesToMatrix.Add(1) }
 }
 
 func (m *Metrics) RecordMessageFromMatrix() {
-	m.messagesFromMatrix.Add(1)
+	if m != nil { m.messagesFromMatrix.Add(1) }
 }
 
 func (m *Metrics) RecordMessageSyncError() {
-	m.messageSyncErrors.Add(1)
+	if m != nil { m.messageSyncErrors.Add(1) }
 }
 
 func (m *Metrics) RecordMessageEditSynced() {
-	m.messageEditsSynced.Add(1)
+	if m != nil { m.messageEditsSynced.Add(1) }
 }
 
 func (m *Metrics) RecordReactionAdded() {
-	m.reactionsAdded.Add(1)
+	if m != nil { m.reactionsAdded.Add(1) }
 }
 
 func (m *Metrics) RecordReactionRemoved() {
-	m.reactionsRemoved.Add(1)
+	if m != nil { m.reactionsRemoved.Add(1) }
 }
 
 // User/Room metrics
 func (m *Metrics) RecordGhostUserCreated() {
-	m.ghostUsersCreated.Add(1)
+	if m != nil { m.ghostUsersCreated.Add(1) }
 }
 
 func (m *Metrics) RecordRoomCreated() {
-	m.roomsCreated.Add(1)
+	if m != nil { m.roomsCreated.Add(1) }
 }
 
 func (m *Metrics) RecordChannelCreated() {
-	m.channelsCreated.Add(1)
+	if m != nil { m.channelsCreated.Add(1) }
 }
 
 func (m *Metrics) RecordUserSynced() {
-	m.usersSynced.Add(1)
+	if m != nil { m.usersSynced.Add(1) }
 }
 
 // API call metrics
 func (m *Metrics) RecordMatrixAPICall() {
-	m.matrixAPICalls.Add(1)
+	if m != nil { m.matrixAPICalls.Add(1) }
 }
 
 func (m *Metrics) RecordMatrixAPIError() {
-	m.matrixAPIErrors.Add(1)
+	if m != nil { m.matrixAPIErrors.Add(1) }
 }
 
 func (m *Metrics) RecordMatrixAPIRetry() {
-	m.matrixAPIRetries.Add(1)
+	if m != nil { m.matrixAPIRetries.Add(1) }
 }
 
 // Latency tracking
 func (m *Metrics) RecordMessageLatency(duration time.Duration) {
+	if m == nil {
+		return
+	}
 	ms := uint64(duration.Milliseconds())
-	
+
 	m.messageLatencyMutex.Lock()
 	defer m.messageLatencyMutex.Unlock()
-	
+
 	m.messageLatencySum += ms
 	m.messageLatencyCount++
 	if ms > m.messageLatencyMax {
@@ -124,11 +127,14 @@ func (m *Metrics) RecordMessageLatency(duration time.Duration) {
 }
 
 func (m *Metrics) RecordAPILatency(duration time.Duration) {
+	if m == nil {
+		return
+	}
 	ms := uint64(duration.Milliseconds())
-	
+
 	m.apiLatencyMutex.Lock()
 	defer m.apiLatencyMutex.Unlock()
-	
+
 	m.apiLatencySum += ms
 	m.apiLatencyCount++
 	if ms > m.apiLatencyMax {
@@ -138,63 +144,79 @@ func (m *Metrics) RecordAPILatency(duration time.Duration) {
 
 // Error tracking
 func (m *Metrics) RecordError(errorType string) {
+	if m == nil {
+		return
+	}
 	m.errorsMutex.Lock()
 	defer m.errorsMutex.Unlock()
-	
+
 	m.errorsByType[errorType]++
 }
 
 // Getters for metrics values
 
 func (m *Metrics) GetMessagesToMatrix() uint64 {
+	if m == nil { return 0 }
 	return m.messagesToMatrix.Load()
 }
 
 func (m *Metrics) GetMessagesFromMatrix() uint64 {
+	if m == nil { return 0 }
 	return m.messagesFromMatrix.Load()
 }
 
 func (m *Metrics) GetMessageSyncErrors() uint64 {
+	if m == nil { return 0 }
 	return m.messageSyncErrors.Load()
 }
 
 func (m *Metrics) GetMessageEditsSynced() uint64 {
+	if m == nil { return 0 }
 	return m.messageEditsSynced.Load()
 }
 
 func (m *Metrics) GetReactionsAdded() uint64 {
+	if m == nil { return 0 }
 	return m.reactionsAdded.Load()
 }
 
 func (m *Metrics) GetReactionsRemoved() uint64 {
+	if m == nil { return 0 }
 	return m.reactionsRemoved.Load()
 }
 
 func (m *Metrics) GetGhostUsersCreated() uint64 {
+	if m == nil { return 0 }
 	return m.ghostUsersCreated.Load()
 }
 
 func (m *Metrics) GetRoomsCreated() uint64 {
+	if m == nil { return 0 }
 	return m.roomsCreated.Load()
 }
 
 func (m *Metrics) GetChannelsCreated() uint64 {
+	if m == nil { return 0 }
 	return m.channelsCreated.Load()
 }
 
 func (m *Metrics) GetUsersSynced() uint64 {
+	if m == nil { return 0 }
 	return m.usersSynced.Load()
 }
 
 func (m *Metrics) GetMatrixAPICalls() uint64 {
+	if m == nil { return 0 }
 	return m.matrixAPICalls.Load()
 }
 
 func (m *Metrics) GetMatrixAPIErrors() uint64 {
+	if m == nil { return 0 }
 	return m.matrixAPIErrors.Load()
 }
 
 func (m *Metrics) GetMatrixAPIRetries() uint64 {
+	if m == nil { return 0 }
 	return m.matrixAPIRetries.Load()
 }
 
