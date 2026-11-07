@@ -10,6 +10,7 @@
 | [BRIDGE_OVERVIEW.md](BRIDGE_OVERVIEW.md) | How the bridge works: ghost users, spaces, federation, security model, supported features | Admins, developers |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, data flow, KV storage schema, extension points | Developers |
 | [BATCH_OPERATIONS.md](BATCH_OPERATIONS.md) | Event queue and batching design | Developers |
+| [CALLS_AND_MIRROR_MODE.md](CALLS_AND_MIRROR_MODE.md) | Design: how calls are bridged, and the scenarios mirror mode must handle for a migration | Admins, developers |
 | [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md) | Experimental mirror mode on a dedicated homeserver | Admins |
 | [../LOCAL_DEVELOPMENT.md](../LOCAL_DEVELOPMENT.md) | Docker Compose stack with Mattermost, Synapse and Element | Developers |
 | [WALKTHROUGH.md](WALKTHROUGH.md) | Screenshot tour of a bridged channel, generated from the current code | Everyone |
