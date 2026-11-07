@@ -162,7 +162,6 @@ Join by room ID:
 - Bridge to rooms created by other Matrix users
 - Participate in cross-organization Matrix spaces
 
-**See also:** [Join Command Guide](JOIN_COMMAND.md) for detailed documentation
 
 ---
 
@@ -499,18 +498,19 @@ Total: 37 mappings processed
 
 ### User Permissions
 
-Most commands require:
-- Permission to post in the current channel
-- Plugin must be enabled for the team
+| Commands | Who may run them |
+|----------|------------------|
+| `test`, `list`, `status` | Any channel member |
+| `create`, `map`, `unmap`, `join` | Users allowed to manage the channel's properties (channel admins and team/system admins) |
+| `map_user`, `backfill`, `migrate`, `metrics` | System administrators only |
 
-Administrative commands (`map_user`, `backfill`) may require:
-- System Admin role
-- Plugin configuration permissions
+Everyone else receives an ephemeral "permission denied" reply and nothing changes.
 
 ### Plugin Permissions
 
 The plugin requires:
-- **Shared Channels** feature (Mattermost Pro/Enterprise)
+- Optionally the **Shared Channels** feature (Mattermost Professional/Enterprise) for attachment
+  and profile-image sync through Connected Workspaces; without it the bridge runs in hooks-only mode
 - Access to KV store (for mappings)
 - Webhook/bot permissions (for posting messages)
 
@@ -621,7 +621,6 @@ Test federation with well-known Matrix rooms:
 ## See Also
 
 - [Bridge Overview](BRIDGE_OVERVIEW.md) - Architecture and how it works
-- [Join Command Guide](JOIN_COMMAND.md) - Detailed guide for joining rooms
 - [Local Development](../LOCAL_DEVELOPMENT.md) - Setup and configuration
 - [README](../README.md) - Plugin overview
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -89,10 +88,14 @@ func (p *Plugin) setConfiguration(configuration *configuration) {
 func (p *Plugin) OnConfigurationChange() error {
 	var configuration = new(configuration)
 
-	// Check that Shared Channels is enabled (required for the bridge to function)
-	enableSharedChannels := p.GetPluginAPI().GetConfig().ConnectedWorkspacesSettings.EnableSharedChannels
-	if enableSharedChannels == nil || !*enableSharedChannels {
-		return fmt.Errorf("shared Channels is required but currently not enabled")
+	// Shared Channels (Connected Workspaces) lets the bridge receive file
+	// attachments and profile images through the sync framework. Without it the
+	// bridge still works through the regular plugin hooks, so only warn.
+	if cfg := p.API.GetConfig(); cfg != nil {
+		enableSharedChannels := cfg.ConnectedWorkspacesSettings.EnableSharedChannels
+		if enableSharedChannels == nil || !*enableSharedChannels {
+			p.API.LogWarn("Shared Channels is not enabled; the Matrix bridge will run in hooks-only mode")
+		}
 	}
 
 	// Load the public configuration fields from the Mattermost server configuration.

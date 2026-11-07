@@ -1050,6 +1050,11 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 	}
 
 	subcommand := fields[1]
+
+	if denied := c.checkCommandPermission(args, subcommand); denied != nil {
+		return denied
+	}
+
 	switch subcommand {
 	case "test":
 		return c.executeTestCommand(args)
@@ -1170,6 +1175,37 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 			Text:         unknownSubcommandError,
 		}
 	}
+}
+
+// checkCommandPermission enforces who may run each subcommand. Commands that
+// change bridge-wide state (user mappings, backfill, migrations, metrics)
+// require system admin. Commands that bridge a channel require the right to
+// manage that channel. Read-only commands are open to everyone.
+func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand string) *model.CommandResponse {
+	deny := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+
+	isSystemAdmin := func() bool {
+		return c.pluginAPI.HasPermissionTo(args.UserId, model.PermissionManageSystem)
+	}
+
+	switch subcommand {
+	case "map_user", "backfill", "migrate", "metrics":
+		if !isSystemAdmin() {
+			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
+		}
+	case "create", "map", "unmap", "join":
+		if isSystemAdmin() {
+			return nil
+		}
+		canManage := c.pluginAPI.HasPermissionToChannel(args.UserId, args.ChannelId, model.PermissionManagePublicChannelProperties) ||
+			c.pluginAPI.HasPermissionToChannel(args.UserId, args.ChannelId, model.PermissionManagePrivateChannelProperties)
+		if !canManage {
+			return deny("❌ You need permission to manage this channel to run `/matrix " + subcommand + "`.")
+		}
+	}
+	return nil
 }
 
 // shareChannelAndInvitePlugin shares a channel and invites this plugin to receive sync messages

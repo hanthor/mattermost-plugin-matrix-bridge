@@ -11,6 +11,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type env struct {
@@ -109,6 +110,7 @@ func (m *mockPlugin) GetMatrixUserIDFromMattermostUser(mattermostUserID string) 
 
 func setupTest() *env {
 	api := &plugintest.API{}
+	allowAllPermissions(api)
 	driver := &plugintest.Driver{}
 	client := pluginapi.NewClient(api, driver)
 
@@ -116,6 +118,13 @@ func setupTest() *env {
 		client: client,
 		api:    api,
 	}
+}
+
+// allowAllPermissions makes every permission check succeed so command tests
+// can focus on behaviour. Permission denial is covered by TestCommandPermissions.
+func allowAllPermissions(api *plugintest.API) {
+	api.On("HasPermissionTo", mock.Anything, mock.Anything).Return(true).Maybe()
+	api.On("HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything).Return(true).Maybe()
 }
 
 func TestMatrixCreateCommandParsing(t *testing.T) {

@@ -1,164 +1,151 @@
-# Mattermost Bridge for Matrix
+# Mattermost bridge for Matrix
 
-[![Build Status](https://github.com/mattermost/mattermost-plugin-matrix-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-matrix-bridge/actions/workflows/ci.yml)
+[![CI](https://github.com/mattermost/mattermost-plugin-matrix-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-matrix-bridge/actions/workflows/ci.yml)
+[![End-to-end](https://github.com/mattermost/mattermost-plugin-matrix-bridge/actions/workflows/e2e.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-matrix-bridge/actions/workflows/e2e.yml)
 
-A bidirectional bridge that connects Mattermost and Matrix, enabling real-time message synchronization between platforms.
+A Mattermost plugin that bridges Mattermost channels and Matrix rooms in both
+directions. It runs inside your Mattermost server and talks to your Matrix
+homeserver as a Matrix [Application Service](https://spec.matrix.org/latest/application-service-api/),
+so Mattermost users appear in Matrix as real-looking puppet ("ghost") users and
+Matrix users appear in Mattermost as remote users with their names and avatars.
 
-## Requires
+## What is bridged
 
-- Mattermost server v10.7.1 or newer, with Pro, Enterprise or higher license
-- A Matrix server, such as [Synapse](https://github.com/element-hq/synapse) v1.119
+| Feature | Mattermost → Matrix | Matrix → Mattermost |
+|---------|:-------------------:|:-------------------:|
+| Messages with formatting (Markdown ↔ HTML) | ✅ | ✅ |
+| Edits | ✅ | ✅ |
+| Deletions / redactions | ✅ | ✅ |
+| Threads / replies | ✅ | ✅ |
+| Reactions (4,400+ emoji) | ✅ | ✅ |
+| File, image, audio and video attachments | ✅ | ✅ |
+| @-mentions (`m.mentions`) | ✅ | ✅ |
+| User display names and avatars | ✅ | ✅ |
+| Membership (join and leave) | ✅ | ✅ |
+| Channel ↔ room creation, team ↔ space | ✅ | — |
+| Room name and topic → channel name and header | — | ✅ |
+| Typing notifications | — | ✅ |
+| Presence → Mattermost status | — | ✅ |
+| Direct and group messages | ✅ | ✅ (partial) |
+| Read receipts | — | — |
+| End-to-end encrypted rooms | — | — |
 
-## Features
-
-- **Bidirectional Sync**: Messages, reactions, and edits sync automatically in both directions
-- **Real Users**: Messages appear from actual users, not bots, with authentic names and avatars
-- **Rich Content**: Full support for formatting, emoji reactions, threads, and file attachments
-- **Easy Setup**: Simple configuration with automatic registration file generation
-- **Secure**: Loop prevention, proper authentication, and namespace isolation
-
-## Quick Start
-
-### 1. Install Plugin
-- Download from [releases](https://github.com/mattermost/mattermost-plugin-matrix-bridge/releases)
-- Upload via System Console → Plugins → Plugin Management
-
-### 2. Configure Settings
-- Go to System Console → Plugins → Matrix Bridge
-- Set your Matrix homeserver URL (e.g., `https://matrix.example.com`)
-- Generate Application Service and Homeserver tokens
-- Enable message synchronization
-
-### 3. Setup Matrix Homeserver
-- Download the registration file from the admin console
-- Add it to your Matrix homeserver's `app_service_config_files`
-- Restart your homeserver
-
-### 4. Connect Channels
-Use slash commands to bridge channels:
-
-```
-/matrix test                            # Test Matrix connection and configuration
-/matrix create "Room Name"              # Create new Matrix room
-/matrix map #room:matrix.example.com    # Map to existing room
-/matrix status                          # Check bridge health
-```
-
-## How It Works
-
-1. **Create Mapping**: Link a Mattermost channel to a Matrix room
-2. **Enable Sharing**: Configure the channel for shared channels in Channel Settings
-3. **Start Chatting**: Messages automatically sync between platforms with full user attribution
-
-**What Gets Synced:**
-- Messages (with formatting and mentions)
-- Emoji reactions (4,400+ emoji support)
-- Message edits and deletions
-- User profiles with display names and avatars
-- Reply threads
+Loop prevention is built in: every bridged message is tagged on both sides and
+echoes are dropped.
 
 ## Requirements
 
-- Mattermost Server 10.7.1+
-- Matrix homeserver with Application Service support (Synapse, Dendrite, etc.)
-- Admin access to both platforms
+- Mattermost server 10.7.1 or newer. Shared Channels (Connected Workspaces,
+  Professional/Enterprise) is optional; it adds attachment and profile-image
+  sync through Mattermost's own sync framework. Without it the bridge runs in
+  hooks-only mode and still bridges everything in the table above.
+- A Matrix homeserver that supports Application Services (Synapse, Dendrite,
+  Conduit/conduwuit). Tested against Synapse.
+- Network access from the Mattermost server to the homeserver's client API,
+  and from the homeserver to the Mattermost site URL.
 
-## Configuration
+## Quick start
+
+### 1. Mattermost side
+
+1. Download the latest release and upload it in **System Console → Plugins →
+   Plugin Management**, or run `make deploy` against a dev server.
+2. Open **System Console → Plugins → Mattermost bridge for Matrix** and set:
+   - **Matrix Server URL**: the homeserver's client API URL as seen from the
+     Mattermost server, e.g. `https://matrix.example.com`.
+   - **Matrix Server Name**: only if the domain in your Matrix user IDs differs
+     from the URL hostname (e.g. `example.com` for `@alice:example.com`).
+   - Click **Regenerate** for both the **Application Service Token** and the
+     **Homeserver Token**.
+   - Turn on **Enable Message Sync** and **Save**.
+3. Click **Download Registration File**. It contains the two tokens, the
+   plugin's callback URL (`<site URL>/plugins/com.mattermost.plugin-matrix-bridge`)
+   and the user namespace the bridge owns.
+
+### 2. Matrix side
+
+1. Copy the downloaded `mattermost-bridge-registration.yaml` to your
+   homeserver, e.g. `/data/mattermost-bridge-registration.yaml`.
+2. Reference it from `homeserver.yaml`:
+
+   ```yaml
+   app_service_config_files:
+     - /data/mattermost-bridge-registration.yaml
+   ```
+
+3. Restart the homeserver. Synapse logs `Loaded application service` on
+   startup; it will deliver events, typing and presence to the plugin and let
+   the plugin act as `@_mattermost_*` users.
+
+### 3. Verify and connect a channel
+
+In any Mattermost channel:
+
+```
+/matrix test                           # checks URL, tokens and appservice permissions
+/matrix create                         # create a Matrix room for this channel
+/matrix map #room:example.com          # or bridge an existing room (bot must be able to join)
+/matrix list                           # show all mappings
+/matrix unmap                          # stop bridging this channel
+```
+
+New public and private channels get a Matrix room automatically, and new teams
+get a Matrix space. See [docs/COMMANDS.md](docs/COMMANDS.md) for every command.
+Bridging commands require permission to manage the channel; `map_user`,
+`backfill`, `migrate` and `metrics` require a system administrator.
+
+## Configuration reference
 
 | Setting | Description |
 |---------|-------------|
-| Matrix Server URL | Your Matrix homeserver URL |
-| Application Service Token | Generated token for Matrix authentication |
-| Homeserver Token | Generated token for webhook security |
-| Enable Message Sync | Toggle bidirectional synchronization |
+| Matrix Server URL | Client API URL of the homeserver. |
+| Matrix Server Name | Domain of Matrix user IDs when it differs from the URL hostname. |
+| Application Service Token | Token the plugin uses to act as ghost users. Goes into the registration as `as_token`. |
+| Homeserver Token | Token the homeserver presents to the plugin. Goes into the registration as `hs_token`. |
+| Enable Message Sync | Master switch for both directions. |
+| Matrix User Prefix | Prefix of Mattermost accounts created for Matrix users (default `matrix`). |
+| Matrix Rate Limiting | How aggressively the plugin throttles requests to the homeserver. |
+| Mirror Mode (experimental) | Takes over a dedicated homeserver and creates real `@username` accounts instead of ghosts. See [docs/MIRROR_MODE_SETUP.md](docs/MIRROR_MODE_SETUP.md). |
 
 ## Development
 
 ```bash
-# Build everything
-make all
-
-# Run tests
-make test
-
-# Deploy to local Mattermost
-make deploy
+make dist          # build server, webapp and the plugin bundle
+make test          # Go and webapp unit tests
+make check-style   # golangci-lint and eslint
+make e2e           # Complement end-to-end suite (Docker required)
+./scripts/local-setup.sh   # Mattermost + Synapse + Element with the plugin installed
 ```
 
-### Emoji Generation
+- [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md): the Docker Compose dev stack.
+- [e2e/README.md](e2e/README.md): the end-to-end suite, which deploys Synapse
+  through [Complement](https://github.com/matrix-org/complement) and a real
+  Mattermost server, then exercises every bridged feature in both directions.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): components, data flow and
+  storage layout.
 
-To generate the emoji mappings in the `server/emoji_mappings_generated.go` file:
-
-```bash
-make generate-emoji
-```
-
-## Local Development with Matrix Synapse
-
-For local development and testing, you can run a Matrix Synapse server using Docker Compose.
-
-### Prerequisites
-
-1. Install and configure the Mattermost Matrix Bridge plugin first
-2. Generate the bridge registration file through the plugin configuration
-3. Copy the generated registration file to `docker/mattermost-bridge-registration.yaml`
-
-### Starting the Matrix Synapse Server
-
-1. Start the services:
-   ```bash
-   docker-compose up -d
-   ```
-
-2. Create an admin user:
-   ```bash
-   docker exec -it mattermost-plugin-matrix-bridge-synapse-1 register_new_matrix_user -c /data/homeserver.yaml -u admin -p admin123 -a http://localhost:8008
-   ```
-
-3. The Matrix server will be available at `http://localhost:8888`
-
-### Configuration Notes
-
-- The Synapse server is configured to use PostgreSQL as the database
-- Registration is enabled for development purposes
-- App service configuration is loaded from `docker/mattermost-bridge-registration.yaml`
-- Room list publication is restricted to the bridge user only
-
-### Stopping the Services
-
-```bash
-docker-compose down
-```
-
-To completely reset (remove all data):
-```bash
-docker-compose down -v
-```
+Regenerate emoji mappings with `make generate-emoji` and Go mocks with
+`make mock`.
 
 ## Troubleshooting
 
-**Connection Issues:**
-- Verify Matrix server URL and tokens are correct
-- Check that registration file is installed on Matrix homeserver
-- Use `/matrix status` to diagnose problems
-
-**Sync Problems:**
-- Ensure channel is configured for shared channels
-- Check that both platforms can reach each other
-- Review plugin logs for detailed error information
+- `/matrix test` fails: check that the Mattermost server can reach the Matrix
+  Server URL and that `as_token` in the registration matches the plugin.
+- Matrix → Mattermost does nothing: the homeserver must be able to reach the
+  Mattermost **Site URL**. Check the homeserver log for appservice delivery
+  errors; the plugin answers `401`/`403` when `hs_token` does not match.
+- Ghost users have the wrong domain: set **Matrix Server Name** to the
+  homeserver's `server_name`.
+- Enable the plugin's debug logging (System Console → Logging) or set
+  `MM_MATRIX_LOG_FILESPEC` to write every received appservice transaction to a
+  file.
 
 ## Support
 
 - [GitHub Issues](https://github.com/mattermost/mattermost-plugin-matrix-bridge/issues)
-- [Matrix Specification](https://spec.matrix.org/)
-- [Mattermost Plugin Documentation](https://developers.mattermost.com/integrate/plugins/)
-
-## Roadmap
-
-- Support multiple Matrix instances
-- Expose more Share Channels APIs in plugin API
-- Improve support for private, encrypted channels
+- [Matrix specification](https://spec.matrix.org/)
+- [Mattermost plugin documentation](https://developers.mattermost.com/integrate/plugins/)
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE).

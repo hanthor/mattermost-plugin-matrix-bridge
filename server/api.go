@@ -3,79 +3,95 @@ package main
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
-// ServeHTTP demonstrates a plugin that handles HTTP requests by greeting the world.
-// The root URL is currently <siteUrl>/plugins/com.mattermost.plugin-starter-template/api/v1/. Replace com.mattermost.plugin-starter-template with the plugin ID.
+// ServeHTTP exposes the Matrix Application Service API implemented by the bridge.
+//
+// The homeserver reaches the bridge at
+// <siteURL>/plugins/<plugin id>/_matrix/app/v1/... (the URL written into the
+// appservice registration). The legacy unprefixed paths used by older
+// homeservers are served as well.
 func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	router := mux.NewRouter()
 
-	// Matrix Application Service webhook endpoint with Matrix authentication
-	matrixRouter := router.PathPrefix("/_matrix/app/v1").Subrouter()
-	matrixRouter.Use(p.MatrixAuthorizationRequired)
-	matrixRouter.HandleFunc("/transactions/{txnId}", p.handleMatrixTransaction).Methods(http.MethodPut)
-
-	// Authenticated Mattermost API routes
-	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	apiRouter.Use(p.MattermostAuthorizationRequired)
-	apiRouter.HandleFunc("/hello", p.HelloWorld).Methods(http.MethodGet)
+	for _, prefix := range []string{"/_matrix/app/v1", ""} {
+		asRouter := router.PathPrefix(prefix).Subrouter()
+		asRouter.Use(p.MatrixAuthorizationRequired)
+		asRouter.HandleFunc("/transactions/{txnId}", p.handleMatrixTransaction).Methods(http.MethodPut)
+		asRouter.HandleFunc("/users/{userId}", p.handleAppServiceUserQuery).Methods(http.MethodGet)
+		asRouter.HandleFunc("/rooms/{roomAlias}", p.handleAppServiceRoomQuery).Methods(http.MethodGet)
+		asRouter.HandleFunc("/ping", p.handleAppServicePing).Methods(http.MethodPost)
+	}
 
 	router.ServeHTTP(w, r)
 }
 
-// MattermostAuthorizationRequired is a middleware that requires users to be logged in.
-func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get("Mattermost-User-ID")
-		if userID == "" {
-			http.Error(w, "Not authorized", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
+// writeMatrixError writes a Matrix-style JSON error body.
+func writeMatrixError(w http.ResponseWriter, status int, errcode, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"errcode": errcode, "error": message})
 }
 
-// MatrixAuthorizationRequired is a middleware that requires valid Matrix hs_token authentication.
+// writeJSON writes a JSON response with the given status.
+func writeJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+// extractMatrixAccessToken returns the credential the homeserver presented:
+// the Authorization bearer token (spec v1.4+) or the legacy access_token
+// query parameter.
+func extractMatrixAccessToken(r *http.Request) string {
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		if strings.HasPrefix(auth, "Bearer ") {
+			return strings.TrimPrefix(auth, "Bearer ")
+		}
+		return ""
+	}
+	return r.URL.Query().Get("access_token")
+}
+
+// MatrixAuthorizationRequired is a middleware that requires a valid hs_token.
+//
+// Following the Application Service API: a request without credentials is
+// answered with 401 M_UNAUTHORIZED, a request with the wrong credentials with
+// 403 M_FORBIDDEN.
 func (p *Plugin) MatrixAuthorizationRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		config := p.getConfiguration()
 
-		// Check if sync is enabled
 		if !config.EnableSync {
-			p.logger.LogDebug("Matrix webhook received but sync is disabled")
-			http.Error(w, "Sync disabled", http.StatusServiceUnavailable)
+			p.logger.LogDebug("Matrix appservice request received but sync is disabled")
+			writeMatrixError(w, http.StatusServiceUnavailable, "M_UNKNOWN", "Matrix sync is disabled")
 			return
 		}
-
-		// Verify hs_token in Authorization header
-		authHeader := r.Header.Get("Authorization")
-		expectedToken := "Bearer " + config.MatrixHSToken
 
 		if config.MatrixHSToken == "" {
-			p.logger.LogWarn("Matrix webhook received but hs_token not configured")
-			http.Error(w, "Matrix not configured", http.StatusServiceUnavailable)
+			p.logger.LogWarn("Matrix appservice request received but hs_token not configured")
+			writeMatrixError(w, http.StatusServiceUnavailable, "M_UNKNOWN", "Matrix homeserver token not configured")
 			return
 		}
 
-		if subtle.ConstantTimeCompare([]byte(authHeader), []byte(expectedToken)) != 1 {
-			p.logger.LogWarn("Matrix webhook authentication failed - bearer token mismatch")
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		token := extractMatrixAccessToken(r)
+		if token == "" {
+			writeMatrixError(w, http.StatusUnauthorized, "M_UNAUTHORIZED", "Missing access token")
+			return
+		}
+
+		if subtle.ConstantTimeCompare([]byte(token), []byte(config.MatrixHSToken)) != 1 {
+			p.logger.LogWarn("Matrix appservice authentication failed - hs_token mismatch")
+			writeMatrixError(w, http.StatusForbidden, "M_FORBIDDEN", "Invalid access token")
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-// HelloWorld handles GET requests to /hello endpoint.
-func (p *Plugin) HelloWorld(w http.ResponseWriter, _ *http.Request) {
-	if _, err := w.Write([]byte("Hello, world!")); err != nil {
-		p.logger.LogError("Failed to write response", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }

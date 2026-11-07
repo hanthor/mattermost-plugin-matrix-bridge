@@ -80,7 +80,7 @@ func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error
 
 		serverDomain := config.MatrixServerDomain
 		if serverDomain == "" {
-			serverDomain = "synapse" // Default to "synapse" if not configured
+			serverDomain = b.matrixClient.ServerDomain()
 		}
 
 		matrixUserID := fmt.Sprintf("@%s:%s", user.Username, serverDomain)

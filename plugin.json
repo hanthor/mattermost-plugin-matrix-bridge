@@ -26,7 +26,7 @@
                 "key": "matrix_server_url",
                 "display_name": "Matrix Server URL",
                 "type": "text",
-                "help_text": "The URL of the Matrix homeserver (e.g., https://matrix.org)",
+                "help_text": "Client-Server API URL of the Matrix homeserver as reachable from the Mattermost server (e.g. https://matrix.example.com or http://synapse:8008).",
                 "placeholder": "https://matrix.example.com",
                 "default": ""
             },
@@ -48,30 +48,38 @@
                 "key": "enable_sync",
                 "display_name": "Enable Message Sync",
                 "type": "bool",
-                "help_text": "Enable syncing messages from Mattermost to Matrix",
+                "help_text": "Enable bridging between Mattermost and Matrix. Both directions require this.",
                 "default": false
+            },
+            {
+                "key": "matrix_username_prefix",
+                "display_name": "Matrix User Prefix",
+                "type": "text",
+                "help_text": "Prefix for Mattermost accounts created for Matrix users (e.g. 'matrix' creates matrix:alice). Change only before any Matrix users have been bridged.",
+                "placeholder": "matrix",
+                "default": "matrix"
             },
             {
                 "key": "enable_mirror_mode",
                 "display_name": "Enable Mirror Mode (Experimental)",
                 "type": "bool",
-                "help_text": "⚠️ ADVANCED: Completely hijacks the Matrix server to mirror Mattermost. Automatically creates real Matrix users (@username:domain) and syncs profiles. Requires a DEDICATED Matrix server. Users will be able to login to Matrix/Element with the configured password.",
+                "help_text": "⚠️ ADVANCED: Takes over a DEDICATED Matrix homeserver to mirror Mattermost. Creates real Matrix accounts (@username:server-name) with synced profiles so people can log in with Element. Requires the mirror-mode user namespace in the registration file.",
                 "default": false
             },
             {
                 "key": "matrix_server_domain",
-                "display_name": "Matrix Server Domain",
+                "display_name": "Matrix Server Name",
                 "type": "text",
-                "help_text": "The Matrix server domain (e.g., 'synapse' for @user:synapse). Used for Mirror Mode.",
-                "placeholder": "synapse",
-                "default": "synapse"
+                "help_text": "The homeserver's server_name, i.e. the domain part of Matrix user IDs (e.g. 'example.com' for @user:example.com). Leave empty when it equals the hostname of the Matrix Server URL.",
+                "placeholder": "example.com",
+                "default": ""
             },
             {
                 "key": "mirror_mode_password",
                 "display_name": "Mirror Mode Default Password",
                 "type": "text",
-                "help_text": "Default password for auto-created Matrix users in Mirror Mode. Users can login to Element with their Mattermost username and this password. Leave empty to generate unique passwords per user.",
-                "placeholder": "changeme123",
+                "help_text": "Password for Matrix accounts created in Mirror Mode. Leave empty to generate a unique random password per user (recommended unless users must log in to Element directly).",
+                "placeholder": "",
                 "default": ""
             },
             {
@@ -114,7 +122,7 @@
                 "key": "registration_download",
                 "display_name": "Matrix Application Service Registration",
                 "type": "custom",
-                "help_text": "Download the registration file for your Matrix homeserver.\n \n**Setup Instructions:**\n1. Download the file using the button above\n2. Copy it to your Matrix homeserver\n3. Add the file path to your homeserver.yaml under 'app_service_config_files'\n4. Restart your Matrix homeserver\n\nSee the [Matrix Application Service spec](https://spec.matrix.org/v1.14/application-service-api/) for details."
+                "help_text": "Download the registration file for your Matrix homeserver.\n \n**Setup Instructions:**\n1. Save the settings on this page, then download the file using the button above\n2. Copy it to your Matrix homeserver (e.g. /data/mattermost-bridge-registration.yaml)\n3. Add the file path to homeserver.yaml under 'app_service_config_files'\n4. Restart your Matrix homeserver and run /matrix test in any channel\n\nSee the [Matrix Application Service spec](https://spec.matrix.org/v1.14/application-service-api/) for details."
             },
             {
                 "key": "homeserver_config",

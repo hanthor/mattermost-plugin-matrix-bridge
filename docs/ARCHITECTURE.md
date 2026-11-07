@@ -127,7 +127,7 @@ Handles all communication with the Matrix homeserver via Client-Server API.
 **Key Methods:**
 ```go
 // Room Management
-CreateRoom(name, topic, serverDomain string, isPublic bool, channelID string) (string, error)
+CreateRoom(name, topic, serverDomain string, isPublic bool, channelID string, skipPrefix bool, teamName string) (string, error)
 CreateSpace(name, topic, aliasLocalPart string) (string, error)
 JoinRoom(roomIdentifier string) error
 JoinRoomAsUser(roomIdentifier, userID string) error
@@ -743,18 +743,21 @@ Possible metrics to track:
 
 ### Features (Implementation Status)
 
-#### ✅ Implemented (Just Need Hook Wiring)
-- **Message edit sync** - Logic exists in `SyncPostToMatrix`, just needs `MessageHasBeenUpdated` hook
-- **Reaction bridging** - Full implementation in `SyncReactionToMatrix`, needs `ReactionHasBeenAdded`/`ReactionHasBeenRemoved` hooks
-- **Threaded conversations** - Already working! Checks `post.RootId` and uses Matrix thread relations
-
-#### 🚧 Partially Implemented
-- **Message deletion sync** - Reaction removal works, post deletion needs hook implementation
+#### ✅ Implemented
+- **Message edits, deletions, reactions and threads** in both directions through the
+  `MessageHasBeenUpdated`, `MessageHasBeenDeleted`/Shared Channels and `ReactionHasBeen*` hooks
+  and the appservice transaction handler.
+- **Membership**: `UserHasJoinedChannel`/`UserHasLeftChannel` move ghosts in and out of rooms;
+  `m.room.member` events add and remove remote users in channels.
+- **Ephemeral events** (`m.typing`, `m.presence`) are accepted when the registration sets
+  `receive_ephemeral` and are republished as Mattermost typing events and status updates.
+- **Room state**: `m.room.name` and `m.room.topic` update the channel display name and header.
+- **Appservice API**: `/transactions`, `/users` (lazy ghost provisioning), `/rooms` and `/ping`,
+  on both the `/_matrix/app/v1` and legacy paths, with 401/403 semantics from the spec.
 
 #### 📋 Planned
-- Typing indicators
-- Read receipts  
-- Presence sync
+- Read receipts (no Mattermost plugin API to mark channels read for another user)
+- Typing indicators Mattermost → Matrix (no plugin hook exposes typing)
 - End-to-end encryption (E2EE) - requires significant work, see below
 
 #### ❌ Not Feasible

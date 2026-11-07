@@ -820,6 +820,51 @@ func (c *Client) joinGhostUserWithFallback(roomID, ghostUserID string) error {
 	return nil
 }
 
+// LeaveRoomAsUser makes the given (ghost) user leave a room.
+func (c *Client) LeaveRoomAsUser(roomID, userID string) error {
+	if c.serverURL == "" || c.asToken == "" {
+		return errors.New("matrix client not configured")
+	}
+
+	endpoint, err := BuildSecureURL("/_matrix/client/v3/rooms/", roomID, "leave")
+	if err != nil {
+		return errors.Wrap(err, "invalid room ID")
+	}
+	requestURL := c.serverURL + endpoint
+	if userID != "" {
+		requestURL += "?user_id=" + url.QueryEscape(userID)
+	}
+
+	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		return errors.Wrap(err, "failed to create leave request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send leave request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to leave room: HTTP %d - %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// ServerDomain returns the Matrix server name this client builds user IDs
+// with, or "" when it cannot be determined.
+func (c *Client) ServerDomain() string {
+	domain, err := c.extractServerDomain()
+	if err != nil {
+		return ""
+	}
+	return domain
+}
+
 // CreateRoom creates a new Matrix room with the specified name, topic, and settings.
 // Returns the room ID or alias on success.
 // If skipPrefix is true, no _mattermost_ prefix is added (for Mirror Mode)
