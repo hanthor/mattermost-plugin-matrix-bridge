@@ -431,9 +431,12 @@ await step('feature: edits', async () => {
     await shot(alice.page, 'feature-element-edit', 'Ada edits her post; Element shows the edited message with the "(edited)" marker.');
     const own = await matrixApi('GET', `/_matrix/client/v3/rooms/${encodeURIComponent(roomID)}/messages?dir=b&limit=30`);
     const mine = (own.chunk || []).find((ev) => ev.sender === scenario.alice.userID && (ev.content?.body || '').includes('Hello from'));
-    const edited = 'Hello from **Matrix**! Replies, edits, reactions and files all flow back the other way, including edits. 🎉';
+    const edited = 'Hello from Matrix! Replies, edits, reactions and files all flow back the other way, including edits. 🎉';
+    const editedHTML = 'Hello from <strong>Matrix</strong>! Replies, edits, reactions and files all flow back the other way, including edits. 🎉';
     await matrixText(roomID, `* ${edited}`, {
-        'm.new_content': {msgtype: 'm.text', body: edited},
+        format: 'org.matrix.custom.html',
+        formatted_body: `* ${editedHTML}`,
+        'm.new_content': {msgtype: 'm.text', body: edited, format: 'org.matrix.custom.html', formatted_body: editedHTML},
         'm.relates_to': {rel_type: 'm.replace', event_id: mine.event_id},
     });
     await ada.waitForText('including edits');
