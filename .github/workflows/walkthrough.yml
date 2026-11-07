@@ -21,7 +21,7 @@ permissions:
 jobs:
   screenshots:
     name: Generate walkthrough screenshots
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
       COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse:develop
