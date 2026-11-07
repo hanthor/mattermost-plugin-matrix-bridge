@@ -90,7 +90,8 @@ bridged today and which are still gaps, as verified by the end-to-end suite.
 | Piece | Role |
 | --- | --- |
 | [`e2e/walkthrough_test.go`](../e2e/walkthrough_test.go) | Gated on `E2E_WALKTHROUGH=1`. Deploys the stack with the shared harness, starts an Element Web container pointed at the Complement homeserver, and spawns the Playwright script with the URLs and credentials in `WALKTHROUGH_SCENARIO`. |
-| [`e2e/walkthrough/walkthrough.mjs`](../e2e/walkthrough/walkthrough.mjs) | Logs in to Mattermost and Element, runs the commands above, waits for each bridged event and captures a screenshot per step. Each step is independent, so one UI change does not hide the rest of the tutorial. Writes `manifest.json` with the captions. |
+| [`e2e/walkthrough/walkthrough.mjs`](../e2e/walkthrough/walkthrough.mjs) | Drives Mattermost with [`@mattermost/playwright-lib`](https://www.npmjs.com/package/@mattermost/playwright-lib), Mattermost's own Playwright page objects (API login, `ChannelsPage`, `SystemConsolePage`), runs the commands above, waits for each bridged event and captures a screenshot per step. Each step is independent, so one UI change does not hide the rest of the tutorial. Writes `manifest.json` with the captions. |
+| [`e2e/walkthrough/element.mjs`](../e2e/walkthrough/element.mjs) | Element helpers mirrored from [element-web's Playwright suite](https://github.com/element-hq/element-web/tree/develop/apps/web/playwright): credential injection, toast handling, composer and timeline selectors. |
 | [`.github/workflows/walkthrough.yml`](../.github/workflows/walkthrough.yml) | Runs the test in CI, uploads the images as an artifact, and on `master` opens a pull request with the refreshed images. |
 
 Set `WALKTHROUGH_OUT_DIR` to write the images somewhere else and

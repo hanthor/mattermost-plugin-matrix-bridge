@@ -41,3 +41,4 @@ IMPROVEMENTS_SUMMARY.md
 e2e/walkthrough/node_modules/
 e2e/walkthrough/package-lock.json
 docs/walkthrough-debug/
+e2e/walkthrough/storage_state/

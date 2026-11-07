@@ -87,8 +87,10 @@ cd e2e && COMPLEMENT_BASE_IMAGE=ghcr.io/element-hq/synapse/complement-synapse:de
 
 `TestWalkthrough` (skipped unless `E2E_WALKTHROUGH=1`) additionally starts
 Element Web and drives both web UIs with Playwright from
-[`walkthrough/walkthrough.mjs`](walkthrough/walkthrough.mjs), writing the
-images behind [docs/WALKTHROUGH.md](../docs/WALKTHROUGH.md). Run it with
+[`walkthrough/walkthrough.mjs`](walkthrough/walkthrough.mjs), using
+Mattermost's `@mattermost/playwright-lib` page objects and helpers mirrored
+from element-web's Playwright suite, writing the images behind
+[docs/WALKTHROUGH.md](../docs/WALKTHROUGH.md). Run it with
 `make walkthrough` from the repository root.
 
 ## Notes
