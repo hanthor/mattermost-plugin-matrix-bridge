@@ -52,6 +52,14 @@ func (m *mockPlugin) GetKVStore() kvstore.KVStore {
 	return m.kvstore
 }
 
+func (m *mockPlugin) MirrorStatus() MirrorStatus {
+	return MirrorStatus{Mode: "ghost"}
+}
+
+func (m *mockPlugin) ClaimMirrorAccount(_ string) (string, string, error) {
+	return "", "", nil
+}
+
 func (m *mockPlugin) CreateIdentityLinkCode(_ string) (string, error) {
 	return "TESTCODE", nil
 }

@@ -14,12 +14,7 @@ import (
 
 // getGhostUser retrieves the Matrix ghost user ID for a Mattermost user if it exists
 func (p *Plugin) getGhostUser(mattermostUserID string) (string, bool) {
-	ghostUserKey := "ghost_user_" + mattermostUserID
-	ghostUserIDBytes, err := p.kvstore.Get(ghostUserKey)
-	if err == nil && len(ghostUserIDBytes) > 0 {
-		return string(ghostUserIDBytes), true
-	}
-	return "", false
+	return lookupBridgeAccount(p.kvstore, mattermostUserID)
 }
 
 // extractServerDomain extracts the hostname from a Matrix server URL

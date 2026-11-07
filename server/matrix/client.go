@@ -185,8 +185,9 @@ type Client struct {
 	remoteID     string // Plugin remote ID for metadata
 	httpClient   *http.Client
 	logger       Logger
-	serverDomain string // explicit server domain for testing
-	puppetToken  string // when set, requests act as a real user with this token instead of impersonating via the AS token
+	serverDomain string      // explicit server domain for testing
+	puppetToken  string      // when set, requests act as a real user with this token instead of impersonating via the AS token
+	sent         *sentEvents // events this client sent, shared by puppet copies, to recognise their echoes
 
 	// Rate limiting
 	rateLimitConfig     RateLimitConfig
@@ -291,6 +292,7 @@ func NewClientWithLoggerAndRateLimit(serverURL, asToken, remoteID string, logger
 		},
 		logger:          logger,
 		rateLimitConfig: rateLimitConfig,
+		sent:            newSentEvents(),
 	}
 
 	// Initialize rate limiters if enabled
@@ -399,6 +401,7 @@ func (c *Client) RedactEventAsGhost(roomID, eventID, ghostUserID string) (*SendE
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal redaction response")
 	}
+	c.sent.record(response.EventID)
 
 	return &response, nil
 }
@@ -2040,6 +2043,7 @@ func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID s
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal response")
 	}
+	c.sent.record(response.EventID)
 
 	return &response, nil
 }

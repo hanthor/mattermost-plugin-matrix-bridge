@@ -104,6 +104,13 @@ var All = []Capability{
 	{ID: "users.puppeting", Area: "Users", Name: "Double puppeting (use my own Matrix account)", Direction: MattermostToMatrix, Status: Supported, Notes: "\"!mattermost login <access_token>\" lets the bridge send as the linked Matrix account."},
 	{ID: "identity.sso", Area: "Users", Name: "Automatic linking through shared SSO (OIDC / Matrix Authentication Service)", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Match accounts by verified email from a shared identity provider so linking is zero-touch."},
 
+	// Mirror mode
+	{ID: "mirror.accounts", Area: "Mirror mode", Name: "Real @username accounts instead of ghosts", Direction: MattermostToMatrix, Status: Supported, Notes: "Created without credentials; the first account pins the mode so it cannot be switched under existing accounts."},
+	{ID: "mirror.collisions", Area: "Mirror mode", Name: "Name collisions with existing accounts", Direction: MattermostToMatrix, Status: Supported, Notes: "A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status."},
+	{ID: "mirror.claim", Area: "Mirror mode", Name: "Claiming an account", Direction: MatrixToMattermost, Status: Supported, Notes: "/matrix claim with an admin token, or the first message from the person's own client after shared login. Their messages then post as them and the bridge keeps sending through the appservice."},
+	{ID: "mirror.sso_provider", Area: "Mirror mode", Name: "Shared login with Mattermost as the identity provider", Direction: MatrixToMattermost, Status: Partial, Notes: "Documented for Matrix Authentication Service; nothing in the plugin sets it up."},
+	{ID: "mirror.migrate", Area: "Mirror mode", Name: "Ghosts to mirror accounts migration", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Planned: /matrix migrate ghosts-to-mirror."},
+
 	// Membership and rooms
 	{ID: "membership.join_leave", Area: "Rooms", Name: "Join and leave", Direction: MattermostToMatrix, Status: Supported, Notes: ""},
 	{ID: "membership.join_leave.in", Area: "Rooms", Name: "Join and leave", Direction: MatrixToMattermost, Status: Supported, Notes: ""},

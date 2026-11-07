@@ -202,10 +202,22 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		p.handleBridgeBotMembership(event)
 		return nil
 	}
-	if isBotCommand(event) && !p.isGhostUser(event.Sender) && event.Sender != p.BridgeBotUserID() {
+	if isBotCommand(event) && !p.isBridgeAccount(event.Sender) && event.Sender != p.BridgeBotUserID() {
 		p.handleBotCommand(event)
 		return nil
 	}
+
+	// An event the bridge sent comes back through the transaction; never
+	// relay it again. Exact for every account, including a claimed mirror
+	// account whose own client shares the sender with the bridge.
+	if p.matrixClient != nil && p.matrixClient.SentByBridge(event.EventID) {
+		p.logger.LogDebug("Ignoring echo of an event the bridge sent", "event_id", event.EventID, "event_type", event.Type)
+		return nil
+	}
+	// In mirror mode, the first message from an unclaimed mirror account that
+	// the bridge did not send means the person is using their account: claim
+	// it, then relay the message as theirs.
+	p.claimOnFirstOwnMessage(event)
 
 	// Check if we have an existing mapping for this room
 	channelID, err := p.getChannelIDFromMatrixRoom(event.RoomID)
@@ -236,9 +248,10 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		}
 	}
 
-	// Skip events from our own ghost users to prevent loops
-	if p.isGhostUser(event.Sender) {
-		p.logger.LogDebug("Ignoring event from ghost user", "sender", event.Sender, "event_type", event.Type, "room_id", event.RoomID)
+	// Skip events from accounts only the bridge drives (ghosts and unclaimed
+	// mirror accounts) to prevent loops
+	if p.isBridgeAccount(event.Sender) {
+		p.logger.LogDebug("Ignoring event from a bridge account", "sender", event.Sender, "event_type", event.Type, "room_id", event.RoomID)
 		return nil
 	}
 

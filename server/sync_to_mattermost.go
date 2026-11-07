@@ -1165,9 +1165,9 @@ func (b *MatrixToMattermostBridge) compareImageData(currentData, newData []byte)
 func (b *MatrixToMattermostBridge) syncMatrixMemberEventToMattermost(event MatrixEvent, channelID string) error {
 	b.logger.LogDebug("Processing Matrix member event", "event_id", event.EventID, "sender", event.Sender, "channel_id", channelID)
 
-	// Skip events from our own ghost users to prevent loops
-	if b.isGhostUser(event.Sender) {
-		b.logger.LogDebug("Ignoring member event from ghost user", "sender", event.Sender, "event_id", event.EventID)
+	// Skip events from accounts the bridge drives to prevent loops
+	if b.isGhostUser(event.Sender) || b.ownsAccount(event.Sender) {
+		b.logger.LogDebug("Ignoring member event from a bridge account", "sender", event.Sender, "event_id", event.EventID)
 		return nil
 	}
 

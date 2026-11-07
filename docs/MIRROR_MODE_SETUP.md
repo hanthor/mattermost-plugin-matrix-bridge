@@ -28,7 +28,8 @@ This guide walks you through adding a Matrix (Synapse) server to an existing Mat
 - All Mattermost users automatically get Matrix accounts
 - Channels automatically become Matrix rooms
 - Messages sync bidirectionally
-- Users can access via Element or other Matrix clients with their Mattermost credentials
+- Accounts start with **no credentials**; people take them over by claiming them (see [Claiming accounts](#claiming-accounts))
+- The mode is pinned by the first account the bridge creates: changing the setting afterwards is ignored (and reported by `/matrix status`) instead of giving everyone two Matrix identities
 
 **Federation** allows your Matrix server to communicate with other Matrix servers (like matrix.org).
 
@@ -320,7 +321,8 @@ Go to System Console → Plugins → Matrix Bridge:
 
 **Mirror Mode Settings:**
 - **Enable Mirror Mode**: ✓ (checked)
-- **Mirror Mode Default Password**: `Matrix123!` (or your preferred default)
+- **Mirror Mode Shared Password**: leave empty. Accounts are created without credentials; a shared password would let anyone who knows it log in as anyone
+- **Matrix Admin Access Token**: optional, see [Claiming accounts](#claiming-accounts)
 - **Sync User Profiles**: ✓ (checked)
 - **Enable Sync**: ✓ (checked)
 
@@ -339,6 +341,22 @@ docker exec mattermost mattermost plugin enable com.mattermost.plugin-matrix-bri
 ```
 
 Or use System Console → Plugins → Management → Restart
+
+### 5.4 Claiming accounts
+
+A mirrored account is created for each Mattermost user the first time the bridge needs it, as `@<username>:<server>`. There is nothing to log in with until the person claims it. Two routes, in order of preference:
+
+**Shared login (recommended).** Configure your homeserver to sign people in with Mattermost as the identity provider, mapping the sign-in name to the same localpart. With Matrix Authentication Service this is an upstream OAuth 2.0 provider pointing at Mattermost's OAuth endpoints (`/oauth/authorize`, `/oauth/access_token`, user info from `/api/v4/users/me`), with the claim template for the localpart set to `{{ user.username }}`. The first time someone logs in, the account is theirs, and the bridge notices: the first message that arrives from the account without the bridge having sent it claims it.
+
+**Admin token fallback.** Set **Matrix Admin Access Token** to a Synapse admin token. `/matrix claim` then sets a one-time password for the person's account, shown once, to be changed at first login. This needs no identity provider but gives the plugin the power to reset any password on the homeserver, so use a dedicated admin account.
+
+Once an account is claimed:
+
+- Messages typed in the person's own Matrix client are posted in Mattermost as them.
+- The bridge keeps sending their Mattermost messages through the appservice, exactly like double puppeting but without a stored token.
+- The bridge stops managing their Matrix profile (display name and avatar), which is now theirs.
+
+`/matrix status` shows how many accounts exist and how many are claimed. If the natural name of an account was already taken on the homeserver, the bridge uses a suffixed name (`@ada_mm:server`) and reports the count there.
 
 ## Step 6: Enable Federation
 

@@ -47,6 +47,10 @@ type BridgeConfig struct {
 	MatrixServerDomain string
 	ASToken            string
 	HSToken            string
+	// MirrorMode enables mirror mode; AdminToken is a Matrix admin token for
+	// /matrix claim.
+	MirrorMode bool
+	AdminToken string
 }
 
 // StartMattermost starts Postgres and Mattermost on the given network.
