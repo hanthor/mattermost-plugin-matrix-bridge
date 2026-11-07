@@ -219,6 +219,8 @@ func (s *BridgeUtils) extractMatrixMessageContent(event MatrixEvent) string {
 				tempEvent.Content = newContent
 				if s.isHTMLContent(content, tempEvent) {
 					content = s.convertHTMLToMarkdownWithMentions(content, tempEvent)
+				} else {
+					content = escapeMarkdownForMattermost(content)
 				}
 
 				return content
@@ -240,9 +242,12 @@ func (s *BridgeUtils) extractMatrixMessageContent(event MatrixEvent) string {
 		}
 	}
 
-	// Convert HTML to Markdown with mention processing if needed
+	// Convert HTML to Markdown with mention processing if needed. A body
+	// without HTML is plain text and must not be read as Markdown.
 	if s.isHTMLContent(content, event) {
 		content = s.convertHTMLToMarkdownWithMentions(content, event)
+	} else {
+		content = escapeMarkdownForMattermost(content)
 	}
 
 	return content
