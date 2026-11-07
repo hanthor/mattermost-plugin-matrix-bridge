@@ -129,6 +129,13 @@
                 "default": ""
             },
             {
+                "key": "cutover_mode",
+                "display_name": "Cut-over Mode",
+                "type": "bool",
+                "help_text": "Freezes the set of Matrix accounts and rooms while a community moves from Mattermost to Matrix: nothing new is created, everything that exists keeps syncing.",
+                "default": false
+            },
+            {
                 "key": "sync_user_profiles",
                 "display_name": "Sync User Profiles",
                 "type": "bool",

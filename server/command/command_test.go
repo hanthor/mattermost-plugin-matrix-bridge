@@ -52,6 +52,10 @@ func (m *mockPlugin) GetKVStore() kvstore.KVStore {
 	return m.kvstore
 }
 
+func (m *mockPlugin) MigrateGhostsToMirror(_ bool) (GhostMigrationReport, error) {
+	return GhostMigrationReport{}, nil
+}
+
 func (m *mockPlugin) StartCall(_, _, _ string) (string, error) {
 	return "", nil
 }

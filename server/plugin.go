@@ -452,7 +452,7 @@ func (p *Plugin) UserHasBeenCreated(_ *plugin.Context, user *model.User) {
 // ChannelHasBeenCreated is called when a new channel is created in Mattermost
 func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel) {
 	config := p.getConfiguration()
-	if !config.EnableSync || p.matrixClient == nil {
+	if !config.EnableSync || p.matrixClient == nil || config.CutoverMode {
 		return
 	}
 

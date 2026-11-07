@@ -268,6 +268,14 @@ func recordAccountMode(kv kvstore.KVStore, mode string) {
 // Mattermost user, creating it (a ghost, or a mirror account in mirror
 // mode) when it does not exist.
 func (b *MattermostToMatrixBridge) ensureAccount(userID string) (string, error) {
+	// In cut-over mode the set of accounts is frozen: existing ones keep
+	// working, no new ones appear.
+	if b.configGetter.getConfiguration().CutoverMode {
+		if id, ok := lookupBridgeAccount(b.kvstore, userID); ok {
+			return id, nil
+		}
+		return "", errors.New("cut-over mode is on: no new Matrix accounts are created")
+	}
 	if b.configGetter.getConfiguration().EnableMirrorMode {
 		return b.ensureMirrorAccount(userID)
 	}
@@ -454,6 +462,7 @@ func (p *Plugin) MirrorStatus() command.MirrorStatus {
 		Pinned:           cfg.accountModePinned,
 		ConfiguredMirror: cfg.EnableMirrorMode != cfg.accountModePinned,
 		ClaimSupported:   cfg.MatrixAdminToken != "",
+		Cutover:          cfg.CutoverMode,
 	}
 	if mode == accountModeMirror {
 		stats := newMirrorStore(p.kvstore).Stats()
@@ -506,4 +515,142 @@ func oneTimePassword() string {
 		sb.WriteByte(passwordAlphabet[n.Int64()])
 	}
 	return sb.String()
+}
+
+// GhostMigrationReport is the outcome of /matrix migrate ghosts-to-mirror.
+type ghostMigrationOutcome struct {
+	DryRun  bool
+	Users   int
+	Rooms   int
+	Moved   int
+	Skipped int
+	Failed  int
+	Errors  []string
+	Flipped bool
+}
+
+// ghostRooms lists the rooms a user's ghost is known to be in.
+func (p *Plugin) ghostRooms(mattermostUserID string) []string {
+	prefix := kvstore.BuildGhostRoomKey(mattermostUserID, "")
+	var rooms []string
+	for page := 0; ; page++ {
+		keys, err := p.kvstore.ListKeysWithPrefix(page, 200, prefix)
+		if err != nil {
+			return rooms
+		}
+		for _, key := range keys {
+			if data, e := p.kvstore.Get(key); e == nil && string(data) == "joined" {
+				rooms = append(rooms, strings.TrimPrefix(key, prefix))
+			}
+		}
+		if len(keys) < 200 {
+			return rooms
+		}
+	}
+}
+
+// ghostUserIDs lists the Mattermost users that still have a ghost.
+func (p *Plugin) ghostUserIDs() []string {
+	var ids []string
+	for page := 0; ; page++ {
+		keys, err := p.kvstore.ListKeysWithPrefix(page, 200, kvstore.KeyPrefixGhostUser)
+		if err != nil {
+			return ids
+		}
+		for _, key := range keys {
+			ids = append(ids, strings.TrimPrefix(key, kvstore.KeyPrefixGhostUser))
+		}
+		if len(keys) < 200 {
+			return ids
+		}
+	}
+}
+
+// migrateGhostsToMirror moves every user from a ghost to a mirror account:
+// the mirror account is created and joins the rooms the ghost was in, the
+// ghost leaves, and the ghost record is dropped so everything resolves to the
+// mirror account. Without confirm it only reports what it would do. The mode
+// is switched once every user was moved, so a failed run can be repeated.
+func (p *Plugin) migrateGhostsToMirror(confirm bool) (*ghostMigrationOutcome, error) {
+	cfg := p.getConfiguration()
+	configuredMirror := cfg.EnableMirrorMode != cfg.accountModePinned
+	if !configuredMirror {
+		return nil, errors.New("turn on Mirror Mode in the plugin settings first; the migration moves existing ghost users to mirror accounts")
+	}
+	if effectiveAccountMode(p.kvstore) == accountModeMirror {
+		return nil, errors.New("the bridge is already in mirror mode")
+	}
+	if p.mattermostToMatrixBridge == nil || p.matrixClient == nil {
+		return nil, errors.New("the bridge is not connected to Matrix")
+	}
+
+	out := &ghostMigrationOutcome{DryRun: !confirm}
+	for _, userID := range p.ghostUserIDs() {
+		ghostID, ok := lookupBridgeAccount(p.kvstore, userID)
+		if !ok || !strings.HasPrefix(ghostID, "@_mattermost_") {
+			continue
+		}
+		out.Users++
+		rooms := p.ghostRooms(userID)
+		out.Rooms += len(rooms)
+		if link, linked := p.identity().Link(userID); linked && link.Puppeted() {
+			out.Skipped++ // sends as their own account already
+			continue
+		}
+		if !confirm {
+			continue
+		}
+		if err := p.migrateGhost(userID, ghostID, rooms); err != nil {
+			out.Failed++
+			if len(out.Errors) < 5 {
+				out.Errors = append(out.Errors, fmt.Sprintf("%s: %v", userID, err))
+			}
+			continue
+		}
+		out.Moved++
+	}
+
+	if confirm && out.Failed == 0 {
+		next := cfg.Clone()
+		next.EnableMirrorMode = true
+		next.accountModePinned = false
+		_ = p.kvstore.Set(accountModeKey, []byte(accountModeMirror))
+		p.setConfiguration(next)
+		out.Flipped = true
+	}
+	return out, nil
+}
+
+func (p *Plugin) migrateGhost(userID, ghostID string, rooms []string) error {
+	bridge := p.mattermostToMatrixBridge
+	mirrorID, err := bridge.ensureMirrorAccount(userID)
+	if err != nil {
+		return err
+	}
+	for _, room := range rooms {
+		if err := p.matrixClient.InviteAndJoinGhostUser(room, mirrorID); err != nil {
+			return errors.Wrapf(err, "could not join %s to %s", mirrorID, room)
+		}
+		if err := p.matrixClient.LeaveRoomAsUser(room, ghostID); err != nil {
+			p.logger.LogWarn("Ghost could not leave the room during migration", "error", err, "ghost", ghostID, "room_id", room)
+		}
+	}
+	// From here on everything resolves to the mirror account.
+	_ = p.kvstore.Delete(kvstore.BuildGhostUserKey(userID))
+	if bridge.ghostUserCache != nil {
+		bridge.ghostUserCache.Delete(kvstore.BuildGhostUserKey(userID))
+	}
+	return nil
+}
+
+// MigrateGhostsToMirror implements command.PluginAccessor.
+func (p *Plugin) MigrateGhostsToMirror(confirm bool) (command.GhostMigrationReport, error) {
+	out, err := p.migrateGhostsToMirror(confirm)
+	if err != nil {
+		return command.GhostMigrationReport{}, err
+	}
+	return command.GhostMigrationReport{
+		DryRun: out.DryRun, Users: out.Users, Rooms: out.Rooms, Moved: out.Moved,
+		Skipped: out.Skipped, Failed: out.Failed, Errors: out.Errors, Switched: out.Flipped,
+	}, nil
 }

@@ -100,6 +100,20 @@ type MirrorStatus struct {
 	// ClaimSupported is true when the bridge can set a password for a
 	// mirrored account (an admin token is configured).
 	ClaimSupported bool
+	// Cutover is set when accounts and rooms are frozen.
+	Cutover bool
+}
+
+// GhostMigrationReport is the outcome of /matrix migrate ghosts-to-mirror.
+type GhostMigrationReport struct {
+	DryRun   bool
+	Users    int
+	Rooms    int
+	Moved    int
+	Skipped  int
+	Failed   int
+	Errors   []string
+	Switched bool
 }
 
 // PluginAccessor defines the interface for plugin functionality needed by command handlers
@@ -136,6 +150,10 @@ type PluginAccessor interface {
 	// Migration access
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
+
+	// MigrateGhostsToMirror moves ghost users to mirror accounts; without
+	// confirm it only reports what it would do.
+	MigrateGhostsToMirror(confirm bool) (GhostMigrationReport, error)
 
 	// StartCall starts a call in the channel that both Mattermost and Matrix
 	// users can join, and returns its join address.
@@ -1265,6 +1283,13 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
+	case "create", "map", "join":
+		if c.plugin.MirrorStatus().Cutover {
+			return deny("❌ Cut-over mode is on: no new rooms are bridged.")
+		}
+	}
+
+	switch subcommand {
 	case "map_user", "backfill", "migrate", "metrics":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
@@ -1629,7 +1654,10 @@ func (c *Handler) backfillChannelsForTeam(teamID string) {
 	}
 }
 
-func (c *Handler) executeMigrateCommand(_ *model.CommandArgs) *model.CommandResponse {
+func (c *Handler) executeMigrateCommand(args *model.CommandArgs) *model.CommandResponse {
+	if fields := strings.Fields(args.Command); len(fields) > 2 && fields[2] == "ghosts-to-mirror" {
+		return c.executeGhostMigration(len(fields) > 3 && fields[3] == "confirm")
+	}
 	// Get current version before reset
 	kvstorage := c.plugin.GetKVStore()
 	versionBytes, _ := kvstorage.Get(kvstore.KeyStoreVersion)
@@ -1769,6 +1797,9 @@ func (c *Handler) accountModeStatus() string {
 	} else {
 		sb.WriteString("\n- Accounts: **ghost users** (`@_mattermost_<id>`)")
 	}
+	if st.Cutover {
+		sb.WriteString("\n- 🔒 **Cut-over mode**: accounts and rooms are frozen; no new ones are created")
+	}
 	if st.Pinned {
 		want := "ghost users"
 		if st.ConfiguredMirror {
@@ -1807,4 +1838,30 @@ func (c *Handler) executeCallCommand(args *model.CommandArgs, title string) *mod
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         fmt.Sprintf("📞 The call is announced in the channel and in the Matrix room. Join: %s", joinURL),
 	}
+}
+
+// executeGhostMigration moves ghost users to mirror accounts.
+func (c *Handler) executeGhostMigration(confirm bool) *model.CommandResponse {
+	reply := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+	r, err := c.plugin.MigrateGhostsToMirror(confirm)
+	if err != nil {
+		return reply("❌ " + err.Error())
+	}
+	if r.DryRun {
+		return reply(fmt.Sprintf("**Dry run.** %d user(s) with a ghost would move to mirror accounts and %d room membership(s) would be re-created; %d user(s) post as their own linked account and stay as they are.\n\n"+
+			"Run `/matrix migrate ghosts-to-mirror confirm` to do it. It can be repeated if something fails.", r.Users-r.Skipped, r.Rooms, r.Skipped))
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**Migration finished:** %d moved, %d skipped, %d failed.", r.Moved, r.Skipped, r.Failed))
+	for _, e := range r.Errors {
+		sb.WriteString("\n- " + e)
+	}
+	if r.Switched {
+		sb.WriteString("\n\n✅ The bridge is now in mirror mode.")
+	} else {
+		sb.WriteString("\n\n⚠️ Some users were not moved, so the mode was not switched yet. Run the command again after fixing the cause.")
+	}
+	return reply(sb.String())
 }

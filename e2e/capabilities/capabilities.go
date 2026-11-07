@@ -116,7 +116,8 @@ var All = []Capability{
 	{ID: "mirror.collisions", Area: "Mirror mode", Name: "Name collisions with existing accounts", Direction: MattermostToMatrix, Status: Supported, Notes: "A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status."},
 	{ID: "mirror.claim", Area: "Mirror mode", Name: "Claiming an account", Direction: MatrixToMattermost, Status: Supported, Notes: "/matrix claim with an admin token, or the first message from the person's own client after shared login. Their messages then post as them and the bridge keeps sending through the appservice."},
 	{ID: "mirror.sso_provider", Area: "Mirror mode", Name: "Shared login with Mattermost as the identity provider", Direction: MatrixToMattermost, Status: Partial, Notes: "Documented for Matrix Authentication Service; nothing in the plugin sets it up."},
-	{ID: "mirror.migrate", Area: "Mirror mode", Name: "Ghosts to mirror accounts migration", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Planned: /matrix migrate ghosts-to-mirror."},
+	{ID: "mirror.migrate", Area: "Mirror mode", Name: "Ghosts to mirror accounts migration", Direction: MattermostToMatrix, Status: Supported, Notes: "/matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver."},
+	{ID: "mirror.cutover", Area: "Mirror mode", Name: "Cut-over mode", Direction: MattermostToMatrix, Status: Supported, Notes: "Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing."},
 
 	// Membership and rooms
 	{ID: "membership.join_leave", Area: "Rooms", Name: "Join and leave", Direction: MattermostToMatrix, Status: Supported, Notes: ""},

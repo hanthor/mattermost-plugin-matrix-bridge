@@ -544,6 +544,21 @@ Mattermost messages from the same account. `/matrix status` shows how many
 accounts exist and how many are claimed. See
 [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md#54-claiming-accounts).
 
+### Moving to mirror mode: `/matrix migrate ghosts-to-mirror`
+
+Administrators only. Turning mirror mode on after ghost users exist does not
+change anything by itself: the mode is pinned by the first account, and
+`/matrix status` says so. `/matrix migrate ghosts-to-mirror` reports what it
+would do (a dry run); `/matrix migrate ghosts-to-mirror confirm` creates each
+user's mirror account, joins it to the rooms the ghost was in, retires the
+ghost and finally switches the mode. People who post as their own linked
+account are left alone. If any user fails, nothing is switched and the command
+can simply be run again.
+
+When a community has finished moving, the **Cut-over Mode** setting freezes
+the bridge: no new accounts, rooms or mappings are created, and everything that
+exists keeps syncing.
+
 ## Permissions
 
 ### User Permissions

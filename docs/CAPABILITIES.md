@@ -85,7 +85,8 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Name collisions with existing accounts | Mattermost → Matrix | ✅ | A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status. |
 | Claiming an account | Matrix → Mattermost | ✅ | /matrix claim with an admin token, or the first message from the person's own client after shared login. Their messages then post as them and the bridge keeps sending through the appservice. |
 | Shared login with Mattermost as the identity provider | Matrix → Mattermost | 🟡 | Documented for Matrix Authentication Service; nothing in the plugin sets it up. |
-| Ghosts to mirror accounts migration | Mattermost → Matrix | ❌ | Planned: /matrix migrate ghosts-to-mirror. |
+| Ghosts to mirror accounts migration | Mattermost → Matrix | ✅ | /matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver. |
+| Cut-over mode | Mattermost → Matrix | ✅ | Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing. |
 
 ## Rooms
 
@@ -117,7 +118,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 30
+- ✅ supported: 32
 - 🟡 partial: 4
-- ❌ gap: 30
+- ❌ gap: 29
 - — n/a: 0

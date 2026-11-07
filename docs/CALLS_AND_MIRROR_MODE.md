@@ -12,9 +12,11 @@ token or through the first message after shared login), call presence in both
 directions (Tier 1) and `/matrix call` with a configurable Element Call URL
 (Tier 2). Not implemented: recordings and transcripts as thread attachments,
 retiring a mirror when a native account is linked later (scenario 4),
-deactivation handling (scenario 5), the encryption guard (scenario 7), power
-levels from channel roles (scenario 10), and the ghost-to-mirror migration
-command and cut-over mode. The sections below describe the design; the
+deactivation handling (scenario 5), the encryption guard (scenario 7) and
+power levels from channel roles (scenario 10). The ghost-to-mirror migration
+(`/matrix migrate ghosts-to-mirror`) and a cut-over mode that freezes accounts
+and rooms are implemented; cut-over is deliberately smaller than the
+read-only relay sketched in scenario 6. The sections below describe the design; the
 capability matrix is the authoritative list of what works.
 
 ## Part 1: Calls

@@ -35,6 +35,7 @@ type configuration struct {
 	CallsMode            string `json:"calls_mode"`           // off, presence (default) or element_call
 	ElementCallURL       string `json:"element_call_url"`     // join URL template for calls both sides can join
 	ElementURL           string `json:"element_url"`          // Element Web address used for "join in Element" links
+	CutoverMode          bool   `json:"cutover_mode"`         // Freeze accounts and rooms: no new ones are created
 	SyncUserProfiles     bool   `json:"sync_user_profiles"`   // Sync display names and avatars
 
 	// accountModePinned is set when EnableMirrorMode was overridden because
