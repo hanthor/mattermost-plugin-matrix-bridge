@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +25,9 @@ const defaultElementImage = "vectorim/element-web:latest"
 // UIs with Playwright (e2e/walkthrough/walkthrough.mjs) to produce the
 // screenshots behind docs/WALKTHROUGH.md. It runs only when E2E_WALKTHROUGH
 // is set, because it needs Node.js and a Chromium install on the test host.
+//
+// The run fails if any tutorial step failed, so the committed screenshots
+// always reflect a bridge that did everything the tutorial claims.
 func TestWalkthrough(t *testing.T) {
 	if os.Getenv("E2E_WALKTHROUGH") == "" {
 		t.Skip("set E2E_WALKTHROUGH=1 to generate the walkthrough screenshots")
@@ -34,9 +39,12 @@ func TestWalkthrough(t *testing.T) {
 	h := NewHarness(t)
 	ctx := context.Background()
 
-	const alicePassword = "Walkthrough-Alice-Password-1!"
-	alice := h.NewMatrixUserWithPassword("alice", alicePassword)
+	// Personas. Matrix: Alice and Bob. Mattermost: Ada (admin), Carol, Dave.
+	const matrixPassword = "Walkthrough-Password-1!"
+	alice := h.NewMatrixUserWithPassword("alice", matrixPassword)
+	bob := h.NewMatrixUserWithPassword("bob", matrixPassword)
 	carol, _, carolPassword := h.CreateMattermostUserWithPassword("carol")
+	dave, _, davePassword := h.CreateMattermostUserWithPassword("dave")
 
 	homeserverURL := h.Deployment.UnauthenticatedClient(t, HSName).BaseURL
 	elementURL := startElement(t, ctx, h.Deployment.Network(), homeserverURL, h.ServerName)
@@ -44,22 +52,27 @@ func TestWalkthrough(t *testing.T) {
 	outDir, err := filepath.Abs(envOr("WALKTHROUGH_OUT_DIR", filepath.Join("..", "docs", "walkthrough")))
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(outDir, 0o755))
+	writeRedactedRegistration(t, filepath.Join(outDir, "registration.yaml"), h.Registration)
 
 	scenario := map[string]any{
-		"mattermostURL":  h.Mattermost.URL,
-		"adminUsername":  adminUsername,
-		"adminPassword":  adminPassword,
-		"adminToken":     h.Admin.AuthToken,
-		"teamName":       h.Team.Name,
-		"carolUsername":  carol.Username,
-		"carolPassword":  carolPassword,
-		"homeserverURL":  homeserverURL,
-		"serverName":     h.ServerName,
-		"elementURL":     elementURL,
-		"aliceUserID":    alice.UserID,
-		"alicePassword":  alicePassword,
-		"aliceToken":     alice.AccessToken,
-		"aliceDeviceID":  alice.DeviceID,
+		"mattermostURL": h.Mattermost.URL,
+		"adminUsername": adminUsername,
+		"adminPassword": adminPassword,
+		"adminEmail":    adminEmail,
+		"adminToken":    h.Admin.AuthToken,
+		"teamName":      h.Team.Name,
+		"carol":         map[string]string{"username": carol.Username, "password": carolPassword, "id": carol.Id},
+		"dave":          map[string]string{"username": dave.Username, "password": davePassword, "id": dave.Id},
+		"homeserverURL": homeserverURL,
+		"serverName":    h.ServerName,
+		"elementURL":    elementURL,
+		"asToken":       h.ASToken,
+		"alice": map[string]string{
+			"userID": alice.UserID, "password": matrixPassword, "token": alice.AccessToken, "deviceID": alice.DeviceID,
+		},
+		"bob": map[string]string{
+			"userID": bob.UserID, "password": matrixPassword, "token": bob.AccessToken, "deviceID": bob.DeviceID,
+		},
 		"bridgeBotUser":  h.BridgeBotUserID(),
 		"ghostPrefix":    "@_mattermost_",
 		"outDir":         outDir,
@@ -69,7 +82,7 @@ func TestWalkthrough(t *testing.T) {
 	scenarioJSON, err := json.Marshal(scenario)
 	require.NoError(t, err)
 
-	scriptDir, err := filepath.Abs(filepath.Join("walkthrough"))
+	scriptDir, err := filepath.Abs("walkthrough")
 	require.NoError(t, err)
 
 	cmd := exec.Command("node", filepath.Join(scriptDir, "walkthrough.mjs"))
@@ -79,16 +92,39 @@ func TestWalkthrough(t *testing.T) {
 	cmd.Stderr = os.Stderr
 	require.NoError(t, cmd.Run(), "walkthrough script failed")
 
-	entries, err := os.ReadDir(outDir)
-	require.NoError(t, err)
-	pngs := 0
-	for _, e := range entries {
-		if filepath.Ext(e.Name()) == ".png" {
-			pngs++
+	// Every step must have produced its screenshot.
+	raw, err := os.ReadFile(filepath.Join(outDir, "manifest.json"))
+	require.NoError(t, err, "walkthrough manifest")
+	var manifest struct {
+		Steps []struct {
+			File    string `json:"file"`
+			Error   string `json:"error"`
+			Message string `json:"message"`
+		} `json:"steps"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &manifest))
+	var failures []string
+	shots := 0
+	for _, s := range manifest.Steps {
+		if s.Error != "" {
+			failures = append(failures, s.Error+": "+s.Message)
+		}
+		if s.File != "" {
+			shots++
 		}
 	}
-	require.Greater(t, pngs, 5, "expected the walkthrough to produce screenshots in %s", outDir)
-	t.Logf("walkthrough produced %d screenshots in %s", pngs, outDir)
+	require.Empty(t, failures, "walkthrough steps failed")
+	require.Greater(t, shots, 20, "expected the walkthrough to produce screenshots in %s", outDir)
+	t.Logf("walkthrough produced %d screenshots in %s", shots, outDir)
+}
+
+// writeRedactedRegistration stores the appservice registration the demo
+// homeserver runs with, with the secrets blanked, for the tutorial.
+func writeRedactedRegistration(t *testing.T, path, registration string) {
+	t.Helper()
+	redacted := regexp.MustCompile(`(?m)^(as_token|hs_token):.*$`).ReplaceAllString(registration, "$1: <generated by the plugin; copy from the System Console>")
+	redacted = strings.TrimSpace(redacted) + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(redacted), 0o644))
 }
 
 // startElement runs Element Web pointed at the deployed homeserver and

@@ -91,6 +91,21 @@ export class ElementAppPage {
         await field.press('Enter');
     }
 
+    /** Opens the member list from the header face pile and waits for it. */
+    async openMemberList() {
+        await this.page.locator('.mx_FacePile').first().click();
+        await this.page.locator('.mx_MemberListView').waitFor({timeout: 30_000});
+        await this.page.waitForTimeout(1500);
+    }
+
+    /** Closes the right panel if it is open. */
+    async closeRightPanel() {
+        const close = this.page.locator('.mx_RightPanel').getByRole('button', {name: /close/i}).first();
+        if (await close.isVisible().catch(() => false)) {
+            await close.click().catch(() => {});
+        }
+    }
+
     /** Waits for an event tile whose body contains the text. */
     async waitForMessage(text, timeout = 60_000) {
         const tile = this.page.locator('.mx_RoomView_MessageList .mx_EventTile', {hasText: text}).last();

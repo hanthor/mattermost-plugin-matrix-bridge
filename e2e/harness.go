@@ -55,6 +55,8 @@ type Harness struct {
 	ServerName string
 	// ASToken and HSToken are the appservice tokens Complement generated.
 	ASToken, HSToken string
+	// Registration is the appservice registration file installed on hs1.
+	Registration string
 
 	// Mattermost is the Mattermost deployment reachable from the test host.
 	Mattermost *MattermostServer
@@ -94,7 +96,7 @@ func NewHarness(t *testing.T) *Harness {
 	deployment := complement.OldDeploy(t, bridgeBlueprint())
 	t.Cleanup(func() { deployment.Destroy(t) })
 
-	asToken, hsToken := readAppServiceTokens(t, deployment.ContainerID(t, HSName))
+	asToken, hsToken, registration := readAppServiceTokens(t, deployment.ContainerID(t, HSName))
 
 	mm := StartMattermost(t, ctx, MattermostOptions{
 		Network: deployment.Network(),
@@ -102,12 +104,13 @@ func NewHarness(t *testing.T) *Harness {
 	})
 
 	h := &Harness{
-		t:          t,
-		Deployment: deployment,
-		ServerName: HSName,
-		ASToken:    asToken,
-		HSToken:    hsToken,
-		Mattermost: mm,
+		t:            t,
+		Deployment:   deployment,
+		ServerName:   HSName,
+		ASToken:      asToken,
+		Registration: registration,
+		HSToken:      hsToken,
+		Mattermost:   mm,
 	}
 
 	h.Admin, h.AdminUser = mm.CreateAdmin(t, ctx)
@@ -125,7 +128,7 @@ func NewHarness(t *testing.T) *Harness {
 
 // readAppServiceTokens reads the registration Complement wrote into the
 // homeserver container and extracts the tokens.
-func readAppServiceTokens(t *testing.T, containerID string) (asToken, hsToken string) {
+func readAppServiceTokens(t *testing.T, containerID string) (asToken, hsToken, registration string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -154,7 +157,7 @@ func readAppServiceTokens(t *testing.T, containerID string) (asToken, hsToken st
 	require.NoError(t, yaml.Unmarshal([]byte(content), &reg), "parse registration: %s", content)
 	require.NotEmpty(t, reg.ASToken, "as_token missing in registration: %s", content)
 	require.NotEmpty(t, reg.HSToken, "hs_token missing in registration: %s", content)
-	return reg.ASToken, reg.HSToken
+	return reg.ASToken, reg.HSToken, content
 }
 
 // waitForBridgeCommands waits until the plugin has registered its slash
