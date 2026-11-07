@@ -489,7 +489,7 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 	}
 
 	// Validate room identifier format (should start with ! or # and contain a colon)
-	if (!strings.HasPrefix(roomIdentifier, "!") && !strings.HasPrefix(roomIdentifier, "#")) || !strings.Contains(roomIdentifier, ":") {
+	if !isValidRoomIdentifier(roomIdentifier) {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
 			Text:         roomIdentifierError,
@@ -608,7 +608,7 @@ func (c *Handler) executeMapCommand(args *model.CommandArgs, roomIdentifier stri
 	}
 
 	// Validate room identifier format (should start with ! or # and contain a colon)
-	if (!strings.HasPrefix(roomIdentifier, "!") && !strings.HasPrefix(roomIdentifier, "#")) || !strings.Contains(roomIdentifier, ":") {
+	if !isValidRoomIdentifier(roomIdentifier) {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
 			Text:         roomIdentifierError,
@@ -1598,4 +1598,19 @@ func titleCase(s string) string {
 		words[i] = string(r)
 	}
 	return strings.Join(words, " ")
+}
+
+// isValidRoomIdentifier accepts a room alias (#name:server) or a room ID.
+// Room IDs carry a ":server" suffix up to room version 11; from room version
+// 12 (MSC4291) they are an opaque "!<hash>" without a server part, so a
+// colon is only required for aliases.
+func isValidRoomIdentifier(roomIdentifier string) bool {
+	switch {
+	case strings.HasPrefix(roomIdentifier, "#"):
+		return strings.Contains(roomIdentifier, ":") && len(roomIdentifier) > 2
+	case strings.HasPrefix(roomIdentifier, "!"):
+		return len(roomIdentifier) > 1 && !strings.ContainsAny(roomIdentifier, " \t\n")
+	default:
+		return false
+	}
 }
