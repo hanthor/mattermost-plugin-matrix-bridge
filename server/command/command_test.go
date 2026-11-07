@@ -52,6 +52,10 @@ func (m *mockPlugin) GetKVStore() kvstore.KVStore {
 	return m.kvstore
 }
 
+func (m *mockPlugin) StartCall(_, _, _ string) (string, error) {
+	return "", nil
+}
+
 func (m *mockPlugin) MirrorStatus() MirrorStatus {
 	return MirrorStatus{Mode: "ghost"}
 }

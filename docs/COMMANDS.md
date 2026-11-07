@@ -16,6 +16,8 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix backfill`](#matrix-backfill) | Backfill existing data | `/matrix backfill all` |
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix migrate`](#matrix-migrate) | Re-run KV migrations | `/matrix migrate` |
+| [`/matrix call`](#calls-matrix-call) | Start a call both sides can join | `/matrix call Weekly sync` |
+| [`/matrix claim`](#mirror-mode-matrix-claim) | Mirror mode: take over your Matrix account | `/matrix claim` |
 
 ---
 
@@ -512,13 +514,43 @@ homeserver and must belong to you. `!mattermost logout` removes it,
 Bridge-bot commands available in Matrix: `help`, `whoami`, `link <code>`,
 `login <token>`, `logout`, `unlink`.
 
+## Calls: `/matrix call`
+
+Audio and video are not relayed between Mattermost Calls and Matrix: both
+sides run their own media servers. What the bridge does is announce calls on
+both sides (see the Calls setting in the plugin configuration):
+
+- A call started with the Mattermost Calls plugin appears in the Matrix room
+  as a notice with a join link, which is edited when the call ends.
+- A call in the Matrix room (Element Call, any MatrixRTC client) appears in
+  the channel as a card with the participants, the duration and a **Join in
+  Element** button.
+
+With **Calls** set to *Presence and Element Call* and an **Element Call URL**
+configured, `/matrix call [title]` starts a call that both sides can join: the
+bridge adds a widget to the room, announces the call there, and posts a card in
+the channel with the same join address. Only one call runs per room at a time;
+asking again returns the running one. The URL may contain `{room_id}`,
+`{room_name}`, `{display_name}` and `{user_id}`.
+
+## Mirror mode: `/matrix claim`
+
+In mirror mode every Mattermost user has a Matrix account of their own, created
+without credentials. `/matrix claim` makes the account yours. With a Synapse
+admin token configured it sets a one-time password, shown once, to change at
+first login; otherwise sign in to Matrix through shared login. Afterwards your
+own Matrix client posts in Mattermost as you, and the bridge keeps sending your
+Mattermost messages from the same account. `/matrix status` shows how many
+accounts exist and how many are claimed. See
+[MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md#54-claiming-accounts).
+
 ## Permissions
 
 ### User Permissions
 
 | Commands | Who may run them |
 |----------|------------------|
-| `test`, `list`, `status`, `link`, `unlink` | Any channel member |
+| `test`, `list`, `status`, `link`, `unlink`, `claim`, `call` | Any channel member |
 | `create`, `map`, `unmap`, `join` | Users allowed to manage the channel's properties (channel admins and team/system admins) |
 | `map_user`, `backfill`, `migrate`, `metrics` | System administrators only |
 

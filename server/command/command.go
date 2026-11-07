@@ -137,6 +137,10 @@ type PluginAccessor interface {
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
 
+	// StartCall starts a call in the channel that both Mattermost and Matrix
+	// users can join, and returns its join address.
+	StartCall(mattermostUserID, channelID, title string) (string, error)
+
 	// Mirror mode: account mode and claiming (see docs/CALLS_AND_MIRROR_MODE.md)
 	MirrorStatus() MirrorStatus
 	// ClaimMirrorAccount hands a mirrored account to its person. When the
@@ -289,10 +293,11 @@ const (
 	matrixCommandTrigger = "matrix"
 
 	// Main command usage
-	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|migrate] [room_name|room_alias|room_id]"
+	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|claim|call|migrate] [room_name|room_alias|room_id]"
 	linkCommandDesc    = "Link your Matrix account so you are one identity on both networks"
 	unlinkCommandDesc  = "Remove the link to your Matrix account"
 	claimCommandDesc   = "Mirror mode: take over your mirrored Matrix account"
+	callCommandDesc    = "Start a call in this bridged channel that Mattermost and Matrix users can both join"
 
 	// Subcommand descriptions for autocomplete
 	testCommandDesc    = "Test Matrix server connection and configuration"
@@ -421,6 +426,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("link", "", linkCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("unlink", "", unlinkCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("claim", "", claimCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("call", "[title]", callCommandDesc))
 
 	return matrixData
 }
@@ -1223,6 +1229,12 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	case "claim":
 		return c.executeClaimCommand(args)
+	case "call":
+		title := ""
+		if len(fields) > 2 {
+			title = strings.Join(fields[2:], " ")
+		}
+		return c.executeCallCommand(args, title)
 	case "metrics":
 		return c.executeMetricsCommand(args)
 	case "link":
@@ -1783,4 +1795,16 @@ func (c *Handler) executeClaimCommand(args *model.CommandArgs) *model.CommandRes
 		return reply(fmt.Sprintf("✅ `%s` is now yours. Log in to Matrix with your single sign-on account; the bridge keeps posting as you from Mattermost.", matrixUserID))
 	}
 	return reply(fmt.Sprintf("✅ `%s` is now yours.\n\nOne-time password (shown once, change it after your first login): `%s`\n\nThe bridge keeps posting as you from Mattermost.", matrixUserID, password))
+}
+
+// executeCallCommand starts a call that people on both sides can join.
+func (c *Handler) executeCallCommand(args *model.CommandArgs, title string) *model.CommandResponse {
+	joinURL, err := c.plugin.StartCall(args.UserId, args.ChannelId, title)
+	if err != nil {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+	}
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         fmt.Sprintf("📞 The call is announced in the channel and in the Matrix room. Join: %s", joinURL),
+	}
 }

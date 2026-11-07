@@ -100,6 +100,10 @@ type HarnessOptions struct {
 	// @username accounts instead of ghosts, and a Matrix admin token is
 	// configured so /matrix claim can hand accounts over.
 	MirrorMode bool
+	// CallsMode and ElementCallURL configure call bridging ("" keeps the
+	// default, presence).
+	CallsMode      string
+	ElementCallURL string
 }
 
 // NewHarnessWithOptions is NewHarness with options.
@@ -135,6 +139,8 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 		ASToken:            asToken,
 		HSToken:            hsToken,
 		MirrorMode:         opts.MirrorMode,
+		CallsMode:          opts.CallsMode,
+		ElementCallURL:     opts.ElementCallURL,
 	}
 	if opts.MirrorMode {
 		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})

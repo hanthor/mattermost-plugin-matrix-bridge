@@ -104,6 +104,13 @@ var All = []Capability{
 	{ID: "users.puppeting", Area: "Users", Name: "Double puppeting (use my own Matrix account)", Direction: MattermostToMatrix, Status: Supported, Notes: "\"!mattermost login <access_token>\" lets the bridge send as the linked Matrix account."},
 	{ID: "identity.sso", Area: "Users", Name: "Automatic linking through shared SSO (OIDC / Matrix Authentication Service)", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Match accounts by verified email from a shared identity provider so linking is zero-touch."},
 
+	// Calls
+	{ID: "calls.presence", Area: "Calls", Name: "Call announced in the room (who started, who is in, join link, ended)", Direction: MattermostToMatrix, Status: Supported, Notes: "A Mattermost Calls post becomes a notice with a join link and a com.mattermost.bridge.call state event; the notice is edited when the call ends."},
+	{ID: "calls.presence.in", Area: "Calls", Name: "Call shown as a card in the channel (participants, duration, join button)", Direction: MatrixToMattermost, Status: Supported, Notes: "m.rtc.member and org.matrix.msc3401.call.member state become a custom_matrix_call post that is updated as people join and leave."},
+	{ID: "calls.join", Area: "Calls", Name: "One call both sides can join", Direction: MattermostToMatrix, Status: Partial, Notes: "/matrix call adds a widget to the room and posts a card with the configured Element Call URL. The bridge does not verify the call service itself."},
+	{ID: "calls.media", Area: "Calls", Name: "Audio and video relayed between Mattermost Calls and MatrixRTC", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Both sides run their own media servers and signalling; a relay would be a full WebRTC endpoint on each side. Not planned."},
+	{ID: "calls.recordings", Area: "Calls", Name: "Call recordings and transcripts", Direction: MattermostToMatrix, Status: Unsupported, Notes: "The Calls plugin keeps them in the call's thread; not relayed yet."},
+
 	// Mirror mode
 	{ID: "mirror.accounts", Area: "Mirror mode", Name: "Real @username accounts instead of ghosts", Direction: MattermostToMatrix, Status: Supported, Notes: "Created without credentials; the first account pins the mode so it cannot be switched under existing accounts."},
 	{ID: "mirror.collisions", Area: "Mirror mode", Name: "Name collisions with existing accounts", Direction: MattermostToMatrix, Status: Supported, Notes: "A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status."},

@@ -51,6 +51,9 @@ type BridgeConfig struct {
 	// /matrix claim.
 	MirrorMode bool
 	AdminToken string
+	// CallsMode and ElementCallURL configure call bridging.
+	CallsMode      string
+	ElementCallURL string
 }
 
 // StartMattermost starts Postgres and Mattermost on the given network.
