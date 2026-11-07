@@ -128,7 +128,8 @@ async function mattermostSession(username, password) {
         /** Posts text and waits for it to render; waitFor is the plain text to look for once markdown is rendered. */
         async post(text, waitFor = text) {
             await this.channels.postMessage(text);
-            await this.channels.centerView.waitUntilLastPostContains(waitFor, 30_000);
+            // Not "last post": a bridged join notice can land right after it.
+            await this.channels.centerView.container.getByText(waitFor).last().waitFor({timeout: 30_000});
         },
         /** Runs a slash command through the send button, which the autocomplete cannot swallow. */
         async slash(command) {
@@ -245,7 +246,7 @@ await step('element bridged message', async () => {
 
 await step('reply from matrix', async () => {
     await element.app.sendMessage('Hi from Matrix 👋 — replies, edits, reactions and files all flow back.');
-    await admin.channels.centerView.waitUntilLastPostContains('Hi from Matrix', 60_000);
+    await admin.channels.centerView.container.getByText('Hi from Matrix').last().waitFor({timeout: 60_000});
     await shot(admin.page, 'mattermost-bridged-reply', 'The Matrix reply appears in Mattermost as a remote user carrying the Matrix display name.');
 });
 

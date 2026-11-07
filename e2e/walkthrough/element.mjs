@@ -31,7 +31,14 @@ export async function rejectToastIfExists(page, title, timeout = 2000) {
     } catch {
         return false;
     }
-    await toast.locator('.mx_Toast_buttons .mx_AccessibleButton_kind_danger_outline, .mx_Toast_buttons .mx_AccessibleButton_kind_primary_outline, .mx_Toast_buttons button').first().click();
+    // Same selector as element-web's clickToastButton.
+    const secondary = toast.getByTestId('toast-buttons').locator('button[data-kind="secondary"]');
+    const button = (await secondary.count()) ? secondary : toast.getByRole('button', {name: /later|dismiss|not now/i});
+    try {
+        await button.first().click({timeout: 2000});
+    } catch {
+        return !(await toast.isVisible().catch(() => false));
+    }
     return true;
 }
 
