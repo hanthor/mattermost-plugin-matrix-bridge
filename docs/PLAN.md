@@ -117,6 +117,12 @@ Rows `membership.roles`, `membership.roles.in`, `rooms.create.in`, `spaces.team`
 
 ## Epic 5 — Migration toolkit
 
+Mirror mode is the migration vehicle; the scenarios it has to handle (account
+claiming through shared login, collisions, dual use, cut-over, encryption)
+and the design for bridging calls are worked out in
+[CALLS_AND_MIRROR_MODE.md](CALLS_AND_MIRROR_MODE.md), which also orders the
+work: mirror-mode hygiene first, shared login second, then calls.
+
 ### History import with original timestamps
 Replay post history as the real users with `origin_server_ts` (edits,
 reactions, threads, files); resumable per channel; progress in
