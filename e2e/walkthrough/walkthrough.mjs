@@ -148,6 +148,11 @@ async function mattermostSession(username, password) {
 }
 
 async function dismissMattermostTips(page) {
+    // The unlicensed server shows a "Preview Mode" announcement bar.
+    const banner = page.locator('.announcement-bar__close').first();
+    if (await banner.isVisible().catch(() => false)) {
+        await banner.click().catch(() => {});
+    }
     for (const label of [/skip for now/i, /^skip$/i, /not now/i]) {
         const button = page.getByRole('button', {name: label}).first();
         if (await button.isVisible().catch(() => false)) {
@@ -189,6 +194,12 @@ await step('plugin settings', async () => {
     await admin.page.goto(`/admin_console/plugins/plugin_${scenario.pluginID}`);
     await admin.systemConsole.sidebar.toBeVisible();
     await admin.page.getByText('Matrix Server URL', {exact: true}).first().waitFor({timeout: 60_000});
+    // The settings load in two phases; wait for the overlay spinner to go.
+    await admin.page.locator('.admin-console__wrapper .loading-screen, .admin-console .LoadingSpinner').waitFor({state: 'hidden', timeout: 30_000}).catch(() => {});
+    await admin.page.getByRole('button', {name: 'Regenerate'}).first().waitFor({timeout: 30_000});
+    await admin.page.waitForLoadState('networkidle');
+    await dismissMattermostTips(admin.page);
+    await sleep(1000);
     await shot(admin.page, 'plugin-settings', 'System Console → Plugins → Mattermost bridge for Matrix: server URL, generated tokens, and the registration file download.');
 });
 
@@ -204,8 +215,9 @@ await step('create channel and test connection', async () => {
 });
 
 await step('create and map a room', async () => {
-    await admin.slash('/matrix create');
-    await shot(admin.page, 'matrix-create', '`/matrix create` creates a Matrix room for the channel and bridges it.');
+    // publish=true makes a public room, so Matrix users can join it directly.
+    await admin.slash('/matrix create publish=true');
+    await shot(admin.page, 'matrix-create', '`/matrix create publish=true` creates a public Matrix room for the channel and bridges it.');
 
     // /matrix list prints "channel → `!room`"; pick the room up from there.
     const list = await mmApi('POST', '/commands/execute', {channel_id: channelID, command: '/matrix list'});

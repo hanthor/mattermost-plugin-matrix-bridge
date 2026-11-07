@@ -34,9 +34,11 @@ namespace the bridge owns.
 ## 3. Create or map a room
 
 `/matrix create` creates a Matrix room for the current channel and bridges it
-in one step. To bridge an existing room instead, invite the bridge bot and run
-`/matrix map !room:server` or `/matrix map #alias:server`. `/matrix list`
-shows every bridged channel in the team.
+in one step; add `publish=true` for a public room listed in the directory that
+anyone on Matrix can join, otherwise the room is invite-only. To bridge an
+existing room instead, invite the bridge bot and run `/matrix map !room:server`
+or `/matrix map #alias:server`. `/matrix list` shows every bridged channel in
+the team.
 
 ![/matrix create output](walkthrough/03-matrix-create.png)
 
