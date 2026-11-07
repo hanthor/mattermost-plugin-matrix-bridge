@@ -126,7 +126,9 @@ func TestSpaceHierarchy(t *testing.T) {
 		// 2. ChannelHasBeenCreated calls Set(room->channel) with ALIAS as roomID
 		mockKV.On("Set", kvstore.BuildRoomMappingKey(expectedAlias), []byte(testChannelID)).Return(nil).Once()
 
-		// 3. ChannelHasBeenCreated calls Get(team_mapping) to find space
+		// 3. ChannelHasBeenCreated re-checks the channel mapping, then calls
+		// Get(team_mapping) to find the space
+		mockKV.On("Get", kvstore.BuildChannelMappingKey(testChannelID)).Return([]byte(nil), nil).Maybe()
 		mockKV.On("Get", kvstore.BuildTeamMappingKey(testTeamID)).Return([]byte(testSpaceID), nil).Once()
 
 		// Setup Plugin
