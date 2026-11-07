@@ -73,6 +73,16 @@ cd e2e && COMPLEMENT_BASE_IMAGE=ghcr.io/element-hq/synapse/complement-synapse:de
 - `/matrix test`, `/matrix create`, `/matrix list`, `/matrix unmap`
 - permission checks on administrative commands
 
+`TestCapabilityGaps`
+
+- probes every row of `e2e/capabilities` that is documented as a gap or
+  partial (room mentions, pins, custom emoji, stickers, locations, polls,
+  typing/presence/receipts from Mattermost, deactivation, power levels,
+  room-initiated channels, channel rename/archive, widgets, bot commands)
+- a gap that unexpectedly works fails the run until the matrix is promoted; a
+  supported row that breaks fails the run. `docs/CAPABILITIES.md` is generated
+  from the same list (`make capabilities`).
+
 ## Notes
 
 - Each top-level test deploys its own Synapse + Mattermost pair, which takes a

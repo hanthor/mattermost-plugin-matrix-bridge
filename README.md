@@ -33,6 +33,11 @@ Matrix users appear in Mattermost as remote users with their names and avatars.
 Loop prevention is built in: every bridged message is tagged on both sides and
 echoes are dropped.
 
+The authoritative, test-enforced list is [docs/CAPABILITIES.md](docs/CAPABILITIES.md):
+the end-to-end suite probes every capability, including the gaps, so the
+document can never drift from what the bridge does. Planned work to close the
+gaps and to integrate deeper on both sides is in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Requirements
 
 - Mattermost server 10.7.1 or newer. Shared Channels (Connected Workspaces,

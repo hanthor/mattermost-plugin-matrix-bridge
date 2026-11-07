@@ -12,3 +12,8 @@ e2e: dist
 .PHONY: e2e-check
 e2e-check:
 	cd e2e && $(GO) vet ./... && $(GO) test -count=1 -run '^$$' ./...
+
+## Regenerates docs/CAPABILITIES.md from e2e/capabilities.
+.PHONY: capabilities
+capabilities:
+	cd e2e && $(GO) test ./capabilities -run TestCapabilitiesDoc -update
