@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -373,4 +374,27 @@ func TestFormatCallDuration(t *testing.T) {
 	assert.Equal(t, "1 h", formatCallDuration(1000, 1000+60*60_000))
 	assert.Equal(t, "1 h 5 min", formatCallDuration(1000, 1000+65*60_000))
 	assert.Equal(t, "", formatCallDuration(0, 5000))
+}
+
+func TestCallPostWorkIsSerialized(t *testing.T) {
+	var inside, overlaps int32
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			unlock := lockCallPost("post1")
+			defer unlock()
+			if atomic.AddInt32(&inside, 1) > 1 {
+				atomic.AddInt32(&overlaps, 1)
+			}
+			time.Sleep(2 * time.Millisecond)
+			atomic.AddInt32(&inside, -1)
+		}()
+	}
+	wg.Wait()
+	assert.Zero(t, overlaps, "two workers handled the same call post at once")
+	callPostLocksMu.Lock()
+	defer callPostLocksMu.Unlock()
+	assert.Empty(t, callPostLocks, "locks are released when unused")
 }

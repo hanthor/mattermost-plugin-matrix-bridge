@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -55,6 +56,38 @@ func (c *configuration) callsMode() string {
 		return c.CallsMode
 	default:
 		return callsModePresence
+	}
+}
+
+var (
+	callPostLocksMu sync.Mutex
+	callPostLocks   = map[string]*callPostLock{}
+)
+
+type callPostLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lockCallPost serializes work on one call post and returns the unlock.
+func lockCallPost(postID string) func() {
+	callPostLocksMu.Lock()
+	l := callPostLocks[postID]
+	if l == nil {
+		l = &callPostLock{}
+		callPostLocks[postID] = l
+	}
+	l.refs++
+	callPostLocksMu.Unlock()
+
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		callPostLocksMu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(callPostLocks, postID)
+		}
+		callPostLocksMu.Unlock()
 	}
 }
 
@@ -156,9 +189,14 @@ func (b *MattermostToMatrixBridge) syncCallPost(post *model.Post, roomID string)
 	sort.Strings(participants)
 	fingerprint := strings.Join(participants, ",")
 
+	// The start and the end of a call can arrive within milliseconds on
+	// different workers; handle one post at a time so the end sees the record
+	// the start stores.
+	unlock := lockCallPost(post.Id)
+	defer unlock()
+
 	var rec mattermostCallRecord
 	known := loadJSON(b.kvstore, mattermostCallKeyPrefix+post.Id, &rec)
-	b.logger.LogInfo("Syncing a call post", "post_id", post.Id, "known", known, "ended", rec.Ended, "end_at", endAt, "participants", len(participants))
 
 	switch {
 	case !known && endAt > 0:
