@@ -59,6 +59,7 @@ func TestWalkthrough(t *testing.T) {
 		"aliceUserID":    alice.UserID,
 		"alicePassword":  alicePassword,
 		"aliceToken":     alice.AccessToken,
+		"aliceDeviceID":  alice.DeviceID,
 		"bridgeBotUser":  h.BridgeBotUserID(),
 		"ghostPrefix":    "@_mattermost_",
 		"outDir":         outDir,

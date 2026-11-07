@@ -65,6 +65,14 @@ jobs:
           path: docs/walkthrough/
           if-no-files-found: error
 
+      - name: Upload failure diagnostics
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: walkthrough-debug
+          path: docs/walkthrough-debug/
+          if-no-files-found: ignore
+
       - name: Open a pull request with refreshed screenshots
         if: github.event_name != 'pull_request'
         uses: peter-evans/create-pull-request@v7

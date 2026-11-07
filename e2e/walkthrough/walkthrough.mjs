@@ -32,12 +32,27 @@ async function shot(page, slug, caption) {
     return file;
 }
 
+const debugDir = process.env.WALKTHROUGH_DEBUG_DIR || join(scenario.outDir, '..', 'walkthrough-debug');
+mkdirSync(debugDir, {recursive: true});
+const openPages = new Set();
+
 async function step(name, fn) {
     try {
         await fn();
     } catch (err) {
         console.error(`step "${name}" failed: ${err.message}`);
         manifest.steps.push({error: name, message: err.message});
+        const slug = name.replace(/[^a-z0-9]+/gi, '-');
+        let i = 0;
+        for (const page of openPages) {
+            i += 1;
+            try {
+                await page.screenshot({path: join(debugDir, `${slug}-${i}.png`)});
+                writeFileSync(join(debugDir, `${slug}-${i}.txt`), `${page.url()}\n\n${await page.content()}`);
+            } catch {
+                // page may be closed
+            }
+        }
     }
 }
 
@@ -56,11 +71,23 @@ async function mmApi(method, path, body, token = scenario.adminToken) {
 }
 
 async function mmLogin(page, username, password) {
-    await page.goto(`${scenario.mattermostURL}/login`);
-    await page.getByPlaceholder(/email|username/i).first().fill(username);
-    await page.locator('#input_password-input, input[type=password]').first().fill(password);
-    await page.getByRole('button', {name: /log in/i}).click();
-    await page.waitForURL((url) => !url.pathname.includes('/login'), {timeout: 60_000});
+    // Log in through the API so the session cookies land in the browser
+    // context, then skip the "view in app or browser" landing page.
+    const res = await page.context().request.post(`${scenario.mattermostURL}/api/v4/users/login`, {
+        data: {login_id: username, password},
+    });
+    if (!res.ok()) {
+        throw new Error(`login as ${username} failed: ${res.status()} ${await res.text()}`);
+    }
+    await page.context().addInitScript(() => {
+        try {
+            window.localStorage.setItem('__landingPageSeen__', 'true');
+        } catch {
+            // ignore
+        }
+    });
+    await page.goto(`${scenario.mattermostURL}/${scenario.teamName}/channels/town-square`);
+    await page.locator('#post_textbox').waitFor({timeout: 90_000});
     await dismissMattermostTips(page);
 }
 
@@ -110,12 +137,31 @@ async function matrixApi(method, path, body, token = scenario.aliceToken) {
 }
 
 async function elementLogin(page) {
-    await page.goto(`${scenario.elementURL}/#/login`);
-    const localpart = scenario.aliceUserID.slice(1).split(':')[0];
-    await page.locator('#mx_LoginForm_username, input[name=username]').first().fill(localpart);
-    await page.locator('#mx_LoginForm_password, input[name=password]').first().fill(scenario.alicePassword);
-    await page.getByRole('button', {name: /sign in/i}).click();
-    await page.waitForURL((url) => url.hash.startsWith('#/home') || url.hash.startsWith('#/room'), {timeout: 90_000});
+    // Seed the session Element keeps in localStorage instead of driving the
+    // login form, so the tutorial does not depend on that form's markup.
+    await page.context().addInitScript((session) => {
+        try {
+            if (!window.localStorage.getItem('mx_access_token')) {
+                window.localStorage.setItem('mx_hs_url', session.homeserverURL);
+                window.localStorage.setItem('mx_user_id', session.userID);
+                window.localStorage.setItem('mx_access_token', session.accessToken);
+                window.localStorage.setItem('mx_device_id', session.deviceID);
+                window.localStorage.setItem('mx_is_guest', 'false');
+                window.localStorage.setItem('mx_local_settings', JSON.stringify({
+                    showCookieBar: false, analyticsOptIn: false, theme: 'light',
+                }));
+            }
+        } catch {
+            // ignore
+        }
+    }, {
+        homeserverURL: scenario.homeserverURL,
+        userID: scenario.aliceUserID,
+        accessToken: scenario.aliceToken,
+        deviceID: scenario.aliceDeviceID,
+    });
+    await page.goto(`${scenario.elementURL}/#/home`);
+    await page.locator('.mx_LeftPanel, .mx_HomePage, .mx_RoomView').first().waitFor({timeout: 90_000});
     await dismissElementDialogs(page);
 }
 
@@ -149,6 +195,8 @@ const mmContext = await browser.newContext({viewport: {width: 1440, height: 900}
 const elementContext = await browser.newContext({viewport: {width: 1440, height: 900}, deviceScaleFactor: 2});
 const mm = await mmContext.newPage();
 const element = await elementContext.newPage();
+openPages.add(mm);
+openPages.add(element);
 
 const channelName = 'bridge-demo';
 let channelID = '';
@@ -226,6 +274,7 @@ await step('link identities', async () => {
     // Carol links her Mattermost account to alice's Matrix account.
     const carolContext = await browser.newContext({viewport: {width: 1440, height: 900}, deviceScaleFactor: 2});
     const carolPage = await carolContext.newPage();
+    openPages.add(carolPage);
     await mmLogin(carolPage, scenario.carolUsername, scenario.carolPassword);
     await mmApi('POST', `/channels/${channelID}/members`, {user_id: (await mmApi('GET', `/users/username/${scenario.carolUsername}`)).id});
     await carolPage.goto(`${scenario.mattermostURL}/${scenario.teamName}/channels/${channelName}`);
@@ -261,6 +310,7 @@ await step('link identities', async () => {
     await elementOpenRoom(element, roomID);
     await element.getByText('This is Carol in Mattermost').first().waitFor({timeout: 60_000});
     await shot(element, 'element-double-puppet', 'Carol\'s Mattermost message in Element, sent by her linked Matrix account rather than a ghost.');
+    openPages.delete(carolPage);
     await carolContext.close();
 });
 

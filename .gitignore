@@ -40,3 +40,4 @@ IMPROVEMENTS_SUMMARY.md
 # Walkthrough script dependencies
 e2e/walkthrough/node_modules/
 e2e/walkthrough/package-lock.json
+docs/walkthrough-debug/
