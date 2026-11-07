@@ -1241,30 +1241,20 @@ func (c *Client) CreateSpace(name, topic, aliasLocalPart string) (string, error)
 		}
 	}
 
-	jsonData, err := json.Marshal(roomData)
+	resp, body, err := c.postCreateRoom(roomData)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal space creation data")
+		return "", err
 	}
 
-	url := c.serverURL + "/_matrix/client/v3/createRoom"
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create space creation request")
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to send space creation request")
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to read space creation response")
+	// Same fallback as rooms: an alias outside the reserved namespace must not
+	// prevent the space from being created.
+	if resp.StatusCode == http.StatusBadRequest && roomData["room_alias_name"] != nil && isAliasNotReservedError(body) {
+		c.logger.LogWarn("Homeserver refused the space alias because the appservice registration does not reserve it; creating the space without an alias", "alias_local_part", aliasLocalPart)
+		delete(roomData, "room_alias_name")
+		resp, body, err = c.postCreateRoom(roomData)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {

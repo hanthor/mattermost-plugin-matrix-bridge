@@ -134,6 +134,9 @@ func (suite *FeaturesE2ETestSuite) TestSpaceHierarchy_Real() {
 		Description: "Space description",
 	}
 
+	// Room creation for channels in this team looks the team up for the alias.
+	suite.api.On("GetTeam", team.Id).Return(team, nil).Maybe()
+
 	// 1. Create Team (triggers Space creation)
 	suite.plugin.TeamHasBeenCreated(nil, team)
 
@@ -180,8 +183,9 @@ func (suite *FeaturesE2ETestSuite) TestUserPuppeting_Real() {
 		LastName:  "Test",
 	}
 
-	// Mock Profile Image call
+	// Mock Profile Image call and the user lookup done while creating the ghost
 	suite.api.On("GetProfileImage", user.Id).Return([]byte("fake_png"), nil)
+	suite.api.On("GetUser", user.Id).Return(user, nil).Maybe()
 
 	// 1. Create User
 	suite.plugin.UserHasBeenCreated(nil, user)
