@@ -42,7 +42,20 @@ export async function rejectToastIfExists(page, title, timeout = 2000) {
     return true;
 }
 
+/** Closes a release announcement ("Introducing …") the way element-web's tests do. */
+export async function closeReleaseAnnouncementIfExists(page, timeout = 300) {
+    const announcement = page.getByRole('dialog').filter({has: page.getByRole('button', {name: /^ok$/i})}).first();
+    try {
+        await announcement.waitFor({state: 'visible', timeout});
+    } catch {
+        return false;
+    }
+    await announcement.getByRole('button', {name: /^ok$/i}).click().catch(() => {});
+    return true;
+}
+
 export async function dismissToasts(page) {
+    await closeReleaseAnnouncementIfExists(page);
     await rejectToastIfExists(page, 'Verify this device', 300);
     if (await rejectToastIfExists(page, 'Turn on key storage', 300)) {
         const confirm = page.getByRole('button', {name: 'Continue'});

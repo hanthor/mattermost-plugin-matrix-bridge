@@ -159,6 +159,8 @@ const people = {
 };
 
 async function setUpPeople() {
+    // Show full names rather than usernames, as most teams configure it.
+    await mmApi('PUT', '/config/patch', {TeamSettings: {TeammateNameDisplay: 'full_name'}});
     const adminUser = await mmApi('GET', `/users/username/${scenario.adminUsername}`);
     people.ada.id = adminUser.id;
     for (const key of ['ada', 'carol', 'dave']) {

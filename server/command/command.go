@@ -303,6 +303,9 @@ const (
 	// Sharing status messages
 	channelSharingEnabled = "\n\n✅ **Channel sharing enabled** - Messages will now sync to Matrix!"
 	channelSharingFailed  = "\n\n⚠️ **Note:** Failed to automatically enable channel sharing. You may need to manually enable shared channels for this channel to start syncing."
+	// channelSharingUnavailable is shown when Shared Channels is off on the
+	// server; the bridge then syncs through plugin hooks, which needs no setup.
+	channelSharingUnavailable = "\n\nℹ️ Shared Channels is not enabled on this server; the bridge syncs this channel through plugin hooks."
 
 	// Directory status messages
 	publishedToDirectory    = "\n**Directory:** Published to public directory"
@@ -1224,6 +1227,11 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 
 // shareChannelAndInvitePlugin shares a channel and invites this plugin to receive sync messages
 func (c *Handler) shareChannelAndInvitePlugin(args *model.CommandArgs, channelName, purpose string) string {
+	// Without Shared Channels the bridge runs on plugin hooks alone, which is
+	// a supported mode: say so instead of reporting a failure.
+	if !c.sharedChannelsEnabled() {
+		return channelSharingUnavailable
+	}
 	sharedChannel := &model.SharedChannel{
 		ChannelId:        args.ChannelId,
 		TeamId:           args.TeamId,
@@ -1257,6 +1265,19 @@ func (c *Handler) shareChannelAndInvitePlugin(args *model.CommandArgs, channelNa
 
 	c.client.Log.Info("Successfully invited plugin to shared channel", "channel_id", args.ChannelId, "remote_id", c.plugin.GetRemoteID())
 	return channelSharingEnabled
+}
+
+// sharedChannelsEnabled reports whether the server has Shared Channels
+// (Connected Workspaces) switched on.
+func (c *Handler) sharedChannelsEnabled() bool {
+	if c.pluginAPI == nil {
+		return false
+	}
+	cfg := c.pluginAPI.GetConfig()
+	if cfg == nil || cfg.ConnectedWorkspacesSettings.EnableSharedChannels == nil {
+		return false
+	}
+	return *cfg.ConnectedWorkspacesSettings.EnableSharedChannels
 }
 
 // extractServerDomain extracts the domain from the Matrix server URL

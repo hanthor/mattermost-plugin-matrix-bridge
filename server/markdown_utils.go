@@ -316,6 +316,9 @@ func isValidURL(url string) bool {
 // convertMattermostToMatrix converts Mattermost markdown content to Matrix format
 // Returns both plain text and HTML versions
 func convertMattermostToMatrix(mattermostContent string) (plainText string, htmlContent string) {
+	// Matrix clients do not render :shortcodes:, so emit Unicode emoji.
+	mattermostContent = replaceEmojiShortcodes(mattermostContent)
+
 	// Plain text is the original content with some cleanup
 	plainText = strings.TrimSpace(mattermostContent)
 
