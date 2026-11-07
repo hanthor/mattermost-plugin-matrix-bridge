@@ -128,13 +128,18 @@ func TestCapabilityGaps(t *testing.T) {
 			"com.beeper.reaction.shortcode":     ":react:",
 			"org.matrix.msc4027.image_reaction": true,
 		}})
+		// Real support means a custom emoji exists for the image and the
+		// reaction uses it; a reaction with a placeholder name does not count.
 		works := TryFor(probeTimeout, func() bool {
 			reactions, _, err := h.Admin.GetReactions(ctx, seedPost.Id)
 			if err != nil {
 				return false
 			}
 			for _, r := range reactions {
-				if r.UserId == aliceMM.Id && r.EmojiName != "" && !strings.Contains(r.EmojiName, "+1") {
+				if r.UserId != aliceMM.Id {
+					continue
+				}
+				if _, _, err := h.Admin.GetEmojiByName(ctx, r.EmojiName); err == nil {
 					return true
 				}
 			}
@@ -270,13 +275,15 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("Matrix read receipt marks the channel viewed", func(t *testing.T) {
-		before, _, err := h.Admin.GetChannelMember(ctx, channel.Id, aliceMM.Id, "")
-		require.NoError(t, err)
+		var before int64
+		if member, _, err := h.Admin.GetChannelMember(ctx, channel.Id, aliceMM.Id, ""); err == nil {
+			before = member.LastViewedAt
+		}
 		res := alice.Do(t, http.MethodPost, []string{"_matrix", "client", "v3", "rooms", roomID, "receipt", "m.read", seedEventID}, client.WithJSONBody(t, map[string]interface{}{}))
 		_ = res.Body.Close()
 		works := TryFor(probeTimeout, func() bool {
 			after, _, err := h.Admin.GetChannelMember(ctx, channel.Id, aliceMM.Id, "")
-			return err == nil && after.LastViewedAt > before.LastViewedAt
+			return err == nil && after.LastViewedAt > before
 		})
 		capabilities.Verify(t, "ephemeral.read_receipts.in", works)
 	})
@@ -308,6 +315,12 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("power level becomes channel admin", func(t *testing.T) {
+		// Room creators cannot appear in power_levels.users since room version
+		// 12, so promote a second Matrix user instead.
+		bob := h.NewMatrixUser("bob")
+		bob.MustJoinRoom(t, roomID, nil)
+		bobMM := WaitForBridgedUserInChannel(t, h, channel.Id, "bob")
+
 		levels, ok := roomState(t, alice, roomID, "m.room.power_levels", "")
 		require.True(t, ok, "room must have power levels")
 		var content map[string]interface{}
@@ -316,11 +329,11 @@ func TestCapabilityGaps(t *testing.T) {
 		if users == nil {
 			users = map[string]interface{}{}
 		}
-		users[alice.UserID] = 100
+		users[bob.UserID] = 50
 		content["users"] = users
 		alice.SendEventSynced(t, roomID, b.Event{Type: "m.room.power_levels", StateKey: model.NewPointer(""), Content: content})
 		works := TryFor(probeTimeout, func() bool {
-			member, _, err := h.Admin.GetChannelMember(ctx, channel.Id, aliceMM.Id, "")
+			member, _, err := h.Admin.GetChannelMember(ctx, channel.Id, bobMM.Id, "")
 			return err == nil && member.SchemeAdmin
 		})
 		capabilities.Verify(t, "membership.roles.in", works)

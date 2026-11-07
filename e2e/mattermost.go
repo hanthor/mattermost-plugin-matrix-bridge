@@ -205,9 +205,14 @@ func dumpContainerLogs(t *testing.T, c testcontainers.Container, name string) {
 	}
 	defer func() { _ = reader.Close() }()
 	all, _ := io.ReadAll(reader)
-	lines := strings.Split(string(all), "\n")
-	if len(lines) > 400 {
-		lines = lines[len(lines)-400:]
+	var pluginLines []string
+	for _, line := range strings.Split(string(all), "\n") {
+		if strings.Contains(line, PluginID) {
+			pluginLines = append(pluginLines, line)
+		}
 	}
-	t.Logf("=== %s logs (last %d lines) ===\n%s", name, len(lines), strings.Join(lines, "\n"))
+	if len(pluginLines) > 400 {
+		pluginLines = pluginLines[len(pluginLines)-400:]
+	}
+	t.Logf("=== %s plugin logs (last %d lines) ===\n%s", name, len(pluginLines), strings.Join(pluginLines, "\n"))
 }

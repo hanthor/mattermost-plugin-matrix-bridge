@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -103,18 +102,29 @@ func TestMattermostToMatrix(t *testing.T) {
 		_, _, err := h.Admin.SaveReaction(ctx, reaction)
 		require.NoError(t, err)
 
-		reactionEv := WaitForMatrixEvent(t, alice, roomID, func(ev gjson.Result) bool {
-			return ev.Get("type").Str == "m.reaction" && ev.Get("content.m\\.relates_to.event_id").Str == rootEventID
+		var reactionEv gjson.Result
+		WaitFor(t, bridgeTimeout, "ghost reaction on the root event", func() bool {
+			for _, ann := range Annotations(t, alice, roomID, rootEventID) {
+				if ann.Get("sender").Str == adminGhost {
+					reactionEv = ann
+					return true
+				}
+			}
+			return false
 		})
 		assert.Equal(t, "m.annotation", reactionEv.Get("content.m\\.relates_to.rel_type").Str)
 		assert.Equal(t, "👍", reactionEv.Get("content.m\\.relates_to.key").Str)
-		reactionEventID := reactionEv.Get("event_id").Str
 
 		_, err = h.Admin.DeleteReaction(ctx, reaction)
 		require.NoError(t, err)
 
-		WaitForMatrixEvent(t, alice, roomID, func(ev gjson.Result) bool {
-			return ev.Get("type").Str == "m.room.redaction" && ev.Get("redacts").Str == reactionEventID
+		WaitFor(t, bridgeTimeout, "ghost reaction to be redacted", func() bool {
+			for _, ann := range Annotations(t, alice, roomID, rootEventID) {
+				if ann.Get("sender").Str == adminGhost {
+					return false
+				}
+			}
+			return true
 		})
 	})
 
@@ -185,16 +195,13 @@ func TestMattermostToMatrix(t *testing.T) {
 
 	t.Run("new channel gets a Matrix room automatically", func(t *testing.T) {
 		auto := h.CreateChannel("auto-room", "Auto Room")
-		alias := fmt.Sprintf("#_mattermost_%s-auto-room:%s", h.Team.Name, h.ServerName)
 
+		// The room carries a com.mattermost.bridge.channel marker; the alias
+		// may be missing when the registration reserves no alias namespace.
+		bot := h.BotClient()
 		var autoRoomID string
-		WaitFor(t, bridgeTimeout, "room alias "+alias+" to resolve", func() bool {
-			res := alice.Do(t, http.MethodGet, []string{"_matrix", "client", "v3", "directory", "room", alias})
-			defer func() { _ = res.Body.Close() }()
-			if res.StatusCode != http.StatusOK {
-				return false
-			}
-			autoRoomID = gjson.GetBytes(client.ParseJSON(t, res), "room_id").Str
+		WaitFor(t, bridgeTimeout, "a room for the new channel to be created", func() bool {
+			autoRoomID = FindBridgedRoomForChannel(t, bot, auto.Id)
 			return autoRoomID != ""
 		})
 

@@ -182,3 +182,36 @@ func mustString(t *testing.T, r gjson.Result, what string) string {
 	require.True(t, r.Exists() && r.Str != "", "%s missing in %s", what, r.Raw)
 	return r.Str
 }
+
+// Annotations returns the m.annotation relations of an event (reactions) as
+// seen by cs. Redacted reactions are not included.
+func Annotations(t *testing.T, cs *client.CSAPI, roomID, eventID string) []gjson.Result {
+	t.Helper()
+	res := cs.Do(t, "GET", []string{"_matrix", "client", "v1", "rooms", roomID, "relations", eventID, "m.annotation"})
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != 200 {
+		return nil
+	}
+	return gjson.ParseBytes(client.ParseJSON(t, res)).Get("chunk").Array()
+}
+
+// FindBridgedRoomForChannel looks through the rooms the bridge bot has joined
+// for the one carrying the com.mattermost.bridge.channel marker of channelID.
+// It returns "" when none matches.
+func FindBridgedRoomForChannel(t *testing.T, bot *client.CSAPI, channelID string) string {
+	t.Helper()
+	res := bot.Do(t, "GET", []string{"_matrix", "client", "v3", "joined_rooms"})
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != 200 {
+		return ""
+	}
+	for _, r := range gjson.ParseBytes(client.ParseJSON(t, res)).Get("joined_rooms").Array() {
+		state := bot.Do(t, "GET", []string{"_matrix", "client", "v3", "rooms", r.Str, "state", "com.mattermost.bridge.channel", ""})
+		body := client.ParseJSON(t, state)
+		_ = state.Body.Close()
+		if state.StatusCode == 200 && gjson.GetBytes(body, "mattermost_channel_id").Str == channelID {
+			return r.Str
+		}
+	}
+	return ""
+}

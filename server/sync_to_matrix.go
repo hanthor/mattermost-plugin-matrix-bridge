@@ -919,6 +919,12 @@ func (b *MattermostToMatrixBridge) addReactionToMatrix(reaction *model.Reaction,
 	// Send reaction as ghost user
 	_, err = b.matrixClient.SendReactionAsGhost(matrixRoomID, matrixEventID, emoji, ghostUserID)
 	if err != nil {
+		// The same reaction already exists in the room (hooks can fire more than
+		// once for one reaction); the desired state is reached.
+		if strings.Contains(err.Error(), "M_DUPLICATE_ANNOTATION") {
+			b.logger.LogDebug("Reaction already present in Matrix, treating as synced", "post_id", reaction.PostId, "emoji", reaction.EmojiName, "ghost_user_id", ghostUserID)
+			return nil
+		}
 		return errors.Wrap(err, "failed to send reaction as ghost user")
 	}
 
