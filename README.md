@@ -9,6 +9,22 @@ homeserver as a Matrix [Application Service](https://spec.matrix.org/latest/appl
 so Mattermost users appear in Matrix as real-looking puppet ("ghost") users and
 Matrix users appear in Mattermost as remote users with their names and avatars.
 
+## See it in action
+
+The same conversation in Mattermost and in Element, with messages, threads,
+reactions and avatars flowing both ways. These screenshots are regenerated
+from the current code by the [walkthrough](docs/WALKTHROUGH.md), which also
+covers setup on both sides step by step.
+
+| Mattermost | Element |
+| --- | --- |
+| ![Reactions from both networks on one post, in Mattermost](docs/walkthrough/feature-mm-reactions.png) | ![The same post and reactions in Element](docs/walkthrough/feature-element-reactions.png) |
+| ![Alice's Matrix message in Mattermost](docs/walkthrough/feature-mm-message-from-matrix.png) | ![Carol's Mattermost message sent from her own Matrix account](docs/walkthrough/feature-element-double-puppet.png) |
+
+Setting it up takes a plugin upload, one settings page and one file on the
+homeserver; the full tour, from install to identity linking, is in
+[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md).
+
 ## What is bridged
 
 | Feature | Mattermost → Matrix | Matrix → Mattermost |
