@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/mocks"
 	matrixtest "github.com/mattermost/mattermost-plugin-matrix-bridge/testcontainers/matrix"
 	"github.com/mattermost/mattermost/server/public/model"
@@ -11,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 )
 
 // TestGetThreadRootFromPostID tests the thread root resolution functionality with mocked API

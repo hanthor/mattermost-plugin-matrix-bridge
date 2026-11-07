@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/mocks"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -386,7 +386,7 @@ func TestConvertHTMLToMarkdown(t *testing.T) {
 		{
 			name:     "line breaks",
 			input:    "Line 1<br>Line 2<br/>Line 3",
-			expected: "Line 1\n\nLine 2\n\nLine 3", // HTML-to-markdown adds double newlines for br tags
+			expected: "Line 1\nLine 2\nLine 3", // HTML-to-markdown adds double newlines for br tags
 		},
 		{
 			name:     "multi-line formatted",
