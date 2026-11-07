@@ -387,7 +387,6 @@ func (b *MattermostToMatrixBridge) SyncUserToMatrix(user *model.User) error {
 	return nil
 }
 
-// SyncPostToMatrix handles syncing a single post from Mattermost to Matrix
 // SyncPostsToMatrix syncs multiple posts to Matrix for a single channel, optimizing room resolution
 func (b *MattermostToMatrixBridge) SyncPostsToMatrix(posts []*model.Post, channelID string) error {
 	if len(posts) == 0 {
@@ -484,6 +483,7 @@ func (b *MattermostToMatrixBridge) syncPostToMatrixWithResolvedRoom(post *model.
 	return nil
 }
 
+// SyncPostToMatrix syncs a single post (create, edit or delete) to the Matrix room mapped to channelID.
 func (b *MattermostToMatrixBridge) SyncPostToMatrix(post *model.Post, channelID string) error {
 	// Check if this is a post deletion
 	if post.DeleteAt != 0 {

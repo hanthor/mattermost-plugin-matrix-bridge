@@ -102,7 +102,7 @@ func TestUserSyncFeature(t *testing.T) {
 			response := map[string]string{
 				"content_uri": "mxc://example.com/avatar123",
 			}
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 
@@ -111,7 +111,7 @@ func TestUserSyncFeature(t *testing.T) {
 		if r.Method == "PUT" && strings.Contains(r.URL.Path, "/avatar_url") {
 			setAvatarCalled = true
 			response := map[string]interface{}{}
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 
@@ -119,7 +119,7 @@ func TestUserSyncFeature(t *testing.T) {
 		// /_matrix/client/v3/profile/{userID}/displayname
 		if r.Method == "PUT" && strings.Contains(r.URL.Path, "/displayname") {
 			response := map[string]interface{}{}
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 

@@ -60,9 +60,9 @@ func TestEventQueueFull(t *testing.T) {
 	err := q.Enqueue(Task{ID: "1", Execute: func(ctx context.Context) error { return nil }})
 	assert.NoError(t, err)
 
-	err = q.Enqueue(Task{ID: "2", Execute: func(ctx context.Context) error { return nil }})
-	// Buffer is 1, so 1 in chan, 1 can be added if we're lucky but usually 2nd fails if 1 worker not reading
-	// Wait, chan size is 1. We can put 1. Next one blocks. Select default handles it.
+	// The buffer holds one task, so this second enqueue may or may not be
+	// accepted depending on scheduling; only the third is guaranteed to fail.
+	_ = q.Enqueue(Task{ID: "2", Execute: func(ctx context.Context) error { return nil }})
 
 	err = q.Enqueue(Task{ID: "3", Execute: func(ctx context.Context) error { return nil }})
 	assert.Error(t, err)
@@ -88,7 +88,7 @@ func TestEventQueueFailure(t *testing.T) {
 	defer q.Stop()
 
 	expectedErr := errors.New("boom")
-	q.Enqueue(Task{
+	_ = q.Enqueue(Task{
 		ID: "fail-task",
 		Execute: func(ctx context.Context) error {
 			return expectedErr

@@ -2748,7 +2748,7 @@ func (c *Client) RegisterUserWithASToken(username, password string) (*RegisterRe
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to send registration request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -2812,7 +2812,7 @@ func (c *Client) SetUserDisplayName(userID, displayName string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to send display name request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -2854,7 +2854,7 @@ func (c *Client) SetUserAvatar(userID, avatarURL string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to send avatar request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)

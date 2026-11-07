@@ -58,12 +58,12 @@ func TestRoomMirroring(t *testing.T) {
 			matrixServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == "POST" && r.URL.Path == "/_matrix/client/v3/createRoom" {
 					createRoomCalled = true
-					json.NewDecoder(r.Body).Decode(&requestBody)
+					_ = json.NewDecoder(r.Body).Decode(&requestBody)
 
 					response := map[string]string{
 						"room_id": "!newroom:example.com",
 					}
-					json.NewEncoder(w).Encode(response)
+					_ = json.NewEncoder(w).Encode(response)
 					return
 				}
 				w.WriteHeader(http.StatusOK)

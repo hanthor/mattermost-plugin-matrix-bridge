@@ -55,36 +55,43 @@ func NewMetrics() *Metrics {
 }
 
 // Message sync metrics
+
+// RecordMessageToMatrix increments the message to matrix counter.
 func (m *Metrics) RecordMessageToMatrix() {
 	if m != nil {
 		m.messagesToMatrix.Add(1)
 	}
 }
 
+// RecordMessageFromMatrix increments the message from matrix counter.
 func (m *Metrics) RecordMessageFromMatrix() {
 	if m != nil {
 		m.messagesFromMatrix.Add(1)
 	}
 }
 
+// RecordMessageSyncError increments the message sync error counter.
 func (m *Metrics) RecordMessageSyncError() {
 	if m != nil {
 		m.messageSyncErrors.Add(1)
 	}
 }
 
+// RecordMessageEditSynced increments the message edit synced counter.
 func (m *Metrics) RecordMessageEditSynced() {
 	if m != nil {
 		m.messageEditsSynced.Add(1)
 	}
 }
 
+// RecordReactionAdded increments the reaction added counter.
 func (m *Metrics) RecordReactionAdded() {
 	if m != nil {
 		m.reactionsAdded.Add(1)
 	}
 }
 
+// RecordReactionRemoved increments the reaction removed counter.
 func (m *Metrics) RecordReactionRemoved() {
 	if m != nil {
 		m.reactionsRemoved.Add(1)
@@ -92,24 +99,29 @@ func (m *Metrics) RecordReactionRemoved() {
 }
 
 // User/Room metrics
+
+// RecordGhostUserCreated increments the ghost user created counter.
 func (m *Metrics) RecordGhostUserCreated() {
 	if m != nil {
 		m.ghostUsersCreated.Add(1)
 	}
 }
 
+// RecordRoomCreated increments the room created counter.
 func (m *Metrics) RecordRoomCreated() {
 	if m != nil {
 		m.roomsCreated.Add(1)
 	}
 }
 
+// RecordChannelCreated increments the channel created counter.
 func (m *Metrics) RecordChannelCreated() {
 	if m != nil {
 		m.channelsCreated.Add(1)
 	}
 }
 
+// RecordUserSynced increments the user synced counter.
 func (m *Metrics) RecordUserSynced() {
 	if m != nil {
 		m.usersSynced.Add(1)
@@ -117,18 +129,22 @@ func (m *Metrics) RecordUserSynced() {
 }
 
 // API call metrics
+
+// RecordMatrixAPICall increments the matrix a p i call counter.
 func (m *Metrics) RecordMatrixAPICall() {
 	if m != nil {
 		m.matrixAPICalls.Add(1)
 	}
 }
 
+// RecordMatrixAPIError increments the matrix a p i error counter.
 func (m *Metrics) RecordMatrixAPIError() {
 	if m != nil {
 		m.matrixAPIErrors.Add(1)
 	}
 }
 
+// RecordMatrixAPIRetry increments the matrix a p i retry counter.
 func (m *Metrics) RecordMatrixAPIRetry() {
 	if m != nil {
 		m.matrixAPIRetries.Add(1)
@@ -136,6 +152,8 @@ func (m *Metrics) RecordMatrixAPIRetry() {
 }
 
 // Latency tracking
+
+// RecordMessageLatency records a message latency sample.
 func (m *Metrics) RecordMessageLatency(duration time.Duration) {
 	if m == nil {
 		return
@@ -152,6 +170,7 @@ func (m *Metrics) RecordMessageLatency(duration time.Duration) {
 	}
 }
 
+// RecordAPILatency records a a p i latency sample.
 func (m *Metrics) RecordAPILatency(duration time.Duration) {
 	if m == nil {
 		return
@@ -169,6 +188,8 @@ func (m *Metrics) RecordAPILatency(duration time.Duration) {
 }
 
 // Error tracking
+
+// RecordError counts an error of the given type.
 func (m *Metrics) RecordError(errorType string) {
 	if m == nil {
 		return
@@ -181,6 +202,7 @@ func (m *Metrics) RecordError(errorType string) {
 
 // Getters for metrics values
 
+// GetMessagesToMatrix returns the messages to matrix value.
 func (m *Metrics) GetMessagesToMatrix() uint64 {
 	if m == nil {
 		return 0
@@ -188,6 +210,7 @@ func (m *Metrics) GetMessagesToMatrix() uint64 {
 	return m.messagesToMatrix.Load()
 }
 
+// GetMessagesFromMatrix returns the messages from matrix value.
 func (m *Metrics) GetMessagesFromMatrix() uint64 {
 	if m == nil {
 		return 0
@@ -195,6 +218,7 @@ func (m *Metrics) GetMessagesFromMatrix() uint64 {
 	return m.messagesFromMatrix.Load()
 }
 
+// GetMessageSyncErrors returns the message sync errors value.
 func (m *Metrics) GetMessageSyncErrors() uint64 {
 	if m == nil {
 		return 0
@@ -202,6 +226,7 @@ func (m *Metrics) GetMessageSyncErrors() uint64 {
 	return m.messageSyncErrors.Load()
 }
 
+// GetMessageEditsSynced returns the message edits synced value.
 func (m *Metrics) GetMessageEditsSynced() uint64 {
 	if m == nil {
 		return 0
@@ -209,6 +234,7 @@ func (m *Metrics) GetMessageEditsSynced() uint64 {
 	return m.messageEditsSynced.Load()
 }
 
+// GetReactionsAdded returns the reactions added value.
 func (m *Metrics) GetReactionsAdded() uint64 {
 	if m == nil {
 		return 0
@@ -216,6 +242,7 @@ func (m *Metrics) GetReactionsAdded() uint64 {
 	return m.reactionsAdded.Load()
 }
 
+// GetReactionsRemoved returns the reactions removed value.
 func (m *Metrics) GetReactionsRemoved() uint64 {
 	if m == nil {
 		return 0
@@ -223,6 +250,7 @@ func (m *Metrics) GetReactionsRemoved() uint64 {
 	return m.reactionsRemoved.Load()
 }
 
+// GetGhostUsersCreated returns the ghost users created value.
 func (m *Metrics) GetGhostUsersCreated() uint64 {
 	if m == nil {
 		return 0
@@ -230,6 +258,7 @@ func (m *Metrics) GetGhostUsersCreated() uint64 {
 	return m.ghostUsersCreated.Load()
 }
 
+// GetRoomsCreated returns the rooms created value.
 func (m *Metrics) GetRoomsCreated() uint64 {
 	if m == nil {
 		return 0
@@ -237,6 +266,7 @@ func (m *Metrics) GetRoomsCreated() uint64 {
 	return m.roomsCreated.Load()
 }
 
+// GetChannelsCreated returns the channels created value.
 func (m *Metrics) GetChannelsCreated() uint64 {
 	if m == nil {
 		return 0
@@ -244,6 +274,7 @@ func (m *Metrics) GetChannelsCreated() uint64 {
 	return m.channelsCreated.Load()
 }
 
+// GetUsersSynced returns the users synced value.
 func (m *Metrics) GetUsersSynced() uint64 {
 	if m == nil {
 		return 0
@@ -251,6 +282,7 @@ func (m *Metrics) GetUsersSynced() uint64 {
 	return m.usersSynced.Load()
 }
 
+// GetMatrixAPICalls returns the matrix a p i calls value.
 func (m *Metrics) GetMatrixAPICalls() uint64 {
 	if m == nil {
 		return 0
@@ -258,6 +290,7 @@ func (m *Metrics) GetMatrixAPICalls() uint64 {
 	return m.matrixAPICalls.Load()
 }
 
+// GetMatrixAPIErrors returns the matrix a p i errors value.
 func (m *Metrics) GetMatrixAPIErrors() uint64 {
 	if m == nil {
 		return 0
@@ -265,6 +298,7 @@ func (m *Metrics) GetMatrixAPIErrors() uint64 {
 	return m.matrixAPIErrors.Load()
 }
 
+// GetMatrixAPIRetries returns the matrix a p i retries value.
 func (m *Metrics) GetMatrixAPIRetries() uint64 {
 	if m == nil {
 		return 0

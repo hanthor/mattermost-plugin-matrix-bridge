@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
@@ -544,7 +545,7 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 		channel := &model.Channel{
 			TeamId:      args.TeamId,
 			Type:        model.ChannelTypeOpen,
-			DisplayName: strings.Title(strings.ReplaceAll(channelName, "-", " ")),
+			DisplayName: titleCase(strings.ReplaceAll(channelName, "-", " ")),
 			Name:        channelName,
 			Header:      fmt.Sprintf("Bridged to Matrix room: %s", roomIdentifier),
 		}
@@ -1586,4 +1587,15 @@ func (c *Handler) executeMigrateCommand(_ *model.CommandArgs) *model.CommandResp
 			userMappingsAdded, channelMappingsAdded, roomMappingsAdded,
 			dmMappingsAdded, reverseDMMappingsAdded),
 	}
+}
+
+// titleCase upper-cases the first letter of every space-separated word.
+func titleCase(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		r := []rune(w)
+		r[0] = unicode.ToUpper(r[0])
+		words[i] = string(r)
+	}
+	return strings.Join(words, " ")
 }
