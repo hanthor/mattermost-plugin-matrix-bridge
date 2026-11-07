@@ -17,3 +17,9 @@ e2e-check:
 .PHONY: capabilities
 capabilities:
 	cd e2e && $(GO) test ./capabilities -run TestCapabilitiesDoc -update
+
+## Regenerates the docs/walkthrough screenshots by driving Mattermost and Element in a browser (needs Docker, Node.js and Playwright's Chromium).
+.PHONY: walkthrough
+walkthrough: dist
+	cd e2e/walkthrough && npm install --no-audit --no-fund
+	cd e2e && E2E_WALKTHROUGH=1 COMPLEMENT_BASE_IMAGE=$(COMPLEMENT_BASE_IMAGE) $(GO) test -count=1 -v -timeout 60m -run '^TestWalkthrough$$' .

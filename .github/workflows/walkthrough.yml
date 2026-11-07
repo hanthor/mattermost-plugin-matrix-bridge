@@ -1,0 +1,80 @@
+name: walkthrough
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    paths:
+      - 'e2e/walkthrough/**'
+      - 'e2e/walkthrough_test.go'
+      - 'docs/WALKTHROUGH.md'
+      - '.github/workflows/walkthrough.yml'
+  workflow_dispatch:
+  schedule:
+    # Weekly, so the screenshots keep tracking the latest Mattermost and Element releases.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  screenshots:
+    name: Generate walkthrough screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse:develop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            e2e/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Pull images
+        run: |
+          docker pull "$COMPLEMENT_BASE_IMAGE"
+          docker pull mattermost/mattermost-enterprise-edition:12.1.0
+          docker pull postgres:16-alpine
+          docker pull vectorim/element-web:latest
+
+      - name: Install Playwright browsers
+        working-directory: e2e/walkthrough
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Generate screenshots
+        run: make walkthrough
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: walkthrough-screenshots
+          path: docs/walkthrough/
+          if-no-files-found: error
+
+      - name: Open a pull request with refreshed screenshots
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: 'docs: refresh walkthrough screenshots'
+          title: 'docs: refresh walkthrough screenshots'
+          body: |
+            Automated run of `make walkthrough` against the current `master`.
+            Review the screenshots in `docs/walkthrough/` and merge if they look right.
+          branch: automation/walkthrough-screenshots
+          delete-branch: true
+          add-paths: docs/walkthrough/
+          labels: documentation

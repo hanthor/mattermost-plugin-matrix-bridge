@@ -180,7 +180,14 @@ func (h *Harness) TownSquare() *model.Channel {
 // a generous sync timeout.
 func (h *Harness) NewMatrixUser(localpart string) *client.CSAPI {
 	h.t.Helper()
-	cs := h.Deployment.Register(h.t, HSName, helpers.RegistrationOpts{LocalpartSuffix: localpart})
+	return h.NewMatrixUserWithPassword(localpart, "")
+}
+
+// NewMatrixUserWithPassword registers a Matrix user with a known password so
+// a browser can log in as them. An empty password uses Complement's default.
+func (h *Harness) NewMatrixUserWithPassword(localpart, password string) *client.CSAPI {
+	h.t.Helper()
+	cs := h.Deployment.Register(h.t, HSName, helpers.RegistrationOpts{LocalpartSuffix: localpart, Password: password})
 	cs.SyncUntilTimeout = bridgeTimeout
 	return cs
 }
@@ -212,6 +219,14 @@ func (h *Harness) CreateChannel(name, displayName string) *model.Channel {
 // test team and returns a logged-in client for them.
 func (h *Harness) CreateMattermostUser(username string) (*model.User, *model.Client4) {
 	h.t.Helper()
+	user, cl, _ := h.CreateMattermostUserWithPassword(username)
+	return user, cl
+}
+
+// CreateMattermostUserWithPassword is CreateMattermostUser but also returns
+// the generated password, for browser logins.
+func (h *Harness) CreateMattermostUserWithPassword(username string) (*model.User, *model.Client4, string) {
+	h.t.Helper()
 	ctx := context.Background()
 	password := "E2e-Password-" + model.NewId()[:8]
 	user, _, err := h.Admin.CreateUser(ctx, &model.User{
@@ -226,7 +241,7 @@ func (h *Harness) CreateMattermostUser(username string) (*model.User, *model.Cli
 	cl := model.NewAPIv4Client(h.Mattermost.URL)
 	_, _, err = cl.Login(ctx, username, password)
 	require.NoError(h.t, err, "login %s", username)
-	return user, cl
+	return user, cl, password
 }
 
 // MapChannelToRoom runs /matrix map so the channel bridges to an existing

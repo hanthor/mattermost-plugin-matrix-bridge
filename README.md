@@ -124,9 +124,12 @@ make dist          # build server, webapp and the plugin bundle
 make test          # Go and webapp unit tests
 make check-style   # golangci-lint and eslint
 make e2e           # Complement end-to-end suite (Docker required)
+make walkthrough   # regenerate the docs/WALKTHROUGH.md screenshots in a browser
 ./scripts/local-setup.sh   # Mattermost + Synapse + Element with the plugin installed
 ```
 
+- [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md): a screenshot tour from install
+  to identity linking, regenerated automatically from the current code.
 - [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md): the Docker Compose dev stack.
 - [e2e/README.md](e2e/README.md): the end-to-end suite, which deploys Synapse
   through [Complement](https://github.com/matrix-org/complement) and a real
