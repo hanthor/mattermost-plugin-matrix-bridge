@@ -3,6 +3,7 @@ package e2e
 import (
 	"archive/tar"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -330,6 +331,25 @@ func (h *Harness) CreateMappedRoom(owner *client.CSAPI, channelID, roomName stri
 			h.BridgeBotUserID(), roomID, h.JoinedMembers(roomID))
 	}
 	return roomID
+}
+
+// GrantBridgePower gives the bridge bot a power level in a room the owner
+// created, as an admin would for a room mapped with /matrix map. Without it
+// the bot cannot set the state events that calls and widgets use.
+func (h *Harness) GrantBridgePower(owner *client.CSAPI, roomID string, level int) {
+	h.t.Helper()
+	res := owner.MustDo(h.t, "GET", []string{"_matrix", "client", "v3", "rooms", roomID, "state", "m.room.power_levels"})
+	var levels map[string]any
+	if err := json.Unmarshal(client.ParseJSON(h.t, res), &levels); err != nil {
+		h.t.Fatalf("decode power levels: %v", err)
+	}
+	users, _ := levels["users"].(map[string]any)
+	if users == nil {
+		users = map[string]any{}
+	}
+	users[h.BridgeBotUserID()] = level
+	levels["users"] = users
+	owner.MustDo(h.t, "PUT", []string{"_matrix", "client", "v3", "rooms", roomID, "state", "m.room.power_levels"}, client.WithJSONBody(h.t, levels))
 }
 
 // WaitFor polls cond until it returns true or the timeout elapses.

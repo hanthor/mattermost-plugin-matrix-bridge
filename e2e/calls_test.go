@@ -28,6 +28,7 @@ func TestCalls(t *testing.T) {
 	alice := h.NewMatrixUser("alice")
 	channel := h.CreateChannel("calls", "Calls")
 	roomID := h.CreateMappedRoom(alice, channel.Id, "Calls")
+	h.GrantBridgePower(alice, roomID, 50)
 	carol, carolClient := h.CreateMattermostUser("carol")
 	_, _, err := h.Admin.AddChannelMember(ctx, channel.Id, carol.Id)
 	require.NoError(t, err)

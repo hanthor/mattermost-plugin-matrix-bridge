@@ -158,6 +158,7 @@ func (b *MattermostToMatrixBridge) syncCallPost(post *model.Post, roomID string)
 
 	var rec mattermostCallRecord
 	known := loadJSON(b.kvstore, mattermostCallKeyPrefix+post.Id, &rec)
+	b.logger.LogInfo("Syncing a call post", "post_id", post.Id, "known", known, "ended", rec.Ended, "end_at", endAt, "participants", len(participants))
 
 	switch {
 	case !known && endAt > 0:
