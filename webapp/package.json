@@ -98,7 +98,6 @@
       "^bundle-loader\\?lazy\\!(.*)$": "$1"
     },
     "moduleDirectories": [
-      "",
       "node_modules",
       "non_npm_dependencies"
     ],
@@ -115,6 +114,7 @@
     "setupFilesAfterEnv": [
       "<rootDir>/tests/setup.tsx"
     ],
+    "testEnvironment": "jsdom",
     "testURL": "http://localhost:8065"
   }
 }

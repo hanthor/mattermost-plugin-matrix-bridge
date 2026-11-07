@@ -67,6 +67,16 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Double puppeting (use my own Matrix account) | Mattermost → Matrix | ✅ | "!mattermost login <access_token>" lets the bridge send as the linked Matrix account. |
 | Automatic linking through shared SSO (OIDC / Matrix Authentication Service) | Mattermost → Matrix | ❌ | Match accounts by verified email from a shared identity provider so linking is zero-touch. |
 
+## Calls
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Call announced in the room (who started, who is in, join link, ended) | Mattermost → Matrix | ✅ | A Mattermost Calls post becomes a notice with a join link and a com.mattermost.bridge.call state event; the notice is edited when the call ends. |
+| Call shown as a card in the channel (participants, duration, join button) | Matrix → Mattermost | ✅ | m.rtc.member and org.matrix.msc3401.call.member state become a custom_matrix_call post that is updated as people join and leave. |
+| One call both sides can join | Mattermost → Matrix | 🟡 | /matrix call adds a widget to the room and posts a card with the configured Element Call URL. The bridge does not verify the call service itself. |
+| Audio and video relayed between Mattermost Calls and MatrixRTC | Mattermost → Matrix | ❌ | Both sides run their own media servers and signalling; a relay would be a full WebRTC endpoint on each side. Not planned. |
+| Call recordings and transcripts | Mattermost → Matrix | ❌ | The Calls plugin keeps them in the call's thread; not relayed yet. |
+
 ## Mirror mode
 
 | Capability | Direction | Status | Notes |
@@ -75,7 +85,8 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Name collisions with existing accounts | Mattermost → Matrix | ✅ | A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status. |
 | Claiming an account | Matrix → Mattermost | ✅ | /matrix claim with an admin token, or the first message from the person's own client after shared login. Their messages then post as them and the bridge keeps sending through the appservice. |
 | Shared login with Mattermost as the identity provider | Matrix → Mattermost | 🟡 | Documented for Matrix Authentication Service; nothing in the plugin sets it up. |
-| Ghosts to mirror accounts migration | Mattermost → Matrix | ❌ | Planned: /matrix migrate ghosts-to-mirror. |
+| Ghosts to mirror accounts migration | Mattermost → Matrix | ✅ | /matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver. |
+| Cut-over mode | Mattermost → Matrix | ✅ | Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing. |
 
 ## Rooms
 
@@ -107,7 +118,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 28
-- 🟡 partial: 3
-- ❌ gap: 28
+- ✅ supported: 32
+- 🟡 partial: 4
+- ❌ gap: 29
 - — n/a: 0

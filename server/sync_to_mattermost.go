@@ -550,6 +550,10 @@ func (b *MatrixToMattermostBridge) getOrCreateMattermostUser(matrixUserID string
 		}
 	}
 
+	if b.getConfiguration().CutoverMode {
+		return "", errors.New("cut-over mode is on: no new Mattermost users are created for Matrix users")
+	}
+
 	// Extract username from Matrix user ID (@username:server.com -> username)
 	username := b.extractUsernameFromMatrixUserID(matrixUserID)
 	if username == "" {

@@ -42,6 +42,7 @@ homeserver; the full tour, from install to identity linking, is in
 | Channel ↔ room creation, team ↔ space | ✅ | — |
 | Room name and topic → channel name and header | — | ✅ |
 | Typing notifications | — | ✅ |
+| Calls: who started, who is in, join link, ended (audio and video are not relayed) | ✅ | ✅ |
 | Presence → Mattermost status | — | ✅ |
 | Direct and group messages | ✅ | — |
 | Read receipts | — | — |

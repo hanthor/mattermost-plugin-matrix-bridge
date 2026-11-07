@@ -421,6 +421,14 @@ func (b *MattermostToMatrixBridge) syncPostToMatrixWithResolvedRoom(post *model.
 		return b.deletePostFromMatrix(post, channelID)
 	}
 
+	// Calls are announced rather than relayed as messages.
+	switch post.Type {
+	case callPostType:
+		return b.syncCallPost(post, matrixRoomID)
+	case matrixCallPostType:
+		return nil // the card for a call that came from Matrix
+	}
+
 	user, appErr := b.API.GetUser(post.UserId)
 	if appErr != nil {
 		return errors.Wrap(appErr, "failed to get user")

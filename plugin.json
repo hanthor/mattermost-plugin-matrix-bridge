@@ -92,6 +92,50 @@
                 "secret": true
             },
             {
+                "key": "calls_mode",
+                "display_name": "Calls",
+                "type": "dropdown",
+                "help_text": "Audio and video are not relayed between Mattermost Calls and Matrix. Presence announces calls in both directions (who started, who is in, how to join, when it ended). Presence and Element Call additionally lets /matrix call start a call that both sides can join through the Element Call URL below.",
+                "default": "presence",
+                "options": [
+                    {
+                        "display_name": "Off",
+                        "value": "off"
+                    },
+                    {
+                        "display_name": "Presence - announce calls on both sides [Recommended]",
+                        "value": "presence"
+                    },
+                    {
+                        "display_name": "Presence and Element Call - calls both sides can join",
+                        "value": "element_call"
+                    }
+                ]
+            },
+            {
+                "key": "element_call_url",
+                "display_name": "Element Call URL",
+                "type": "text",
+                "help_text": "Where /matrix call sends people. May contain {room_id}, {room_name}, {display_name} and {user_id}, which are URL-escaped. Use the room address format of your Element Call deployment.",
+                "placeholder": "https://call.example.com/room?roomId={room_id}",
+                "default": ""
+            },
+            {
+                "key": "element_url",
+                "display_name": "Element Web URL",
+                "type": "text",
+                "help_text": "Used for the Join in Element button on calls that start in Matrix. When empty the link goes through matrix.to.",
+                "placeholder": "https://chat.example.com",
+                "default": ""
+            },
+            {
+                "key": "cutover_mode",
+                "display_name": "Cut-over Mode",
+                "type": "bool",
+                "help_text": "Freezes the set of Matrix accounts and rooms while a community moves from Mattermost to Matrix: nothing new is created, everything that exists keeps syncing.",
+                "default": false
+            },
+            {
                 "key": "sync_user_profiles",
                 "display_name": "Sync User Profiles",
                 "type": "bool",

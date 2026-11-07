@@ -267,6 +267,8 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		return p.matrixToMattermostBridge.syncMatrixMemberEventToMattermost(event, channelID)
 	case "m.room.redaction":
 		return p.matrixToMattermostBridge.syncMatrixRedactionToMattermost(event, channelID)
+	case callMemberEventLegacy, callMemberEventRTC:
+		return p.handleMatrixCallEvent(event, channelID)
 	case "m.room.name":
 		return p.syncMatrixRoomNameToMattermost(event, channelID)
 	case "m.room.topic":

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 )
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
@@ -25,6 +26,8 @@ type fakeSynapse struct {
 	created   []string
 	passwords map[string]string
 	inhibited map[string]bool
+	joins     []string
+	leaves    []string
 	server    *httptest.Server
 }
 
@@ -64,12 +67,47 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 			_ = json.Unmarshal(body, &req)
 			f.passwords[strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v2/users/")], _ = req["password"].(string)
 			_, _ = w.Write([]byte(`{}`))
+		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
+			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
+			_, _ = w.Write([]byte(`{}`))
+		case strings.HasSuffix(r.URL.Path, "/leave"):
+			f.leaves = append(f.leaves, r.URL.Query().Get("user_id")+" from "+roomFromPath(r.URL.Path))
+			_, _ = w.Write([]byte(`{}`))
 		default:
 			_, _ = w.Write([]byte(`{}`))
 		}
 	}))
 	t.Cleanup(f.server.Close)
 	return f
+}
+
+func roomFromPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part == "rooms" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+func (f *fakeSynapse) joinsAndLeaves() (joins, leaves []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.joins...), append([]string(nil), f.leaves...)
+}
+
+func kvstoreGhostUserKey(id string) string { return kvstore.BuildGhostUserKey(id) }
+
+func kvstoreGhostRoomKey(id, room string) string { return kvstore.BuildGhostRoomKey(id, room) }
+
+// withBase applies the pinned fields of a locked configuration on top of the
+// plugin's current one.
+func withBase(base, locked *configuration) *configuration {
+	next := base.Clone()
+	next.EnableMirrorMode = locked.EnableMirrorMode
+	next.accountModePinned = locked.accountModePinned
+	return next
 }
 
 func newMirrorTestBridge(t *testing.T, hs *fakeSynapse, users ...*model.User) (*Plugin, *plugintest.API) {
@@ -295,4 +333,105 @@ func TestSentEventsAreRecognisedAsEchoes(t *testing.T) {
 	p.matrixClient.RecordSentEvent("$event")
 	assert.True(t, p.matrixClient.SentByBridge("$event"))
 	assert.False(t, p.matrixClient.SentByBridge(""))
+}
+
+func seedGhostWithRooms(t *testing.T, p *Plugin, userID string, rooms ...string) string {
+	t.Helper()
+	ghost := "@_mattermost_" + userID + ":example.com"
+	require.NoError(t, p.kvstore.Set(kvstoreGhostUserKey(userID), []byte(ghost)))
+	for _, r := range rooms {
+		require.NoError(t, p.kvstore.Set(kvstoreGhostRoomKey(userID, r), []byte("joined")))
+	}
+	return ghost
+}
+
+func TestMigrateGhostsToMirror(t *testing.T) {
+	hs := newFakeSynapse(t)
+	ada := &model.User{Id: "mm-ada", Username: "ada"}
+	bob := &model.User{Id: "mm-bob", Username: "bob"}
+	carol := &model.User{Id: "mm-carol", Username: "carol"}
+	p, _ := newMirrorTestBridge(t, hs, ada, bob, carol)
+
+	// Start as a ghost deployment that later turns mirror mode on.
+	p.configuration.EnableMirrorMode = false
+	recordAccountMode(p.kvstore, accountModeGhost)
+	seedGhostWithRooms(t, p, "mm-ada", "!r1:example.com", "!r2:example.com")
+	seedGhostWithRooms(t, p, "mm-bob", "!r1:example.com")
+	seedGhostWithRooms(t, p, "mm-carol", "!r1:example.com")
+	require.NoError(t, p.identity().save(&IdentityLink{MattermostUserID: "mm-carol", MatrixUserID: "@carol:other.org", AccessToken: "syt_x"}))
+
+	// The setting asks for mirror mode but the existing ghosts pin ghost mode.
+	cfg := &configuration{EnableMirrorMode: true}
+	p.API.(*plugintest.API).On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	p.applyAccountModeLock(cfg)
+	p.setConfiguration(withBase(p.configuration, cfg))
+	require.True(t, p.getConfiguration().accountModePinned)
+	assert.Equal(t, accountModeGhost, p.MirrorStatus().Mode)
+	assert.True(t, p.MirrorStatus().Pinned)
+
+	// Dry run changes nothing.
+	dry, err := p.migrateGhostsToMirror(false)
+	require.NoError(t, err)
+	assert.True(t, dry.DryRun)
+	assert.Equal(t, 3, dry.Users)
+	assert.Equal(t, 4, dry.Rooms)
+	assert.Equal(t, 1, dry.Skipped, "carol already posts as her own linked account")
+	assert.Empty(t, hs.created)
+	_, stillGhost := p.kvstore.Get(kvstoreGhostUserKey("mm-ada"))
+	assert.NoError(t, stillGhost)
+
+	// Confirm moves everyone else and switches the mode.
+	done, err := p.migrateGhostsToMirror(true)
+	require.NoError(t, err)
+	assert.Equal(t, 2, done.Moved)
+	assert.Equal(t, 0, done.Failed)
+	assert.True(t, done.Flipped)
+	assert.ElementsMatch(t, []string{"ada", "bob"}, hs.created)
+
+	id, ok := p.getGhostUser("mm-ada")
+	require.True(t, ok)
+	assert.Equal(t, "@ada:example.com", id, "everything now resolves to the mirror account")
+	assert.Equal(t, accountModeMirror, effectiveAccountMode(p.kvstore))
+	assert.True(t, p.getConfiguration().EnableMirrorMode)
+	assert.False(t, p.getConfiguration().accountModePinned)
+
+	// Rooms: the mirror account joined, the ghost left.
+	joined, left := hs.joinsAndLeaves()
+	assert.Contains(t, joined, "@ada:example.com in !r1:example.com")
+	assert.Contains(t, joined, "@ada:example.com in !r2:example.com")
+	assert.Contains(t, left, "@_mattermost_mm-ada:example.com from !r1:example.com")
+
+	// Running it again has nothing to do.
+	_, err = p.migrateGhostsToMirror(true)
+	require.Error(t, err)
+}
+
+func TestMigrationRefusesWithoutMirrorModeSetting(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, _ := newMirrorTestBridge(t, hs)
+	p.configuration.EnableMirrorMode = false
+	_, err := p.migrateGhostsToMirror(false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Mirror Mode")
+}
+
+func TestCutoverFreezesAccounts(t *testing.T) {
+	hs := newFakeSynapse(t)
+	ada := &model.User{Id: "mm-ada", Username: "ada"}
+	eve := &model.User{Id: "mm-eve", Username: "eve"}
+	p, _ := newMirrorTestBridge(t, hs, ada, eve)
+
+	_, err := p.mattermostToMatrixBridge.ensureAccount("mm-ada")
+	require.NoError(t, err)
+
+	p.configuration.CutoverMode = true
+	existing, err := p.mattermostToMatrixBridge.ensureAccount("mm-ada")
+	require.NoError(t, err, "existing accounts keep working")
+	assert.Equal(t, "@ada:example.com", existing)
+
+	_, err = p.mattermostToMatrixBridge.ensureAccount("mm-eve")
+	require.Error(t, err, "no new accounts in cut-over mode")
+	assert.Contains(t, err.Error(), "cut-over")
+	assert.Equal(t, []string{"ada"}, hs.created)
+	assert.True(t, p.MirrorStatus().Cutover)
 }

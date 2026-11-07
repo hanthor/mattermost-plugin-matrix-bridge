@@ -4,8 +4,20 @@ Two questions came up once the bridge did the everyday things: what happens
 when someone starts a **call** on either side, and what exactly **mirror
 mode** promises when a community uses it to move from Mattermost to Matrix.
 This document settles the design for both so the work in
-[PLAN.md](PLAN.md) can proceed in order. Nothing here is implemented yet
-unless marked.
+[PLAN.md](PLAN.md) can proceed in order.
+
+**Status.** Implemented: mirror mode hygiene (credential-less accounts, the
+account resolver, collisions, pinned mode, `/matrix claim` with an admin
+token or through the first message after shared login), call presence in both
+directions (Tier 1) and `/matrix call` with a configurable Element Call URL
+(Tier 2). Not implemented: recordings and transcripts as thread attachments,
+retiring a mirror when a native account is linked later (scenario 4),
+deactivation handling (scenario 5), the encryption guard (scenario 7) and
+power levels from channel roles (scenario 10). The ghost-to-mirror migration
+(`/matrix migrate ghosts-to-mirror`) and a cut-over mode that freezes accounts
+and rooms are implemented; cut-over is deliberately smaller than the
+read-only relay sketched in scenario 6. The sections below describe the design; the
+capability matrix is the authoritative list of what works.
 
 ## Part 1: Calls
 

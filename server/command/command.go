@@ -100,6 +100,20 @@ type MirrorStatus struct {
 	// ClaimSupported is true when the bridge can set a password for a
 	// mirrored account (an admin token is configured).
 	ClaimSupported bool
+	// Cutover is set when accounts and rooms are frozen.
+	Cutover bool
+}
+
+// GhostMigrationReport is the outcome of /matrix migrate ghosts-to-mirror.
+type GhostMigrationReport struct {
+	DryRun   bool
+	Users    int
+	Rooms    int
+	Moved    int
+	Skipped  int
+	Failed   int
+	Errors   []string
+	Switched bool
 }
 
 // PluginAccessor defines the interface for plugin functionality needed by command handlers
@@ -136,6 +150,14 @@ type PluginAccessor interface {
 	// Migration access
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
+
+	// MigrateGhostsToMirror moves ghost users to mirror accounts; without
+	// confirm it only reports what it would do.
+	MigrateGhostsToMirror(confirm bool) (GhostMigrationReport, error)
+
+	// StartCall starts a call in the channel that both Mattermost and Matrix
+	// users can join, and returns its join address.
+	StartCall(mattermostUserID, channelID, title string) (string, error)
 
 	// Mirror mode: account mode and claiming (see docs/CALLS_AND_MIRROR_MODE.md)
 	MirrorStatus() MirrorStatus
@@ -289,10 +311,11 @@ const (
 	matrixCommandTrigger = "matrix"
 
 	// Main command usage
-	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|migrate] [room_name|room_alias|room_id]"
+	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|claim|call|migrate] [room_name|room_alias|room_id]"
 	linkCommandDesc    = "Link your Matrix account so you are one identity on both networks"
 	unlinkCommandDesc  = "Remove the link to your Matrix account"
 	claimCommandDesc   = "Mirror mode: take over your mirrored Matrix account"
+	callCommandDesc    = "Start a call in this bridged channel that Mattermost and Matrix users can both join"
 
 	// Subcommand descriptions for autocomplete
 	testCommandDesc    = "Test Matrix server connection and configuration"
@@ -421,6 +444,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("link", "", linkCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("unlink", "", unlinkCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("claim", "", claimCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("call", "[title]", callCommandDesc))
 
 	return matrixData
 }
@@ -1223,6 +1247,12 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	case "claim":
 		return c.executeClaimCommand(args)
+	case "call":
+		title := ""
+		if len(fields) > 2 {
+			title = strings.Join(fields[2:], " ")
+		}
+		return c.executeCallCommand(args, title)
 	case "metrics":
 		return c.executeMetricsCommand(args)
 	case "link":
@@ -1250,6 +1280,13 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 
 	isSystemAdmin := func() bool {
 		return c.pluginAPI.HasPermissionTo(args.UserId, model.PermissionManageSystem)
+	}
+
+	switch subcommand {
+	case "create", "map", "join":
+		if c.plugin.MirrorStatus().Cutover {
+			return deny("❌ Cut-over mode is on: no new rooms are bridged.")
+		}
 	}
 
 	switch subcommand {
@@ -1617,7 +1654,10 @@ func (c *Handler) backfillChannelsForTeam(teamID string) {
 	}
 }
 
-func (c *Handler) executeMigrateCommand(_ *model.CommandArgs) *model.CommandResponse {
+func (c *Handler) executeMigrateCommand(args *model.CommandArgs) *model.CommandResponse {
+	if fields := strings.Fields(args.Command); len(fields) > 2 && fields[2] == "ghosts-to-mirror" {
+		return c.executeGhostMigration(len(fields) > 3 && fields[3] == "confirm")
+	}
 	// Get current version before reset
 	kvstorage := c.plugin.GetKVStore()
 	versionBytes, _ := kvstorage.Get(kvstore.KeyStoreVersion)
@@ -1757,6 +1797,9 @@ func (c *Handler) accountModeStatus() string {
 	} else {
 		sb.WriteString("\n- Accounts: **ghost users** (`@_mattermost_<id>`)")
 	}
+	if st.Cutover {
+		sb.WriteString("\n- 🔒 **Cut-over mode**: accounts and rooms are frozen; no new ones are created")
+	}
 	if st.Pinned {
 		want := "ghost users"
 		if st.ConfiguredMirror {
@@ -1783,4 +1826,42 @@ func (c *Handler) executeClaimCommand(args *model.CommandArgs) *model.CommandRes
 		return reply(fmt.Sprintf("✅ `%s` is now yours. Log in to Matrix with your single sign-on account; the bridge keeps posting as you from Mattermost.", matrixUserID))
 	}
 	return reply(fmt.Sprintf("✅ `%s` is now yours.\n\nOne-time password (shown once, change it after your first login): `%s`\n\nThe bridge keeps posting as you from Mattermost.", matrixUserID, password))
+}
+
+// executeCallCommand starts a call that people on both sides can join.
+func (c *Handler) executeCallCommand(args *model.CommandArgs, title string) *model.CommandResponse {
+	joinURL, err := c.plugin.StartCall(args.UserId, args.ChannelId, title)
+	if err != nil {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+	}
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         fmt.Sprintf("📞 The call is announced in the channel and in the Matrix room. Join: %s", joinURL),
+	}
+}
+
+// executeGhostMigration moves ghost users to mirror accounts.
+func (c *Handler) executeGhostMigration(confirm bool) *model.CommandResponse {
+	reply := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+	r, err := c.plugin.MigrateGhostsToMirror(confirm)
+	if err != nil {
+		return reply("❌ " + err.Error())
+	}
+	if r.DryRun {
+		return reply(fmt.Sprintf("**Dry run.** %d user(s) with a ghost would move to mirror accounts and %d room membership(s) would be re-created; %d user(s) post as their own linked account and stay as they are.\n\n"+
+			"Run `/matrix migrate ghosts-to-mirror confirm` to do it. It can be repeated if something fails.", r.Users-r.Skipped, r.Rooms, r.Skipped))
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**Migration finished:** %d moved, %d skipped, %d failed.", r.Moved, r.Skipped, r.Failed))
+	for _, e := range r.Errors {
+		sb.WriteString("\n- " + e)
+	}
+	if r.Switched {
+		sb.WriteString("\n\n✅ The bridge is now in mirror mode.")
+	} else {
+		sb.WriteString("\n\n⚠️ Some users were not moved, so the mode was not switched yet. Run the command again after fixing the cause.")
+	}
+	return reply(sb.String())
 }
