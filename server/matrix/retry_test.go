@@ -88,12 +88,12 @@ func TestCalculateBackoff(t *testing.T) {
 		attempt  int
 		expected time.Duration
 	}{
-		{0, 100 * time.Millisecond},   // 100ms * 2^0 = 100ms
-		{1, 200 * time.Millisecond},   // 100ms * 2^1 = 200ms
-		{2, 400 * time.Millisecond},   // 100ms * 2^2 = 400ms
-		{3, 800 * time.Millisecond},   // 100ms * 2^3 = 800ms
-		{4, 1600 * time.Millisecond},  // 100ms * 2^4 = 1600ms
-		{10, 10 * time.Second},        // Should be capped at MaxBackoff
+		{0, 100 * time.Millisecond},  // 100ms * 2^0 = 100ms
+		{1, 200 * time.Millisecond},  // 100ms * 2^1 = 200ms
+		{2, 400 * time.Millisecond},  // 100ms * 2^2 = 400ms
+		{3, 800 * time.Millisecond},  // 100ms * 2^3 = 800ms
+		{4, 1600 * time.Millisecond}, // 100ms * 2^4 = 1600ms
+		{10, 10 * time.Second},       // Should be capped at MaxBackoff
 	}
 
 	for _, tt := range tests {
@@ -133,12 +133,12 @@ func TestShouldRetry(t *testing.T) {
 	config := DefaultRetryConfig()
 
 	tests := []struct {
-		name         string
-		err          error
-		statusCode   int
-		attempt      int
-		shouldRetry  bool
-		hasBackoff   bool
+		name        string
+		err         error
+		statusCode  int
+		attempt     int
+		shouldRetry bool
+		hasBackoff  bool
 	}{
 		{"429 on first attempt", nil, 429, 0, true, true},
 		{"500 on first attempt", nil, 500, 0, true, true},
@@ -215,7 +215,7 @@ func TestWithRetryRetriableError(t *testing.T) {
 	require.NotNil(t, resp, "Should return response")
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Should eventually succeed")
 	assert.Equal(t, 3, attempts, "Should retry twice before success")
-	
+
 	// Should have taken at least the sum of backoffs (100ms + 200ms = 300ms approximately)
 	assert.Greater(t, duration, 200*time.Millisecond, "Should have waited during retries")
 }

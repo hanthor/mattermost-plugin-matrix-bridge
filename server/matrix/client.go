@@ -838,7 +838,7 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 	// Create room alias - include team name to avoid collisions across teams
 	alias := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 	alias = strings.ReplaceAll(alias, "_", "-")
-	
+
 	// Prepend team name if available to avoid alias collisions
 	// (e.g., multiple teams can have "town-square" channels)
 	if teamName != "" {
@@ -846,7 +846,7 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 		teamSlug = strings.ReplaceAll(teamSlug, "_", "-")
 		alias = teamSlug + "-" + alias
 	}
-	
+
 	// In Mirror Mode (skipPrefix=true), use clean aliases without prefix
 	// Otherwise use _mattermost_ prefix for namespace reservation
 	roomAlias := ""
@@ -2819,12 +2819,13 @@ func (c *Client) SetUserAvatar(userID, avatarURL string) error {
 	return nil
 }
 
-// getServerName extracts the server name from the server URL or returns a default
+// getServerName returns the Matrix server name used to build user IDs. It
+// prefers the explicitly configured server domain and otherwise derives the
+// hostname from the configured server URL.
 func (c *Client) getServerName() string {
-	// Try to parse server name from URL
-	if c.serverURL != "" {
-		// Default to "synapse" for local development
-		return "synapse"
+	domain, err := c.extractServerDomain()
+	if err != nil {
+		return ""
 	}
-	return "matrix.org"
+	return domain
 }

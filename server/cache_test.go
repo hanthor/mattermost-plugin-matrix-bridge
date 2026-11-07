@@ -334,10 +334,10 @@ func TestCacheZeroCapacity(t *testing.T) {
 	cache := NewCache(0, 5*time.Minute)
 
 	cache.Set("key1", "value1")
-	
+
 	// Should not store anything with zero capacity
 	assert.Equal(t, 0, cache.Len())
-	
+
 	_, found := cache.Get("key1")
 	assert.False(t, found)
 }

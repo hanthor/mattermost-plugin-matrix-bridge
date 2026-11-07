@@ -126,7 +126,7 @@ func (suite *FeaturesE2ETestSuite) TestAutoRoomCreation_Real() {
 // TestSpaceHierarchy_Real verifies Team -> Space -> Child Room hierarchy
 func (suite *FeaturesE2ETestSuite) TestSpaceHierarchy_Real() {
 	t := suite.T()
-	
+
 	team := &model.Team{
 		Id:          "team_e2e_id",
 		Name:        "e2e-team",
@@ -163,10 +163,10 @@ func (suite *FeaturesE2ETestSuite) TestSpaceHierarchy_Real() {
 	// We use the raw HTTP client for this specific check if helper is missing
 	_ = roomID
 
-    // Using a manual check via httptest could work, but here we can trust no error logs means success 
-    // OR try to fetch state.
-    // For now, assertion of "No Error" during the AddSpaceChild call (which log info does) is good integration signal.
-    // But we can check via plugin.matrixClient if we expose a GetStateEvent.
+	// Using a manual check via httptest could work, but here we can trust no error logs means success
+	// OR try to fetch state.
+	// For now, assertion of "No Error" during the AddSpaceChild call (which log info does) is good integration signal.
+	// But we can check via plugin.matrixClient if we expose a GetStateEvent.
 }
 
 // TestUserPuppeting_Real verifies ghost user creation
@@ -179,7 +179,7 @@ func (suite *FeaturesE2ETestSuite) TestUserPuppeting_Real() {
 		FirstName: "E2E",
 		LastName:  "Test",
 	}
-	
+
 	// Mock Profile Image call
 	suite.api.On("GetProfileImage", user.Id).Return([]byte("fake_png"), nil)
 
@@ -192,13 +192,13 @@ func (suite *FeaturesE2ETestSuite) TestUserPuppeting_Real() {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, ghostIDBytes)
 	ghostID := string(ghostIDBytes)
-	
+
 	t.Logf("Created Ghost User: %s", ghostID)
-	
+
 	// 2. Update User (Profile Sync)
 	// This usually triggers profile updates.
 	suite.plugin.UserHasUpdated(nil, user, user)
-	
-	// If no error logged, it likely worked. 
+
+	// If no error logged, it likely worked.
 	// Real check would be GET /_matrix/client/v3/profile/{ghostID}
 }

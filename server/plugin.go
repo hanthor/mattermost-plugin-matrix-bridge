@@ -271,27 +271,7 @@ func (p *Plugin) GetConfiguration() command.Configuration {
 }
 
 // GetMetrics returns the metrics collector wrapped to satisfy the command interface
-func (p *Plugin) GetMetrics() interface {
-	GetMessagesToMatrix() uint64
-	GetMessagesFromMatrix() uint64
-	GetMessageSyncErrors() uint64
-	GetMessageEditsSynced() uint64
-	GetReactionsAdded() uint64
-	GetReactionsRemoved() uint64
-	GetGhostUsersCreated() uint64
-	GetRoomsCreated() uint64
-	GetChannelsCreated() uint64
-	GetUsersSynced() uint64
-	GetMatrixAPICalls() uint64
-	GetMatrixAPIErrors() uint64
-	GetMatrixAPIRetries() uint64
-	GetMessageLatencyAvg() float64
-	GetMessageLatencyMax() uint64
-	GetAPILatencyAvg() float64
-	GetAPILatencyMax() uint64
-	GetErrorsByType() map[string]uint64
-	GetUptime() time.Duration
-} {
+func (p *Plugin) GetMetrics() command.MetricsProvider {
 	return p.metrics
 }
 
@@ -405,7 +385,7 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 	} else {
 		// This is a local Mattermost user
 		var matrixUserID string
-		
+
 		if config.EnableMirrorMode {
 			// Mirror Mode: Create or use real Matrix user based on username
 			serverDomain := config.MatrixServerDomain
@@ -414,19 +394,16 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 			}
 			matrixUserID = fmt.Sprintf("@%s:%s", user.Username, serverDomain)
 			p.logger.LogDebug("Mirror mode: Adding Mattermost user to Matrix", "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
-			
+
 			// Auto-create the user if needed (will be idempotent)
-			password := config.MirrorModePassword
-			if password == "" {
-				password = "mattermost-mirror-" + user.Id
-			}
-			
+			password := config.GetMirrorModePassword()
+
 			_, err := p.matrixClient.RegisterUserWithASToken(user.Username, password)
 			if err != nil {
 				p.logger.LogWarn("Failed to register Matrix user (may already exist)", "error", err, "matrix_user_id", matrixUserID)
 				// Continue anyway - user likely exists
 			}
-			
+
 			// Sync profile if enabled
 			if config.SyncUserProfiles {
 				displayName := user.GetDisplayName(model.ShowFullName)
@@ -539,7 +516,7 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 
 	// Get team name to include in room alias (prevents collisions across teams)
 	teamName := ""
-	if channel.TeamId != "" {
+	if channel.TeamId != "" && p.API != nil {
 		if team, err := p.API.GetTeam(channel.TeamId); err == nil && team != nil {
 			teamName = team.Name
 		}

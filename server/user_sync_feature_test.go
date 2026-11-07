@@ -93,7 +93,7 @@ func (l *localTestLogger) LogError(message string, keyValuePairs ...any) {
 
 func TestUserSyncFeature(t *testing.T) {
 	var uploadCalled, setAvatarCalled bool
-	
+
 	// Setup Matrix Mock Server
 	matrixServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Mock UploadMedia
@@ -122,7 +122,7 @@ func TestUserSyncFeature(t *testing.T) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		
+
 		http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
 	}))
 	defer matrixServer.Close()
@@ -130,7 +130,7 @@ func TestUserSyncFeature(t *testing.T) {
 	// Setup KVStore Mock
 	mockKV := &MockKVStore{}
 	mmUserID := "mm_user_id"
-	ghostUserID := "@ghost:matrix.org"
+	ghostUserID := "@_mattermost_" + mmUserID + ":matrix.org" // must match the ghost namespace or sync is skipped
 	ghostUserKey := kvstore.BuildGhostUserKey(mmUserID)
 	mockKV.On("Get", ghostUserKey).Return([]byte(ghostUserID), nil)
 
@@ -144,7 +144,7 @@ func TestUserSyncFeature(t *testing.T) {
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Maybe()
-	
+
 	// Return some bytes for profile image
 	api.On("GetProfileImage", mmUserID).Return([]byte("fake_image_data"), nil)
 
@@ -156,7 +156,7 @@ func TestUserSyncFeature(t *testing.T) {
 	plugin := &Plugin{}
 	plugin.SetAPI(api)
 	plugin.logger = &localTestLogger{t: t}
-	
+
 	// Config
 	config := &configuration{
 		EnableSync: true,
@@ -180,7 +180,7 @@ func TestUserSyncFeature(t *testing.T) {
 	t.Run("Avatar Syncing", func(t *testing.T) {
 		uploadCalled = false
 		setAvatarCalled = false
-		
+
 		user := &model.User{
 			Id:        mmUserID,
 			Username:  "testuser",

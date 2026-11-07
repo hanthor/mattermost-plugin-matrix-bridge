@@ -219,7 +219,7 @@ func (mc *Container) isMatrixReady() (bool, error) {
 // CreateRoom creates a test room and returns its room ID
 // Uses the Matrix client with proper rate limiting to avoid 429 errors
 func (mc *Container) CreateRoom(t *testing.T, roomName string) string {
-	roomIdentifier, err := mc.Client.CreateRoom(roomName, "", mc.ServerDomain, true, "")
+	roomIdentifier, err := mc.Client.CreateRoom(roomName, "", mc.ServerDomain, true, "", false, "")
 	require.NoError(t, err)
 
 	// The client returns either a room alias or room ID

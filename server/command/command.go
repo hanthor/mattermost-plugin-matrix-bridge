@@ -25,25 +25,25 @@ type Configuration interface {
 // MetricsSummary holds a snapshot of all metrics at a point in time.
 // This type is defined in the main server package to avoid circular dependencies.
 type MetricsSummary = struct {
-	MessagesToMatrix     uint64            `json:"messages_to_matrix"`
-	MessagesFromMatrix   uint64            `json:"messages_from_matrix"`
-	MessageSyncErrors    uint64            `json:"message_sync_errors"`
-	MessageEditsSynced   uint64            `json:"message_edits_synced"`
-	ReactionsAdded       uint64            `json:"reactions_added"`
-	ReactionsRemoved     uint64            `json:"reactions_removed"`
-	GhostUsersCreated    uint64            `json:"ghost_users_created"`
-	RoomsCreated         uint64            `json:"rooms_created"`
-	ChannelsCreated      uint64            `json:"channels_created"`
-	UsersSynced          uint64            `json:"users_synced"`
-	MatrixAPICalls       uint64            `json:"matrix_api_calls"`
-	MatrixAPIErrors      uint64            `json:"matrix_api_errors"`
-	MatrixAPIRetries     uint64            `json:"matrix_api_retries"`
-	MessageLatencyAvgMs  float64           `json:"message_latency_avg_ms"`
-	MessageLatencyMaxMs  uint64            `json:"message_latency_max_ms"`
-	APILatencyAvgMs      float64           `json:"api_latency_avg_ms"`
-	APILatencyMaxMs      uint64            `json:"api_latency_max_ms"`
-	ErrorsByType         map[string]uint64 `json:"errors_by_type"`
-	UptimeSeconds        float64           `json:"uptime_seconds"`
+	MessagesToMatrix    uint64            `json:"messages_to_matrix"`
+	MessagesFromMatrix  uint64            `json:"messages_from_matrix"`
+	MessageSyncErrors   uint64            `json:"message_sync_errors"`
+	MessageEditsSynced  uint64            `json:"message_edits_synced"`
+	ReactionsAdded      uint64            `json:"reactions_added"`
+	ReactionsRemoved    uint64            `json:"reactions_removed"`
+	GhostUsersCreated   uint64            `json:"ghost_users_created"`
+	RoomsCreated        uint64            `json:"rooms_created"`
+	ChannelsCreated     uint64            `json:"channels_created"`
+	UsersSynced         uint64            `json:"users_synced"`
+	MatrixAPICalls      uint64            `json:"matrix_api_calls"`
+	MatrixAPIErrors     uint64            `json:"matrix_api_errors"`
+	MatrixAPIRetries    uint64            `json:"matrix_api_retries"`
+	MessageLatencyAvgMs float64           `json:"message_latency_avg_ms"`
+	MessageLatencyMaxMs uint64            `json:"message_latency_max_ms"`
+	APILatencyAvgMs     float64           `json:"api_latency_avg_ms"`
+	APILatencyMaxMs     uint64            `json:"api_latency_max_ms"`
+	ErrorsByType        map[string]uint64 `json:"errors_by_type"`
+	UptimeSeconds       float64           `json:"uptime_seconds"`
 }
 
 // MetricsAccessor interface for accessing plugin metrics
@@ -60,6 +60,30 @@ type MigrationResult struct {
 	ReverseDMMappingsCreated int
 }
 
+// MetricsProvider exposes the read-only metrics snapshot used by the
+// /matrix metrics command. The main package's *Metrics satisfies it.
+type MetricsProvider interface {
+	GetMessagesToMatrix() uint64
+	GetMessagesFromMatrix() uint64
+	GetMessageSyncErrors() uint64
+	GetMessageEditsSynced() uint64
+	GetReactionsAdded() uint64
+	GetReactionsRemoved() uint64
+	GetGhostUsersCreated() uint64
+	GetRoomsCreated() uint64
+	GetChannelsCreated() uint64
+	GetUsersSynced() uint64
+	GetMatrixAPICalls() uint64
+	GetMatrixAPIErrors() uint64
+	GetMatrixAPIRetries() uint64
+	GetMessageLatencyAvg() float64
+	GetMessageLatencyMax() uint64
+	GetAPILatencyAvg() float64
+	GetAPILatencyMax() uint64
+	GetErrorsByType() map[string]uint64
+	GetUptime() time.Duration
+}
+
 // PluginAccessor defines the interface for plugin functionality needed by command handlers
 type PluginAccessor interface {
 	// Matrix client access
@@ -72,27 +96,7 @@ type PluginAccessor interface {
 	GetConfiguration() Configuration
 
 	// Metrics access
-	GetMetrics() interface {
-		GetMessagesToMatrix() uint64
-		GetMessagesFromMatrix() uint64
-		GetMessageSyncErrors() uint64
-		GetMessageEditsSynced() uint64
-		GetReactionsAdded() uint64
-		GetReactionsRemoved() uint64
-		GetGhostUsersCreated() uint64
-		GetRoomsCreated() uint64
-		GetChannelsCreated() uint64
-		GetUsersSynced() uint64
-		GetMatrixAPICalls() uint64
-		GetMatrixAPIErrors() uint64
-		GetMatrixAPIRetries() uint64
-		GetMessageLatencyAvg() float64
-		GetMessageLatencyMax() uint64
-		GetAPILatencyAvg() float64
-		GetAPILatencyMax() uint64
-		GetErrorsByType() map[string]uint64
-		GetUptime() time.Duration
-	}
+	GetMetrics() MetricsProvider
 
 	// Ghost user management
 	CreateOrGetGhostUser(mattermostUserID string) (string, error)
@@ -334,13 +338,10 @@ const (
 	backfillInvalidMode  = "❌ Invalid backfill mode. Use: users, teams, channels, or all"
 )
 
-// NewCommandHandler creates and registers all slash commands for the Matrix Bridge plugin.
-func NewCommandHandler(plugin PluginAccessor) Command {
-	// Cache frequently used services for reduced verbosity
-	client := plugin.GetPluginAPIClient()
-	kvstore := plugin.GetKVStore()
-	pluginAPI := plugin.GetPluginAPI()
-
+// buildMatrixAutocompleteData describes the /matrix command tree used for
+// slash command registration. Tests reuse it so the expected registration
+// never drifts from what the plugin actually registers.
+func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData := model.NewAutocompleteData(matrixCommandTrigger, "[subcommand]", "Matrix bridge commands")
 	matrixData.AddCommand(model.NewAutocompleteData("test", "", testCommandDesc))
 
@@ -378,6 +379,18 @@ func NewCommandHandler(plugin PluginAccessor) Command {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+
+	return matrixData
+}
+
+// NewCommandHandler creates and registers all slash commands for the Matrix Bridge plugin.
+func NewCommandHandler(plugin PluginAccessor) Command {
+	// Cache frequently used services for reduced verbosity
+	client := plugin.GetPluginAPIClient()
+	kvstore := plugin.GetKVStore()
+	pluginAPI := plugin.GetPluginAPI()
+
+	matrixData := buildMatrixAutocompleteData()
 
 	err := client.SlashCommand.Register(&model.Command{
 		Trigger:          matrixCommandTrigger,
@@ -567,7 +580,7 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 			c.client.Log.Info("Created and mapped channel for Matrix room", "channel_id", createdChannel.Id, "channel_name", createdChannel.Name, "room_identifier", roomIdentifier)
 
 			responseText.WriteString(fmt.Sprintf("✅ **Created Mattermost channel** ~%s\n\n", createdChannel.Name))
-			responseText.WriteString(fmt.Sprintf("Messages between the Matrix room and Mattermost channel will now sync automatically."))
+			responseText.WriteString("Messages between the Matrix room and Mattermost channel will now sync automatically.")
 
 			// Add user to the channel
 			if _, appErr := c.client.Channel.AddUser(createdChannel.Id, args.UserId, args.UserId); appErr != nil {
@@ -866,11 +879,11 @@ func (c *Handler) executeCreateRoomCommand(args *model.CommandArgs, roomName str
 	// Create the Matrix room
 	// Extract server domain from Matrix server URL
 	serverDomain := c.extractServerDomain()
-	
+
 	// In Mirror Mode, use clean room names without _mattermost_ prefix
 	config := c.plugin.GetConfiguration()
 	skipPrefix := config.GetEnableMirrorMode()
-	
+
 	roomID, err := matrixClient.CreateRoom(roomName, topic, serverDomain, publish, args.ChannelId, skipPrefix, teamName)
 	if err != nil {
 		c.client.Log.Error("Failed to create Matrix room", "error", err, "room_name", roomName)
@@ -1319,35 +1332,35 @@ func (c *Handler) executeTestCommand(_ *model.CommandArgs) *model.CommandRespons
 
 func (c *Handler) executeMetricsCommand(_ *model.CommandArgs) *model.CommandResponse {
 	metrics := c.plugin.GetMetrics()
-	
+
 	var responseText strings.Builder
 	responseText.WriteString("📊 **Matrix Bridge Metrics**\n\n")
-	
+
 	// Message metrics
 	responseText.WriteString("**Messages**\n")
 	responseText.WriteString(fmt.Sprintf("• To Matrix: %d\n", metrics.GetMessagesToMatrix()))
 	responseText.WriteString(fmt.Sprintf("• From Matrix: %d\n", metrics.GetMessagesFromMatrix()))
 	responseText.WriteString(fmt.Sprintf("• Sync Errors: %d\n", metrics.GetMessageSyncErrors()))
 	responseText.WriteString(fmt.Sprintf("• Edits Synced: %d\n\n", metrics.GetMessageEditsSynced()))
-	
+
 	// Reaction metrics
 	responseText.WriteString("**Reactions**\n")
 	responseText.WriteString(fmt.Sprintf("• Added: %d\n", metrics.GetReactionsAdded()))
 	responseText.WriteString(fmt.Sprintf("• Removed: %d\n\n", metrics.GetReactionsRemoved()))
-	
+
 	// Entity metrics
 	responseText.WriteString("**Entities**\n")
 	responseText.WriteString(fmt.Sprintf("• Ghost Users Created: %d\n", metrics.GetGhostUsersCreated()))
 	responseText.WriteString(fmt.Sprintf("• Rooms Created: %d\n", metrics.GetRoomsCreated()))
 	responseText.WriteString(fmt.Sprintf("• Channels Created: %d\n", metrics.GetChannelsCreated()))
 	responseText.WriteString(fmt.Sprintf("• Users Synced: %d\n\n", metrics.GetUsersSynced()))
-	
+
 	// API metrics
 	responseText.WriteString("**Matrix API**\n")
 	responseText.WriteString(fmt.Sprintf("• API Calls: %d\n", metrics.GetMatrixAPICalls()))
 	responseText.WriteString(fmt.Sprintf("• API Errors: %d\n", metrics.GetMatrixAPIErrors()))
 	responseText.WriteString(fmt.Sprintf("• API Retries: %d\n\n", metrics.GetMatrixAPIRetries()))
-	
+
 	// Latency metrics
 	avgLatency := metrics.GetMessageLatencyAvg()
 	if avgLatency > 0 {
@@ -1361,7 +1374,7 @@ func (c *Handler) executeMetricsCommand(_ *model.CommandArgs) *model.CommandResp
 		}
 		responseText.WriteString("\n")
 	}
-	
+
 	// Error breakdown
 	errorsByType := metrics.GetErrorsByType()
 	if len(errorsByType) > 0 {
@@ -1371,10 +1384,10 @@ func (c *Handler) executeMetricsCommand(_ *model.CommandArgs) *model.CommandResp
 		}
 		responseText.WriteString("\n")
 	}
-	
+
 	// Uptime
 	responseText.WriteString(fmt.Sprintf("**Uptime:** %.1f seconds\n", metrics.GetUptime().Seconds()))
-	
+
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         responseText.String(),

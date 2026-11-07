@@ -27,10 +27,7 @@ func (p *Plugin) ReactionHasBeenAdded(_ *plugin.Context, reaction *model.Reactio
 		return
 	}
 
-	p.reactionBatcher.Add(reaction.PostId, reactionBatchItem{
-		reaction:  reaction,
-		channelID: post.ChannelId,
-	})
+	p.queueReaction(reaction, post.ChannelId)
 }
 
 // ReactionHasBeenRemoved is called when a reaction is removed from a post
@@ -47,9 +44,22 @@ func (p *Plugin) ReactionHasBeenRemoved(_ *plugin.Context, reaction *model.React
 		return
 	}
 
+	p.queueReaction(reaction, post.ChannelId)
+}
+
+// queueReaction batches a reaction for asynchronous sync. When the batcher is
+// not initialised (for example before activation or in unit tests) the
+// reaction is synced immediately so no event is dropped.
+func (p *Plugin) queueReaction(reaction *model.Reaction, channelID string) {
+	if p.reactionBatcher == nil {
+		if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(reaction, channelID); err != nil {
+			p.logger.LogError("Failed to sync reaction to Matrix", "error", err, "post_id", reaction.PostId, "user_id", reaction.UserId)
+		}
+		return
+	}
 	p.reactionBatcher.Add(reaction.PostId, reactionBatchItem{
 		reaction:  reaction,
-		channelID: post.ChannelId,
+		channelID: channelID,
 	})
 }
 
@@ -89,6 +99,13 @@ func (p *Plugin) MessageHasBeenUpdated(_ *plugin.Context, newPost, oldPost *mode
 		return
 	}
 
+	if p.eventQueue == nil {
+		if err := p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId); err != nil {
+			p.logger.LogError("Failed to sync post edit to Matrix", "error", err, "post_id", newPost.Id)
+		}
+		return
+	}
+
 	if err := p.eventQueue.Enqueue(Task{
 		ID:   "post-edit-" + newPost.Id,
 		Type: "mattermost-post-edit",
@@ -100,7 +117,6 @@ func (p *Plugin) MessageHasBeenUpdated(_ *plugin.Context, newPost, oldPost *mode
 		_ = p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId)
 	}
 }
-
 
 // OnSharedChannelsSyncMsg is called when messages need to be synced from Mattermost to Matrix
 func (p *Plugin) OnSharedChannelsSyncMsg(msg *model.SyncMsg, _ *model.RemoteCluster) (model.SyncResponse, error) {
@@ -153,10 +169,7 @@ func (p *Plugin) OnSharedChannelsSyncMsg(msg *model.SyncMsg, _ *model.RemoteClus
 			continue
 		}
 
-		p.reactionBatcher.Add(reaction.PostId, reactionBatchItem{
-			reaction:  reaction,
-			channelID: msg.ChannelId,
-		})
+		p.queueReaction(reaction, msg.ChannelId)
 	}
 
 	return model.SyncResponse{}, nil

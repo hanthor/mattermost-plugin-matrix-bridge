@@ -70,36 +70,33 @@ func (b *MattermostToMatrixBridge) getGhostUser(userID string) (string, bool) {
 // If Mirror Mode is enabled, creates and returns real Matrix user, otherwise returns ghost user ID
 func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error) {
 	config := b.configGetter.getConfiguration()
-	
+
 	if config.EnableMirrorMode {
 		// Mirror Mode: Create or get real Matrix user based on username
 		user, appErr := b.API.GetUser(userID)
 		if appErr != nil {
 			return "", errors.Wrap(appErr, "failed to get Mattermost user for mirror mode")
 		}
-		
+
 		serverDomain := config.MatrixServerDomain
 		if serverDomain == "" {
 			serverDomain = "synapse" // Default to "synapse" if not configured
 		}
-		
+
 		matrixUserID := fmt.Sprintf("@%s:%s", user.Username, serverDomain)
-		
+
 		// Check if user already exists in our tracking
 		existingUserID, err := b.kvstore.Get(fmt.Sprintf("mirror_user_%s", userID))
 		if err == nil && len(existingUserID) > 0 {
 			b.logger.LogDebug("Using existing mirrored Matrix user", "mattermost_user_id", userID, "matrix_user_id", matrixUserID)
 			return matrixUserID, nil
 		}
-		
+
 		// Create the Matrix user
-		password := config.MirrorModePassword
-		if password == "" {
-			password = "mattermost-mirror-" + userID // Generate a default password
-		}
-		
+		password := config.GetMirrorModePassword()
+
 		b.logger.LogInfo("Creating Matrix user in mirror mode", "mattermost_user_id", userID, "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
-		
+
 		regResp, err := b.matrixClient.RegisterUserWithASToken(user.Username, password)
 		if err != nil {
 			b.logger.LogWarn("Failed to register Matrix user, may already exist", "error", err, "matrix_user_id", matrixUserID)
@@ -107,7 +104,7 @@ func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error
 		} else {
 			b.logger.LogInfo("Successfully registered Matrix user", "matrix_user_id", regResp.UserID)
 		}
-		
+
 		// Sync user profile if enabled
 		if config.SyncUserProfiles {
 			// Set display name
@@ -119,19 +116,19 @@ func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error
 					b.logger.LogDebug("Set Matrix user display name", "matrix_user_id", matrixUserID, "display_name", displayName)
 				}
 			}
-			
+
 			// TODO: Sync avatar - would need to upload Mattermost profile picture to Matrix
 			// This requires fetching the profile picture from Mattermost and uploading to Matrix media store
 		}
-		
+
 		// Track that we've created this user
 		if err := b.kvstore.Set(fmt.Sprintf("mirror_user_%s", userID), []byte(matrixUserID)); err != nil {
 			b.logger.LogWarn("Failed to track mirrored user", "error", err, "user_id", userID)
 		}
-		
+
 		return matrixUserID, nil
 	}
-	
+
 	// Ghost mode: create or get ghost user
 	return b.CreateOrGetGhostUser(userID)
 }
@@ -180,7 +177,7 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 		b.logger.LogWarn("Failed to cache ghost user ID", "error", err, "ghost_user_id", ghostUser.UserID)
 		// Continue anyway, the ghost user was created successfully
 	}
-	
+
 	// Also cache in memory
 	if b.ghostUserCache != nil {
 		b.ghostUserCache.Set(ghostUserKey, ghostUser.UserID)
@@ -191,10 +188,10 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 	} else {
 		b.logger.LogDebug("Created new ghost user", "mattermost_user_id", userID, "ghost_user_id", ghostUser.UserID)
 	}
-	
+
 	// Record ghost user creation
 	b.metrics.RecordGhostUserCreated()
-	
+
 	return ghostUser.UserID, nil
 }
 
@@ -613,7 +610,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	// Send message using consolidated method
 	messageRequest := matrix.MessageRequest{
 		RoomID:        matrixRoomID,
-		GhostUserID:   matrixUserID,  // This can be either ghost or real user
+		GhostUserID:   matrixUserID, // This can be either ghost or real user
 		Message:       finalPlainText,
 		HTMLMessage:   finalHTMLContent,
 		ThreadEventID: threadEventID,
@@ -655,10 +652,10 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	}
 
 	b.logger.LogDebug("Successfully created post in Matrix", "post_id", post.Id, "matrix_user_id", matrixUserID, "event_id", sendResponse.EventID)
-	
+
 	// Record successful message sync
 	b.metrics.RecordMessageToMatrix()
-	
+
 	return nil
 }
 

@@ -39,17 +39,17 @@ func DisabledRetryConfig() RetryConfig {
 // isRetriableStatusCode determines if an HTTP status code warrants a retry
 func isRetriableStatusCode(statusCode int) bool {
 	switch statusCode {
-	case http.StatusTooManyRequests:      // 429 - Rate limit
+	case http.StatusTooManyRequests: // 429 - Rate limit
 		return true
-	case http.StatusRequestTimeout:       // 408
+	case http.StatusRequestTimeout: // 408
 		return true
-	case http.StatusServiceUnavailable:   // 503 - Service temporarily unavailable
+	case http.StatusServiceUnavailable: // 503 - Service temporarily unavailable
 		return true
-	case http.StatusGatewayTimeout:       // 504
+	case http.StatusGatewayTimeout: // 504
 		return true
-	case http.StatusBadGateway:           // 502 - May be transient
+	case http.StatusBadGateway: // 502 - May be transient
 		return true
-	case http.StatusInternalServerError:  // 500 - May be transient
+	case http.StatusInternalServerError: // 500 - May be transient
 		return true
 	default:
 		return false
@@ -153,7 +153,7 @@ func (c *Client) withRetry(requestFunc func() (*http.Response, error), operation
 				}
 				return nil, errors.Errorf("request failed with status %d after %d retries", lastStatusCode, config.MaxRetries)
 			}
-			
+
 			// Not retriable but not max retries - return as-is
 			if lastErr != nil {
 				return resp, lastErr

@@ -25,7 +25,7 @@ type EventQueue struct {
 	wg          sync.WaitGroup
 	logger      Logger
 	metrics     *Metrics
-	
+
 	// Optional: Callback for failed tasks after all retries
 	OnFinalFailure func(task Task, err error)
 }
@@ -38,7 +38,7 @@ func NewEventQueue(workerCount int, bufferSize int, logger Logger, metrics *Metr
 	if bufferSize < 0 {
 		bufferSize = 100
 	}
-	
+
 	return &EventQueue{
 		taskChan:    make(chan Task, bufferSize),
 		workerCount: workerCount,
@@ -70,7 +70,7 @@ func (q *EventQueue) Enqueue(task Task) error {
 	if task.CreatedAt.IsZero() {
 		task.CreatedAt = time.Now()
 	}
-	
+
 	select {
 	case q.taskChan <- task:
 		return nil
@@ -82,7 +82,7 @@ func (q *EventQueue) Enqueue(task Task) error {
 
 func (q *EventQueue) worker(id int) {
 	defer q.wg.Done()
-	
+
 	for {
 		select {
 		case <-q.stopChan:
@@ -91,7 +91,7 @@ func (q *EventQueue) worker(id int) {
 			if !ok {
 				return
 			}
-			
+
 			q.processTask(task)
 		}
 	}
@@ -99,30 +99,30 @@ func (q *EventQueue) worker(id int) {
 
 func (q *EventQueue) processTask(task Task) {
 	start := time.Now()
-	
+
 	// Create a context with timeout for the task
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	
+
 	err := task.Execute(ctx)
-	
+
 	duration := time.Since(start)
 	if q.metrics != nil {
 		q.metrics.RecordAPILatency(duration)
 	}
-	
+
 	if err != nil {
-		q.logger.LogError("Task failed", 
-			"task_id", task.ID, 
-			"type", task.Type, 
+		q.logger.LogError("Task failed",
+			"task_id", task.ID,
+			"type", task.Type,
 			"error", err,
 			"duration", duration,
 			"retry_count", task.Retries)
-			
+
 		if q.metrics != nil {
 			q.metrics.RecordMatrixAPIError()
 		}
-		
+
 		// If the task itself doesn't handle retries, we could implement a simple one here
 		// but usually our bridge logic already has internal retry logic for HTTP calls.
 		// However, for total queueing failures, we might want to log it specifically.
@@ -130,9 +130,9 @@ func (q *EventQueue) processTask(task Task) {
 			q.OnFinalFailure(task, err)
 		}
 	} else {
-		q.logger.LogDebug("Task completed successfully", 
-			"task_id", task.ID, 
-			"type", task.Type, 
+		q.logger.LogDebug("Task completed successfully",
+			"task_id", task.ID,
+			"type", task.Type,
 			"duration", duration)
 	}
 }

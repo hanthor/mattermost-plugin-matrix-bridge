@@ -82,7 +82,7 @@ func TestRoomMirroring(t *testing.T) {
 			// Create Matrix Client
 			testLogger := matrix.NewTestLogger(t)
 			matrixClient := matrix.NewClientWithLoggerAndRateLimit(matrixServer.URL, "dummy_token", "dummy_bot", testLogger, matrix.TestRateLimitConfig())
-			
+
 			// Setup Plugin
 			plugin := &Plugin{
 				kvstore:      mockKV,

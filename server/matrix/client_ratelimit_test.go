@@ -70,7 +70,7 @@ func TestClient_CreateRoom_RateLimiting(t *testing.T) {
 
 	// First room creation should succeed quickly
 	start := time.Now()
-	_, err := client.CreateRoom("Test Room 1", "", "test.example.invalid", true, "")
+	_, err := client.CreateRoom("Test Room 1", "", "test.example.invalid", true, "", false, "")
 	elapsed := time.Since(start)
 
 	// We expect this to fail with a network error since we're not actually connecting
@@ -79,7 +79,7 @@ func TestClient_CreateRoom_RateLimiting(t *testing.T) {
 
 	// Second room creation should be rate limited
 	start = time.Now()
-	_, err = client.CreateRoom("Test Room 2", "", "test.example.invalid", true, "")
+	_, err = client.CreateRoom("Test Room 2", "", "test.example.invalid", true, "", false, "")
 	elapsed = time.Since(start)
 
 	assert.Error(t, err, "Expected network error")
@@ -294,7 +294,7 @@ func TestClient_MixedOperations_IndependentRateLimiting(t *testing.T) {
 
 	// Create room immediately after (should not be affected by message rate limit)
 	start = time.Now()
-	_, err = client.CreateRoom("Test Room", "", "test.example.invalid", true, "")
+	_, err = client.CreateRoom("Test Room", "", "test.example.invalid", true, "", false, "")
 	elapsed = time.Since(start)
 	assert.Error(t, err)
 	assert.Less(t, elapsed, 30*time.Millisecond, "Room creation should not be affected by message rate limit")
@@ -312,7 +312,7 @@ func TestClient_MixedOperations_IndependentRateLimiting(t *testing.T) {
 
 	// Second room creation should be rate limited (but differently than messages)
 	start = time.Now()
-	_, err = client.CreateRoom("Test Room 2", "", "test.example.invalid", true, "")
+	_, err = client.CreateRoom("Test Room 2", "", "test.example.invalid", true, "", false, "")
 	elapsed = time.Since(start)
 	assert.Error(t, err)
 	assert.GreaterOrEqual(t, elapsed, 80*time.Millisecond, "Second room creation should be rate limited with 200ms interval")

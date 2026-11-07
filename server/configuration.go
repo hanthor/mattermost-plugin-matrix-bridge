@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/mattermost/mattermost/server/public/model"
+
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
 	"github.com/pkg/errors"
 )
@@ -29,10 +31,10 @@ type configuration struct {
 	EnableSync           bool   `json:"enable_sync"`
 	MatrixUsernamePrefix string `json:"matrix_username_prefix"`
 	RateLimitingMode     string `json:"rate_limiting_mode"`
-	EnableMirrorMode     bool   `json:"enable_mirror_mode"`     // Hijack Matrix server to mirror Mattermost
-	MatrixServerDomain   string `json:"matrix_server_domain"`   // e.g. "synapse" for @user:synapse
-	MirrorModePassword   string `json:"mirror_mode_password"`   // Default password for auto-created users
-	SyncUserProfiles     bool   `json:"sync_user_profiles"`     // Sync display names and avatars
+	EnableMirrorMode     bool   `json:"enable_mirror_mode"`   // Hijack Matrix server to mirror Mattermost
+	MatrixServerDomain   string `json:"matrix_server_domain"` // e.g. "synapse" for @user:synapse
+	MirrorModePassword   string `json:"mirror_mode_password"` // Default password for auto-created users
+	SyncUserProfiles     bool   `json:"sync_user_profiles"`   // Sync display names and avatars
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -98,11 +100,11 @@ func (p *Plugin) OnConfigurationChange() error {
 		return errors.Wrap(err, "failed to load plugin configuration")
 	}
 
-	// Log configuration to debug Mirror Mode setting
-	p.API.LogInfo("Configuration loaded", 
+	// Log non-secret mirror mode settings; the mirror mode password must never be logged.
+	p.API.LogInfo("Configuration loaded",
 		"enable_mirror_mode", configuration.EnableMirrorMode,
 		"sync_user_profiles", configuration.SyncUserProfiles,
-		"mirror_mode_password", configuration.MirrorModePassword,
+		"mirror_mode_password_set", configuration.MirrorModePassword != "",
 		"matrix_server_domain", configuration.MatrixServerDomain,
 	)
 
@@ -163,4 +165,15 @@ func (c *configuration) GetMatrixUsernamePrefixForServer(_ string) string {
 // GetEnableMirrorMode returns whether Mirror Mode is enabled
 func (c *configuration) GetEnableMirrorMode() bool {
 	return c.EnableMirrorMode
+}
+
+// GetMirrorModePassword returns the password used when registering a mirrored
+// Matrix account. When no password is configured a random one is generated so
+// that mirrored accounts never receive a guessable password derived from
+// public identifiers such as the Mattermost user ID.
+func (c *configuration) GetMirrorModePassword() string {
+	if c.MirrorModePassword != "" {
+		return c.MirrorModePassword
+	}
+	return model.NewRandomString(32)
 }

@@ -30,6 +30,10 @@ func (m *mockConfiguration) GetMatrixUsernamePrefixForServer(_ string) string {
 	return "matrix" // Use default prefix for tests
 }
 
+func (m *mockConfiguration) GetEnableMirrorMode() bool {
+	return false
+}
+
 // mockPlugin implements the PluginAccessor interface for testing
 type mockPlugin struct {
 	client       *pluginapi.Client
@@ -45,6 +49,22 @@ func (m *mockPlugin) GetMatrixClient() *matrix.Client {
 
 func (m *mockPlugin) GetKVStore() kvstore.KVStore {
 	return m.kvstore
+}
+
+func (m *mockPlugin) SyncUser(_ string) error {
+	return nil
+}
+
+func (m *mockPlugin) SyncTeam(_ string) error {
+	return nil
+}
+
+func (m *mockPlugin) SyncChannel(_ string) error {
+	return nil
+}
+
+func (m *mockPlugin) GetMetrics() MetricsProvider {
+	return nil
 }
 
 func (m *mockPlugin) GetConfiguration() Configuration {
@@ -341,27 +361,7 @@ func (t *testCommandHandler) Handle(args *model.CommandArgs) (*model.CommandResp
 }
 
 func setupCommandRegistration(env *env) {
-	// Matrix command registration
-	matrixData := model.NewAutocompleteData(matrixCommandTrigger, "[subcommand]", "Matrix bridge commands")
-	matrixData.AddCommand(model.NewAutocompleteData("test", "", testCommandDesc))
-
-	// Create command with argument completion
-	createCmd := model.NewAutocompleteData("create", createCommandHint, createCommandDesc)
-	createCmd.AddTextArgument("Optional room name (defaults to channel name)", "[room_name]", "")
-	createCmd.AddTextArgument("Optional publish flag", "[publish=true|false]", "")
-	matrixData.AddCommand(createCmd)
-
-	// Map command with argument completion
-	mapCmd := model.NewAutocompleteData("map", mapCommandHint, mapCommandDesc)
-	mapCmd.AddTextArgument("Matrix room alias or room ID", "[room_alias|room_id]", "")
-	matrixData.AddCommand(mapCmd)
-
-	// Unmap command
-	matrixData.AddCommand(model.NewAutocompleteData("unmap", unmapCommandHint, unmapCommandDesc))
-
-	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
-	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
-	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	matrixData := buildMatrixAutocompleteData()
 
 	env.api.On("RegisterCommand", &model.Command{
 		Trigger:          matrixCommandTrigger,

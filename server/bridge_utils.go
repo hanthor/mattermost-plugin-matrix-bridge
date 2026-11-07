@@ -127,7 +127,7 @@ func (s *BridgeUtils) setChannelRoomMapping(channelID, matrixRoomIdentifier stri
 	if err != nil {
 		return errors.Wrap(err, "failed to store channel room mapping")
 	}
-	
+
 	// Update cache
 	if s.roomMappingCache != nil {
 		s.roomMappingCache.Set(forwardKey, roomID)
