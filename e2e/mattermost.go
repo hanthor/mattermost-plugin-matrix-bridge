@@ -3,7 +3,9 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,7 +204,10 @@ func dumpContainerLogs(t *testing.T, c testcontainers.Container, name string) {
 		return
 	}
 	defer func() { _ = reader.Close() }()
-	buf := make([]byte, 64*1024)
-	n, _ := reader.Read(buf)
-	t.Logf("=== %s logs (tail) ===\n%s", name, string(buf[:n]))
+	all, _ := io.ReadAll(reader)
+	lines := strings.Split(string(all), "\n")
+	if len(lines) > 400 {
+		lines = lines[len(lines)-400:]
+	}
+	t.Logf("=== %s logs (last %d lines) ===\n%s", name, len(lines), strings.Join(lines, "\n"))
 }

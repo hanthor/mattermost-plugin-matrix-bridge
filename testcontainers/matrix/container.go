@@ -44,7 +44,7 @@ func StartMatrixContainer(t *testing.T, config MatrixTestConfig) *Container {
 
 	// Create container with Synapse using bridge networking with dynamic port assignment
 	req := testcontainers.ContainerRequest{
-		Image: "ghcr.io/element-hq/synapse:v1.164.2",
+		Image: "matrixdotorg/synapse:v1.119.0", // newer images no longer log "SynapseSite starting"; upgrading needs a new readiness check
 		Env: map[string]string{
 			"SYNAPSE_SERVER_NAME":  config.ServerName,
 			"SYNAPSE_REPORT_STATS": "no",

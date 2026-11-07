@@ -820,6 +820,20 @@ func (c *Client) joinGhostUserWithFallback(roomID, ghostUserID string) error {
 	return nil
 }
 
+// BridgeBotLocalpart is the sender_localpart in the appservice registration.
+const BridgeBotLocalpart = "_mattermost_bridge"
+
+// EnsureBotRegistered registers the appservice bot user if the homeserver has
+// not created it yet. Some homeservers only create the sender on first use,
+// others require an explicit registration before the bot can join rooms.
+func (c *Client) EnsureBotRegistered() error {
+	if c.serverURL == "" || c.asToken == "" {
+		return errors.New("matrix client not configured")
+	}
+	_, err := c.RegisterUserWithASToken(BridgeBotLocalpart, "")
+	return err
+}
+
 // LeaveRoomAsUser makes the given (ghost) user leave a room.
 func (c *Client) LeaveRoomAsUser(roomID, userID string) error {
 	if c.serverURL == "" || c.asToken == "" {
@@ -973,30 +987,22 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 		}
 	}
 
-	jsonData, err := json.Marshal(roomData)
+	resp, body, err := c.postCreateRoom(roomData)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal room creation data")
+		return "", err
 	}
 
-	url := c.serverURL + "/_matrix/client/v3/createRoom"
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create room creation request")
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to send room creation request")
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to read room creation response")
+	// A homeserver whose registration does not reserve the alias namespace
+	// rejects the alias with M_EXCLUSIVE. The room itself is more important
+	// than its alias, so retry without one and keep going.
+	if resp.StatusCode == http.StatusBadRequest && roomData["room_alias_name"] != nil && isAliasNotReservedError(body) {
+		c.logger.LogWarn("Homeserver refused the room alias because the appservice registration does not reserve it; creating the room without an alias", "room_alias", roomAlias)
+		delete(roomData, "room_alias_name")
+		roomAlias = ""
+		resp, body, err = c.postCreateRoom(roomData)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -1071,6 +1077,41 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 		return roomAlias, nil
 	}
 	return response.RoomID, nil
+}
+
+// postCreateRoom sends a createRoom request and returns the response with its
+// body already read.
+func (c *Client) postCreateRoom(roomData map[string]any) (*http.Response, []byte, error) {
+	jsonData, err := json.Marshal(roomData)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to marshal room creation data")
+	}
+
+	req, err := http.NewRequest("POST", c.serverURL+"/_matrix/client/v3/createRoom", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create room creation request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to send room creation request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to read room creation response")
+	}
+	return resp, body, nil
+}
+
+// isAliasNotReservedError reports whether a createRoom failure is Synapse
+// refusing an alias outside the appservice's reserved namespaces.
+func isAliasNotReservedError(body []byte) bool {
+	mErr := parseMatrixError(http.StatusBadRequest, body)
+	return mErr.ErrCode == "M_EXCLUSIVE" || strings.Contains(strings.ToLower(mErr.ErrMsg), "not reserved")
 }
 
 // CreateDirectRoom creates a Matrix DM room and invites the specified ghost users

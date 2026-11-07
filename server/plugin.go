@@ -131,6 +131,13 @@ func (p *Plugin) OnActivate() error {
 
 	p.initMatrixClient()
 
+	// Make sure the bridge bot exists on the homeserver before it joins rooms.
+	if cfg := p.getConfiguration(); cfg.EnableSync && cfg.MatrixServerURL != "" && cfg.MatrixASToken != "" {
+		if err := p.matrixClient.EnsureBotRegistered(); err != nil {
+			p.logger.LogWarn("Could not register the bridge bot on the homeserver", "error", err)
+		}
+	}
+
 	// Run KV store migrations before initializing bridges
 	if err := p.runKVStoreMigrations(); err != nil {
 		return errors.Wrap(err, "failed to run KV store migrations")

@@ -237,8 +237,31 @@ func (h *Harness) MapChannelToRoom(channelID, roomID string) *model.CommandRespo
 	resp, _, err := h.Admin.ExecuteCommand(context.Background(), channelID, "/matrix map "+roomID)
 	require.NoError(h.t, err, "/matrix map")
 	require.NotNil(h.t, resp)
+	h.t.Logf("/matrix map %s -> %s", roomID, resp.Text)
 	require.NotContains(h.t, resp.Text, "❌", "/matrix map failed: %s", resp.Text)
+	require.Contains(h.t, resp.Text, "Mapping Saved", "/matrix map did not confirm the mapping: %s", resp.Text)
 	return resp
+}
+
+// BotClient returns a client that acts as the appservice bot using the
+// as_token, for inspecting what the bridge did on the Matrix side.
+func (h *Harness) BotClient() *client.CSAPI {
+	h.t.Helper()
+	cs := h.Deployment.UnauthenticatedClient(h.t, HSName)
+	cs.UserID = h.BridgeBotUserID()
+	cs.AccessToken = h.ASToken
+	cs.SyncUntilTimeout = bridgeTimeout
+	return cs
+}
+
+// JoinedMembers lists the members of a room as seen by the bot, for
+// diagnostics.
+func (h *Harness) JoinedMembers(roomID string) string {
+	h.t.Helper()
+	res := h.BotClient().Do(h.t, "GET", []string{"_matrix", "client", "v3", "rooms", roomID, "joined_members"})
+	defer func() { _ = res.Body.Close() }()
+	body, _ := io.ReadAll(res.Body)
+	return fmt.Sprintf("HTTP %d %s", res.StatusCode, string(body))
 }
 
 // CreateMappedRoom creates a public Matrix room as the given user, maps the
@@ -250,7 +273,18 @@ func (h *Harness) CreateMappedRoom(owner *client.CSAPI, channelID, roomName stri
 		"name":   roomName,
 	})
 	h.MapChannelToRoom(channelID, roomID)
-	owner.MustSyncUntil(h.t, client.SyncReq{}, client.SyncJoinedTo(h.BridgeBotUserID(), roomID))
+	joined := TryFor(bridgeTimeout, func() bool {
+		res := owner.Do(h.t, "GET", []string{"_matrix", "client", "v3", "rooms", roomID, "state", "m.room.member", h.BridgeBotUserID()})
+		defer func() { _ = res.Body.Close() }()
+		if res.StatusCode != 200 {
+			return false
+		}
+		return strings.Contains(string(client.ParseJSON(h.t, res)), `"join"`)
+	})
+	if !joined {
+		h.t.Fatalf("bridge bot %s did not join room %s after /matrix map; members as seen by the bot: %s",
+			h.BridgeBotUserID(), roomID, h.JoinedMembers(roomID))
+	}
 	return roomID
 }
 
