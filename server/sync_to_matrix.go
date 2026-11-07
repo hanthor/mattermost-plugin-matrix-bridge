@@ -219,6 +219,12 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 		b.ghostUserCache.Set(ghostUserKey, ghostUser.UserID)
 	}
 
+	// The ghost carries this profile now; remember it so the next activity
+	// does not resync an unchanged profile.
+	if err := b.kvstore.Set(profileFingerprintKeyPrefix+userID, []byte(profileFingerprint(user))); err != nil {
+		b.logger.LogDebug("Failed to store profile fingerprint for new ghost", "error", err, "user_id", userID)
+	}
+
 	if displayName != "" {
 		b.logger.LogDebug("Created new ghost user with display name", "mattermost_user_id", userID, "ghost_user_id", ghostUser.UserID, "display_name", displayName)
 	} else {

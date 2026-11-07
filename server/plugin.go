@@ -402,7 +402,9 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 			p.logger.LogError("Failed to invite remote user to Matrix room", "error", err, "user_id", user.Id, "username", user.Username, "channel_id", channelMember.ChannelId)
 		}
 	} else {
-		// This is a local Mattermost user
+		// This is a local Mattermost user. Ghosts are created when the account
+		// is, so bring the name and avatar up to date before people see it.
+		p.mattermostToMatrixBridge.syncProfileIfChanged(user)
 		var matrixUserID string
 
 		if config.EnableMirrorMode {
