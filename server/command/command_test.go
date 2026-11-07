@@ -97,6 +97,8 @@ func (m *mockPlugin) GetPluginAPIClient() *pluginapi.Client {
 	return m.client
 }
 
+func (m *mockPlugin) InvalidateChannelMapping(_ string) {}
+
 func (m *mockPlugin) GetRemoteID() string {
 	return "test-remote-id"
 }

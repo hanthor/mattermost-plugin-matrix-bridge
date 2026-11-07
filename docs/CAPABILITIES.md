@@ -82,7 +82,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Archive ↔ tombstone/leave | Mattermost → Matrix | ❌ |  |
 | Tombstone ↔ archive | Matrix → Mattermost | ❌ |  |
 | Direct and group messages | Mattermost → Matrix | ✅ |  |
-| Direct messages | Matrix → Mattermost | 🟡 | Works when a ghost is invited; message-only DMs are not bridged. |
+| Direct messages | Matrix → Mattermost | ❌ | Mattermost refuses direct channels with remote users ("Cannot create a direct channel with a remote user"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users. |
 | Team ↔ space | Mattermost → Matrix | 🟡 | Spaces are created and rooms added; team membership is not mirrored. |
 | End-to-end encrypted rooms | Matrix → Mattermost | ❌ | Needs MSC3202 appservice encryption; not planned. |
 
@@ -98,6 +98,6 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 ## Totals
 
 - ✅ supported: 25
-- 🟡 partial: 3
-- ❌ gap: 26
+- 🟡 partial: 2
+- ❌ gap: 27
 - — n/a: 0

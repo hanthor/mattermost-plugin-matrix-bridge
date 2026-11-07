@@ -116,7 +116,7 @@ var All = []Capability{
 	{ID: "rooms.archive", Area: "Rooms", Name: "Archive ↔ tombstone/leave", Direction: MattermostToMatrix, Status: Unsupported, Notes: ""},
 	{ID: "rooms.archive.in", Area: "Rooms", Name: "Tombstone ↔ archive", Direction: MatrixToMattermost, Status: Unsupported, Notes: ""},
 	{ID: "rooms.dm", Area: "Rooms", Name: "Direct and group messages", Direction: MattermostToMatrix, Status: Supported, Notes: ""},
-	{ID: "rooms.dm.in", Area: "Rooms", Name: "Direct messages", Direction: MatrixToMattermost, Status: Partial, Notes: "Works when a ghost is invited; message-only DMs are not bridged."},
+	{ID: "rooms.dm.in", Area: "Rooms", Name: "Direct messages", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Mattermost refuses direct channels with remote users (\"Cannot create a direct channel with a remote user\"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users."},
 	{ID: "spaces.team", Area: "Rooms", Name: "Team ↔ space", Direction: MattermostToMatrix, Status: Partial, Notes: "Spaces are created and rooms added; team membership is not mirrored."},
 	{ID: "rooms.encryption.in", Area: "Rooms", Name: "End-to-end encrypted rooms", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Needs MSC3202 appservice encryption; not planned."},
 

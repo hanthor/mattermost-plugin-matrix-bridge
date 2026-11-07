@@ -276,6 +276,14 @@ func (p *Plugin) GetKVStore() kvstore.KVStore {
 	return p.kvstore
 }
 
+// InvalidateChannelMapping drops the cached channel → room lookup after a
+// mapping was created, changed or removed outside the bridge utilities.
+func (p *Plugin) InvalidateChannelMapping(channelID string) {
+	if p.roomMappingCache != nil {
+		p.roomMappingCache.Delete(kvstore.BuildChannelMappingKey(channelID))
+	}
+}
+
 // GetConfiguration returns the plugin configuration
 func (p *Plugin) GetConfiguration() command.Configuration {
 	return p.getConfiguration()
@@ -524,8 +532,18 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 
 	p.logger.LogInfo("Created Matrix room for new channel", "room_id", roomID, "channel_name", channel.Name)
 
-	// Automatically map the created room to this channel (both directions)
+	// An administrator may have mapped the channel while the room was being
+	// created (/matrix create or /matrix map); never overwrite that.
 	mappingKey := kvstore.BuildChannelMappingKey(channel.Id)
+	if existing, err := p.kvstore.Get(mappingKey); err == nil && len(existing) > 0 && string(existing) != roomID {
+		p.logger.LogInfo("Channel was mapped while its room was being created; keeping the existing mapping", "channel_id", channel.Id, "existing_room", string(existing), "unused_room", roomID)
+		if err := p.matrixClient.LeaveRoomAsUser(roomID, p.BridgeBotUserID()); err != nil {
+			p.logger.LogDebug("Could not leave unused auto-created room", "room_id", roomID, "error", err)
+		}
+		return
+	}
+
+	// Automatically map the created room to this channel (both directions)
 	if err := p.kvstore.Set(mappingKey, []byte(roomID)); err != nil {
 		p.logger.LogError("Failed to save channel mapping", "error", err, "channel_id", channel.Id, "room_id", roomID)
 	}
@@ -535,6 +553,7 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 	if err := p.kvstore.Set(roomMappingKey, []byte(channel.Id)); err != nil {
 		p.logger.LogError("Failed to save reverse room mapping", "error", err, "channel_id", channel.Id, "room_id", roomID)
 	}
+	p.InvalidateChannelMapping(channel.Id)
 
 	// If the channel belongs to a team, add it to the team's Matrix space
 	if channel.TeamId != "" {

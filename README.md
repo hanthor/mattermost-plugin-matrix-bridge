@@ -43,7 +43,7 @@ homeserver; the full tour, from install to identity linking, is in
 | Room name and topic → channel name and header | — | ✅ |
 | Typing notifications | — | ✅ |
 | Presence → Mattermost status | — | ✅ |
-| Direct and group messages | ✅ | ✅ (partial) |
+| Direct and group messages | ✅ | — |
 | Read receipts | — | — |
 | End-to-end encrypted rooms | — | — |
 

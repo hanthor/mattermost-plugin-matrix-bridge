@@ -77,6 +77,8 @@ func TestRoomMirroring(t *testing.T) {
 				// We match arguments loosely or exactly?
 				// Loose matching for now to verify Set is called.
 				mockKV.On("Set", mock.Anything, mock.Anything).Return(nil).Twice()
+				// The hook re-checks that nobody mapped the channel meanwhile.
+				mockKV.On("Get", mock.Anything).Return([]byte(nil), nil).Maybe()
 			}
 
 			// Create Matrix Client

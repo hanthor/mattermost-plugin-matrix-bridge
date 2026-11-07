@@ -112,6 +112,10 @@ type PluginAccessor interface {
 	// Shared channel access
 	GetRemoteID() string
 
+	// InvalidateChannelMapping drops cached channel → room lookups after a
+	// mapping changed.
+	InvalidateChannelMapping(channelID string)
+
 	// Migration access
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
@@ -589,6 +593,7 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 					}
 				}
 			}
+			c.plugin.InvalidateChannelMapping(createdChannel.Id)
 
 			c.client.Log.Info("Created and mapped channel for Matrix room", "channel_id", createdChannel.Id, "channel_name", createdChannel.Name, "room_identifier", roomIdentifier)
 
@@ -698,6 +703,7 @@ func (c *Handler) executeMapCommand(args *model.CommandArgs, roomIdentifier stri
 			}
 		}
 	}
+	c.plugin.InvalidateChannelMapping(args.ChannelId)
 
 	c.client.Log.Info("Channel mapping saved", "channel_id", args.ChannelId, "channel_name", channelName, "room_identifier", roomIdentifier)
 
@@ -833,6 +839,7 @@ func (c *Handler) executeUnmapCommand(args *model.CommandArgs) *model.CommandRes
 		// Continue - the main mapping was removed
 	}
 
+	c.plugin.InvalidateChannelMapping(args.ChannelId)
 	c.client.Log.Info("Removed Matrix room mapping", "channel_id", args.ChannelId, "room_identifier", matrixRoomIdentifier)
 
 	// Uninvite this plugin from the shared channel
@@ -862,6 +869,16 @@ func (c *Handler) executeCreateRoomCommand(args *model.CommandArgs, roomName str
 	matrixClient, errResponse := c.getMatrixClientOrError()
 	if errResponse != nil {
 		return errResponse
+	}
+
+	// Channels created after the plugin was enabled already have a room;
+	// creating another would silently split the conversation.
+	if existing, err := c.kvstore.Get(kvstore.BuildChannelMappingKey(args.ChannelId)); err == nil && len(existing) > 0 {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text: fmt.Sprintf("ℹ️ This channel is already bridged to `%s`.\n\n"+
+				"Use `/matrix status` to inspect it, or `/matrix unmap` first if you really want a new room.", string(existing)),
+		}
 	}
 
 	// Get channel info for room name (if not provided) and topic
@@ -943,6 +960,7 @@ func (c *Handler) executeCreateRoomCommand(args *model.CommandArgs, roomName str
 		c.client.Log.Error("Failed to save room mapping", "error", err, "room_id", roomID, "channel_id", args.ChannelId)
 		// Continue anyway - the forward mapping was saved successfully
 	}
+	c.plugin.InvalidateChannelMapping(args.ChannelId)
 
 	// Share the channel and invite this plugin to receive sync messages
 	shareStatus := c.shareChannelAndInvitePlugin(args, channelName, topic)

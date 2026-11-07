@@ -315,29 +315,45 @@ await step('setup: plugin settings', async () => {
     await shot(ada.page, 'setup-mm-registration-download', 'Further down, the registration file for the homeserver is generated from these settings.');
 });
 
-await step('setup: create channel and test connection', async () => {
+await step('setup: test connection', async () => {
+    await ada.openChannel('town-square');
+    await ada.slash('/matrix test');
+    await shot(ada.page, 'setup-mm-matrix-test', '`/matrix test` confirms the homeserver connection and the appservice permissions.');
+});
+
+await step('setup: bridge an existing channel', async () => {
+    // Off-Topic existed before the plugin was enabled, so it has no room yet.
+    // publish=true makes a public room, so Matrix users can join it directly.
+    await ada.openChannel('off-topic');
+    await ada.slash('/matrix create publish=true');
+    await shot(ada.page, 'setup-mm-matrix-create', 'For a channel that existed before the bridge, `/matrix create publish=true` creates a public Matrix room and bridges it.');
+});
+
+await step('setup: new channel gets a room automatically', async () => {
     const team = await mmApi('GET', `/teams/name/${scenario.teamName}`);
     const channel = await mmApi('POST', '/channels', {
         team_id: team.id, name: channelName, display_name: 'Bridge Demo', type: 'O', purpose: 'Where Mattermost meets Matrix',
     });
     channelID = channel.id;
+
+    // The plugin creates and maps a room for every new channel; wait for it.
+    const deadline = Date.now() + 60_000;
+    while (!roomID) {
+        const list = await mmApi('POST', '/commands/execute', {channel_id: channelID, command: '/matrix list'});
+        const match = /Bridge Demo → `(![^`]+)`/.exec(list.text || '');
+        if (match) {
+            roomID = match[1];
+            break;
+        }
+        if (Date.now() > deadline) {
+            throw new Error(`no room was created for the new channel: ${list.text}`);
+        }
+        await sleep(1000);
+    }
     await mmApi('POST', `/channels/${channelID}/members`, {user_id: people.carol.id});
     await ada.openChannel(channelName);
-    await ada.slash('/matrix test');
-    await shot(ada.page, 'setup-mm-matrix-test', '`/matrix test` confirms the homeserver connection and the appservice permissions.');
-});
-
-await step('setup: create and map a room', async () => {
-    // publish=true makes a public room, so Matrix users can join it directly.
-    await ada.slash('/matrix create publish=true');
-    await shot(ada.page, 'setup-mm-matrix-create', '`/matrix create publish=true` creates a public Matrix room for the channel and bridges it.');
-
-    const list = await mmApi('POST', '/commands/execute', {channel_id: channelID, command: '/matrix list'});
-    const match = /(![^\s`*]+)/.exec(list.text || '');
-    if (!match) {
-        throw new Error(`could not find the room in /matrix list output: ${list.text}`);
-    }
-    roomID = match[1];
+    await ada.slash('/matrix status');
+    await shot(ada.page, 'setup-mm-matrix-status', 'A channel created after the bridge was enabled gets a room automatically; `/matrix status` shows it.');
 });
 
 // ===== Part 1b: the Matrix side =====
@@ -473,6 +489,12 @@ await step('feature: typing', async () => {
 });
 
 await step('feature: room topic', async () => {
+    // The bridge bot created the room, so it hands Alice moderator power first
+    // (what a room admin would do in Element's room settings).
+    const asBot = `?user_id=${encodeURIComponent(scenario.bridgeBotUser)}`;
+    const levels = await matrixApi('GET', `/_matrix/client/v3/rooms/${encodeURIComponent(roomID)}/state/m.room.power_levels/${asBot}`, undefined, scenario.asToken);
+    levels.users = {...(levels.users || {}), [scenario.alice.userID]: 50};
+    await matrixApi('PUT', `/_matrix/client/v3/rooms/${encodeURIComponent(roomID)}/state/m.room.power_levels/${asBot}`, levels, scenario.asToken);
     await matrixApi('PUT', `/_matrix/client/v3/rooms/${encodeURIComponent(roomID)}/state/m.room.topic/`, {topic: 'Where Mattermost meets Matrix — topic set from Element'});
     await ada.page.getByText('topic set from Element').first().waitFor({timeout: 60_000});
     await sleep(1000);
@@ -494,22 +516,8 @@ await step('feature: membership', async () => {
     await alice.app.closeRightPanel();
 });
 
-await step('feature: direct messages', async () => {
-    const carolGhost = `${scenario.ghostPrefix}${people.carol.id}:${scenario.serverName}`;
-    const dm = await matrixApi('POST', '/_matrix/client/v3/createRoom', {preset: 'trusted_private_chat', is_direct: true, invite: [carolGhost]});
-    await sleep(3000);
-    await matrixText(dm.room_id, 'Hi Carol, this is a direct message from Matrix.');
-    carol = await mattermostSession(scenario.carol.username, scenario.carol.password);
-    await carol.openChannel(`@matrix:${localpart(scenario.alice.userID)}`);
-    await carol.waitForText('direct message from Matrix');
-    await carol.post('Hi Alice! And this is my reply from Mattermost.', 'reply from Mattermost');
-    await shot(carol.page, 'feature-mm-dm', 'Alice starts a DM with Carol\'s ghost in Element; it becomes a Mattermost direct message.');
-    await alice.app.viewRoomById(dm.room_id);
-    await alice.app.waitForMessage('reply from Mattermost');
-    await shot(alice.page, 'feature-element-dm', 'The same direct message in Element, with Carol\'s reply from Mattermost.');
-});
-
 await step('feature: identity link and double puppeting', async () => {
+    carol = await mattermostSession(scenario.carol.username, scenario.carol.password);
     await carol.openChannel(channelName);
     await carol.slash('/matrix link');
     await shot(carol.page, 'feature-mm-matrix-link', '`/matrix link` gives Carol a one-time code for the bridge bot in Matrix.');

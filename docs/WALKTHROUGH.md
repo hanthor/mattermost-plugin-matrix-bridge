@@ -75,18 +75,24 @@ appservice may act in its namespace.
 
 ### Bridge a channel
 
-**6. Create or map a room.** `/matrix create` creates a Matrix room for the
-current channel and bridges it in one step; `publish=true` makes it a public
-room that any Matrix user can join, otherwise it is invite-only. To bridge an
-existing room instead, invite the bridge bot to it and run
-`/matrix map !room:server` or `/matrix map #alias:server`. New channels get a
-room automatically from then on.
+**6. Existing channels: create or map a room.** For a channel that existed
+before the bridge, `/matrix create` creates a Matrix room and bridges it in
+one step; `publish=true` makes it a public room that any Matrix user can
+join, otherwise it is invite-only. To bridge an existing Matrix room instead,
+invite the bridge bot to it and run `/matrix map !room:server` or
+`/matrix map #alias:server`.
 
 ![/matrix create](walkthrough/setup-mm-matrix-create.png)
 
+**7. New channels are bridged automatically.** Every channel created from now
+on gets its own Matrix room: public for public channels, invite-only for
+private ones. `/matrix status` shows the room a channel is bridged to.
+
+![/matrix status](walkthrough/setup-mm-matrix-status.png)
+
 ### Matrix user side
 
-**7. Join from Matrix.** Nothing to install: the bridged room is an ordinary
+**8. Join from Matrix.** Nothing to install: the bridged room is an ordinary
 Matrix room. Alice opens it in Element and joins.
 
 ![Room preview in Element](walkthrough/setup-element-room-preview.png)
@@ -188,15 +194,9 @@ Room name and topic changes in Matrix update the channel name and header.
 
 Adding Dave to the channel joins his ghost to the room; Bob joining from
 Matrix adds him to the channel as a remote user. Leaving works the same way.
-
-### Direct messages
-
-| Mattermost | Element |
-| --- | --- |
-| ![The DM in Mattermost](walkthrough/feature-mm-dm.png) | ![The DM in Element](walkthrough/feature-element-dm.png) |
-
-Alice starts a direct chat with Carol's ghost in Element; it becomes a
-Mattermost direct message, and Carol's reply flows back.
+Direct messages started in Mattermost get a Matrix room too; a DM started in
+Matrix cannot be created yet because Mattermost refuses direct channels with
+remote users (see the [capability matrix](CAPABILITIES.md)).
 
 ### One identity on both networks
 
