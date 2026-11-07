@@ -108,3 +108,20 @@ func TestHexToUnicode(t *testing.T) {
 		})
 	}
 }
+
+func TestReplaceEmojiShortcodes(t *testing.T) {
+	cases := map[string]string{
+		"hello :wave:":                       "hello 👋",
+		"thumbs :+1: up":                     "thumbs 👍 up",
+		"keep `:wave:` in code":              "keep `:wave:` in code",
+		"```\n:wave:\n``` and :wave:":        "```\n:wave:\n``` and 👋",
+		"custom :my_company_logo: stays":     "custom :my_company_logo: stays",
+		"time 10:30:45 is not an emoji":      "time 10:30:45 is not an emoji",
+		"unterminated `code :wave: no close": "unterminated `code :wave: no close",
+	}
+	for in, want := range cases {
+		if got := replaceEmojiShortcodes(in); got != want {
+			t.Errorf("replaceEmojiShortcodes(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

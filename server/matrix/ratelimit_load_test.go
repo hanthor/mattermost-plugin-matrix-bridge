@@ -212,7 +212,7 @@ func TestClient_RoomCreationSpamLoad(t *testing.T) {
 				roomName := func() string { return "Spam Room" }() // Use closure to avoid name conflicts
 
 				start := time.Now()
-				_, err := client.CreateRoom(roomName, "", "test.example.invalid", true, "")
+				_, err := client.CreateRoom(roomName, "", "test.example.invalid", true, "", false, "")
 				elapsed := time.Since(start)
 
 				if err != nil {
@@ -296,7 +296,7 @@ func TestClient_MixedOperationLoad(t *testing.T) {
 					// Room creation (less frequent)
 					atomic.AddInt64(&roomAttempts, 1)
 					start := time.Now()
-					_, err := client.CreateRoom("Mixed Load Room", "", "test.example.invalid", true, "")
+					_, err := client.CreateRoom("Mixed Load Room", "", "test.example.invalid", true, "", false, "")
 					elapsed := time.Since(start)
 
 					if err != nil && elapsed > 200*time.Millisecond {

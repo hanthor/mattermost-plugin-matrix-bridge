@@ -76,7 +76,7 @@ services:
       - synapse-data:/data
 
   synapse:
-    image: matrixdotorg/synapse:latest
+    image: ghcr.io/element-hq/synapse:v1.164.2
     restart: unless-stopped
     environment:
       - SYNAPSE_SERVER_NAME=test.local

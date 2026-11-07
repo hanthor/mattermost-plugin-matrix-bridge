@@ -186,6 +186,7 @@ type Client struct {
 	httpClient   *http.Client
 	logger       Logger
 	serverDomain string // explicit server domain for testing
+	puppetToken  string // when set, requests act as a real user with this token instead of impersonating via the AS token
 
 	// Rate limiting
 	rateLimitConfig     RateLimitConfig
@@ -366,11 +367,6 @@ func (c *Client) RedactEventAsGhost(roomID, eventID, ghostUserID string) (*SendE
 	}
 	reqURL := c.serverURL + endpoint
 
-	// Add user_id query parameter for impersonation
-	if ghostUserID != "" {
-		reqURL += "?user_id=" + url.QueryEscape(ghostUserID)
-	}
-
 	jsonData, err := json.Marshal(content)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal redaction content")
@@ -382,7 +378,7 @@ func (c *Client) RedactEventAsGhost(roomID, eventID, ghostUserID string) (*SendE
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	c.authorize(req, ghostUserID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -579,18 +575,13 @@ func (c *Client) JoinRoomAsUser(roomIdentifier, userID string) error {
 	encodedIdentifier := url.PathEscape(roomIdentifier)
 	requestURL := c.serverURL + "/_matrix/client/v3/join/" + encodedIdentifier
 
-	// Add user_id query parameter for impersonation
-	if userID != "" {
-		requestURL += "?user_id=" + url.QueryEscape(userID)
-	}
-
 	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer([]byte("{}")))
 	if err != nil {
 		return errors.Wrap(err, "failed to create join request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken) // Use AS token for impersonation
+	c.authorize(req, userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -820,6 +811,125 @@ func (c *Client) joinGhostUserWithFallback(roomID, ghostUserID string) error {
 	return nil
 }
 
+// BridgeBotLocalpart is the sender_localpart in the appservice registration.
+const BridgeBotLocalpart = "_mattermost_bridge"
+
+// EnsureBotRegistered registers the appservice bot user if the homeserver has
+// not created it yet. Some homeservers only create the sender on first use,
+// others require an explicit registration before the bot can join rooms.
+func (c *Client) EnsureBotRegistered() error {
+	if c.serverURL == "" || c.asToken == "" {
+		return errors.New("matrix client not configured")
+	}
+	_, err := c.RegisterUserWithASToken(BridgeBotLocalpart, "")
+	return err
+}
+
+// AsPuppet returns a copy of the client that acts as a real Matrix user with
+// the given access token (double puppeting). Requests made through the copy
+// send the token instead of the appservice token and omit user_id.
+func (c *Client) AsPuppet(token string) *Client {
+	cp := *c
+	cp.puppetToken = token
+	return &cp
+}
+
+// IsPuppet reports whether the client acts as a real user.
+func (c *Client) IsPuppet() bool {
+	return c.puppetToken != ""
+}
+
+// authorize sets the Authorization header and, when impersonating through
+// the appservice, the user_id query parameter.
+func (c *Client) authorize(req *http.Request, userID string) {
+	if c.puppetToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.puppetToken)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	if userID != "" {
+		q := req.URL.Query()
+		q.Set("user_id", userID)
+		req.URL.RawQuery = q.Encode()
+	}
+}
+
+// WhoAmI returns the user ID that owns an access token.
+func (c *Client) WhoAmI(token string) (string, error) {
+	req, err := http.NewRequest("GET", c.serverURL+"/_matrix/client/v3/account/whoami", nil)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create whoami request")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to send whoami request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("whoami failed: HTTP %d - %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", errors.Wrap(err, "failed to parse whoami response")
+	}
+	return out.UserID, nil
+}
+
+// SendNotice sends an m.notice as the appservice bot.
+func (c *Client) SendNotice(roomID, text string) error {
+	_, err := c.sendEventAsUser(roomID, "m.room.message", map[string]any{
+		"msgtype": "m.notice",
+		"body":    text,
+	}, "")
+	return err
+}
+
+// LeaveRoomAsUser makes the given (ghost) user leave a room.
+func (c *Client) LeaveRoomAsUser(roomID, userID string) error {
+	if c.serverURL == "" || c.asToken == "" {
+		return errors.New("matrix client not configured")
+	}
+
+	endpoint, err := BuildSecureURL("/_matrix/client/v3/rooms/", roomID, "leave")
+	if err != nil {
+		return errors.Wrap(err, "invalid room ID")
+	}
+	requestURL := c.serverURL + endpoint
+
+	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		return errors.Wrap(err, "failed to create leave request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.authorize(req, userID)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send leave request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to leave room: HTTP %d - %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// ServerDomain returns the Matrix server name this client builds user IDs
+// with, or "" when it cannot be determined.
+func (c *Client) ServerDomain() string {
+	domain, err := c.extractServerDomain()
+	if err != nil {
+		return ""
+	}
+	return domain
+}
+
 // CreateRoom creates a new Matrix room with the specified name, topic, and settings.
 // Returns the room ID or alias on success.
 // If skipPrefix is true, no _mattermost_ prefix is added (for Mirror Mode)
@@ -838,7 +948,7 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 	// Create room alias - include team name to avoid collisions across teams
 	alias := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 	alias = strings.ReplaceAll(alias, "_", "-")
-	
+
 	// Prepend team name if available to avoid alias collisions
 	// (e.g., multiple teams can have "town-square" channels)
 	if teamName != "" {
@@ -846,7 +956,7 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 		teamSlug = strings.ReplaceAll(teamSlug, "_", "-")
 		alias = teamSlug + "-" + alias
 	}
-	
+
 	// In Mirror Mode (skipPrefix=true), use clean aliases without prefix
 	// Otherwise use _mattermost_ prefix for namespace reservation
 	roomAlias := ""
@@ -928,30 +1038,22 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 		}
 	}
 
-	jsonData, err := json.Marshal(roomData)
+	resp, body, err := c.postCreateRoom(roomData)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal room creation data")
+		return "", err
 	}
 
-	url := c.serverURL + "/_matrix/client/v3/createRoom"
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create room creation request")
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to send room creation request")
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to read room creation response")
+	// A homeserver whose registration does not reserve the alias namespace
+	// rejects the alias with M_EXCLUSIVE. The room itself is more important
+	// than its alias, so retry without one and keep going.
+	if resp.StatusCode == http.StatusBadRequest && roomData["room_alias_name"] != nil && isAliasNotReservedError(body) {
+		c.logger.LogWarn("Homeserver refused the room alias because the appservice registration does not reserve it; creating the room without an alias", "room_alias", roomAlias)
+		delete(roomData, "room_alias_name")
+		roomAlias = ""
+		resp, body, err = c.postCreateRoom(roomData)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -1026,6 +1128,41 @@ func (c *Client) CreateRoom(name, topic, serverDomain string, publish bool, matt
 		return roomAlias, nil
 	}
 	return response.RoomID, nil
+}
+
+// postCreateRoom sends a createRoom request and returns the response with its
+// body already read.
+func (c *Client) postCreateRoom(roomData map[string]any) (*http.Response, []byte, error) {
+	jsonData, err := json.Marshal(roomData)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to marshal room creation data")
+	}
+
+	req, err := http.NewRequest("POST", c.serverURL+"/_matrix/client/v3/createRoom", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create room creation request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to send room creation request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to read room creation response")
+	}
+	return resp, body, nil
+}
+
+// isAliasNotReservedError reports whether a createRoom failure is Synapse
+// refusing an alias outside the appservice's reserved namespaces.
+func isAliasNotReservedError(body []byte) bool {
+	mErr := parseMatrixError(http.StatusBadRequest, body)
+	return mErr.ErrCode == "M_EXCLUSIVE" || strings.Contains(strings.ToLower(mErr.ErrMsg), "not reserved")
 }
 
 // CreateDirectRoom creates a Matrix DM room and invites the specified ghost users
@@ -1155,30 +1292,20 @@ func (c *Client) CreateSpace(name, topic, aliasLocalPart string) (string, error)
 		}
 	}
 
-	jsonData, err := json.Marshal(roomData)
+	resp, body, err := c.postCreateRoom(roomData)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to marshal space creation data")
+		return "", err
 	}
 
-	url := c.serverURL + "/_matrix/client/v3/createRoom"
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create space creation request")
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to send space creation request")
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to read space creation response")
+	// Same fallback as rooms: an alias outside the reserved namespace must not
+	// prevent the space from being created.
+	if resp.StatusCode == http.StatusBadRequest && roomData["room_alias_name"] != nil && isAliasNotReservedError(body) {
+		c.logger.LogWarn("Homeserver refused the space alias because the appservice registration does not reserve it; creating the space without an alias", "alias_local_part", aliasLocalPart)
+		delete(roomData, "room_alias_name")
+		resp, body, err = c.postCreateRoom(roomData)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -1881,11 +2008,6 @@ func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID s
 	}
 	reqURL := c.serverURL + endpoint
 
-	// Add user_id query parameter for impersonation
-	if userID != "" {
-		reqURL += "?user_id=" + url.QueryEscape(userID)
-	}
-
 	jsonData, err := json.Marshal(content)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal event content")
@@ -1897,7 +2019,7 @@ func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID s
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken) // Use AS token for impersonation
+	c.authorize(req, userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -2247,11 +2369,6 @@ func (c *Client) sendCustomEventAsUser(roomID, eventType string, content any, us
 	}
 	reqURL := c.serverURL + endpoint
 
-	// Add user_id query parameter for impersonation
-	if userID != "" {
-		reqURL += "?user_id=" + url.QueryEscape(userID)
-	}
-
 	jsonData, err := json.Marshal(content)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal event content")
@@ -2263,7 +2380,7 @@ func (c *Client) sendCustomEventAsUser(roomID, eventType string, content any, us
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	c.authorize(req, userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -2703,7 +2820,7 @@ func (c *Client) RegisterUserWithASToken(username, password string) (*RegisterRe
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to send registration request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -2767,7 +2884,7 @@ func (c *Client) SetUserDisplayName(userID, displayName string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to send display name request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -2809,7 +2926,7 @@ func (c *Client) SetUserAvatar(userID, avatarURL string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to send avatar request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -2819,12 +2936,13 @@ func (c *Client) SetUserAvatar(userID, avatarURL string) error {
 	return nil
 }
 
-// getServerName extracts the server name from the server URL or returns a default
+// getServerName returns the Matrix server name used to build user IDs. It
+// prefers the explicitly configured server domain and otherwise derives the
+// hostname from the configured server URL.
 func (c *Client) getServerName() string {
-	// Try to parse server name from URL
-	if c.serverURL != "" {
-		// Default to "synapse" for local development
-		return "synapse"
+	domain, err := c.extractServerDomain()
+	if err != nil {
+		return ""
 	}
-	return "matrix.org"
+	return domain
 }

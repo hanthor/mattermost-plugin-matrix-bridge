@@ -32,3 +32,13 @@ test_*.sh
 test_*.txt
 configure_plugin.sh
 IMPROVEMENTS_SUMMARY.md
+
+# Local appservice tokens
+.as_token
+.hs_token
+
+# Walkthrough script dependencies
+e2e/walkthrough/node_modules/
+e2e/walkthrough/package-lock.json
+docs/walkthrough-debug/
+e2e/walkthrough/storage_state/

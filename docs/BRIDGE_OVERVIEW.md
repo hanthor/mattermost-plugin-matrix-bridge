@@ -76,10 +76,13 @@ The bridge listens to Mattermost events and forwards them to Matrix:
 
 - **`MessageHasBeenPosted`**: Sends Mattermost messages to Matrix rooms
 - **`UserHasBeenCreated`**: Creates corresponding Matrix ghost users
-- **`UserHasUpdated`**: Syncs profile changes (name, avatar) to Matrix
 - **`ChannelHasBeenCreated`**: Creates Matrix rooms for new channels
 - **`TeamHasBeenCreated`**: Creates Matrix Spaces for teams
 - **`UserHasJoinedChannel`**: Joins ghost users to Matrix rooms
+
+Mattermost has no hook for profile changes, so ghost display names and
+avatars are refreshed when a user is next active in a bridged channel and by
+a periodic sweep ([`server/profile_sync.go`](../server/profile_sync.go)).
 
 #### 2. Application Service (Matrix → Mattermost)
 The bridge runs an HTTP server that receives Matrix events:
@@ -261,15 +264,21 @@ remote_user_<matrixUserID> → mattermostUserID
 - [x] Rate limiting
 - [x] Room aliases
 
-### 🚧 Planned/Partial
+### ✅ Also supported
 
-- [ ] Reactions/Emojis
-- [ ] Message edits
-- [ ] Message deletion sync
-- [ ] Typing indicators
-- [ ] Read receipts
-- [ ] Presence/Status sync
-- [ ] Threaded conversations
+- [x] Reactions/Emojis (both directions)
+- [x] Message edits (both directions)
+- [x] Message deletion sync (both directions)
+- [x] Threaded conversations (both directions)
+- [x] Membership sync: joins and leaves (both directions)
+- [x] Typing indicators (Matrix → Mattermost)
+- [x] Presence → Mattermost status (Matrix → Mattermost)
+- [x] Room name and topic → channel name and header (Matrix → Mattermost)
+
+### 🚧 Planned / not supported
+
+- [ ] Read receipts (Mattermost has no API to mark a channel read on behalf of another user)
+- [ ] Typing indicators Mattermost → Matrix (no plugin hook exposes typing)
 - [ ] End-to-end encryption (E2EE)
 - [ ] Voice/Video bridging
 
@@ -325,7 +334,6 @@ See the following guides:
 
 - **[Setup Guide](../LOCAL_DEVELOPMENT.md)**: Install and configure the bridge
 - **[Commands Reference](COMMANDS.md)**: Complete list of slash commands
-- **[Join Command Guide](JOIN_COMMAND.md)**: Join existing Matrix rooms
 
 ## Troubleshooting
 
@@ -355,7 +363,6 @@ See the following guides:
 ## Related Documentation
 
 - [Commands Reference](COMMANDS.md) - All slash commands
-- [Join Command](JOIN_COMMAND.md) - Detailed join command guide
 - [Local Development](../LOCAL_DEVELOPMENT.md) - Setup and development guide
 - [Matrix Spec](https://spec.matrix.org/) - Matrix protocol specification
 - [Mattermost Plugin API](https://developers.mattermost.com/extend/plugins/) - Plugin development

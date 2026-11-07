@@ -373,5 +373,3 @@ func TestMessageHasBeenUpdated(t *testing.T) {
 		api.AssertNotCalled(t, "GetUser", mock.Anything)
 	})
 }
-
-

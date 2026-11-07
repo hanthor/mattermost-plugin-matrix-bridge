@@ -93,7 +93,7 @@ func (l *localTestLogger) LogError(message string, keyValuePairs ...any) {
 
 func TestUserSyncFeature(t *testing.T) {
 	var uploadCalled, setAvatarCalled bool
-	
+
 	// Setup Matrix Mock Server
 	matrixServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Mock UploadMedia
@@ -102,7 +102,7 @@ func TestUserSyncFeature(t *testing.T) {
 			response := map[string]string{
 				"content_uri": "mxc://example.com/avatar123",
 			}
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 
@@ -111,7 +111,7 @@ func TestUserSyncFeature(t *testing.T) {
 		if r.Method == "PUT" && strings.Contains(r.URL.Path, "/avatar_url") {
 			setAvatarCalled = true
 			response := map[string]interface{}{}
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 
@@ -119,10 +119,10 @@ func TestUserSyncFeature(t *testing.T) {
 		// /_matrix/client/v3/profile/{userID}/displayname
 		if r.Method == "PUT" && strings.Contains(r.URL.Path, "/displayname") {
 			response := map[string]interface{}{}
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
-		
+
 		http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
 	}))
 	defer matrixServer.Close()
@@ -130,9 +130,11 @@ func TestUserSyncFeature(t *testing.T) {
 	// Setup KVStore Mock
 	mockKV := &MockKVStore{}
 	mmUserID := "mm_user_id"
-	ghostUserID := "@ghost:matrix.org"
+	ghostUserID := "@_mattermost_" + mmUserID + ":matrix.org" // must match the ghost namespace or sync is skipped
 	ghostUserKey := kvstore.BuildGhostUserKey(mmUserID)
 	mockKV.On("Get", ghostUserKey).Return([]byte(ghostUserID), nil)
+	mockKV.On("Get", profileFingerprintKeyPrefix+mmUserID).Return([]byte(nil), nil)
+	mockKV.On("Set", profileFingerprintKeyPrefix+mmUserID, mock.Anything).Return(nil)
 
 	// Setup API Mock
 	api := &plugintest.API{}
@@ -144,7 +146,7 @@ func TestUserSyncFeature(t *testing.T) {
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Maybe()
-	
+
 	// Return some bytes for profile image
 	api.On("GetProfileImage", mmUserID).Return([]byte("fake_image_data"), nil)
 
@@ -156,7 +158,7 @@ func TestUserSyncFeature(t *testing.T) {
 	plugin := &Plugin{}
 	plugin.SetAPI(api)
 	plugin.logger = &localTestLogger{t: t}
-	
+
 	// Config
 	config := &configuration{
 		EnableSync: true,
@@ -180,7 +182,7 @@ func TestUserSyncFeature(t *testing.T) {
 	t.Run("Avatar Syncing", func(t *testing.T) {
 		uploadCalled = false
 		setAvatarCalled = false
-		
+
 		user := &model.User{
 			Id:        mmUserID,
 			Username:  "testuser",
@@ -206,11 +208,10 @@ func TestUserSyncFeature(t *testing.T) {
 			LastName:  "User",
 		}
 
-		// UserHasUpdated calls SyncUserToMatrix
-		// Pass user as both previous and new to ensure no panic regardless of which argument is used
-		plugin.UserHasUpdated(nil, user, user)
+		// Mattermost has no profile-change hook; the bridge resyncs on activity.
+		plugin.mattermostToMatrixBridge.syncProfileIfChanged(user)
 
-		assert.True(t, uploadCalled, "UploadAvatarFromData should be called via Hook")
-		assert.True(t, setAvatarCalled, "SetAvatarURL should be called via Hook")
+		assert.True(t, uploadCalled, "UploadAvatarFromData should be called on profile change")
+		assert.True(t, setAvatarCalled, "SetAvatarURL should be called on profile change")
 	})
 }

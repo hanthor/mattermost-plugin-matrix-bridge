@@ -1,44 +1,40 @@
-# Mattermost Bridge Application Service Registration
-# This file registers the Mattermost Bridge as a Matrix Application Service
+# Mattermost bridge Application Service registration (local development)
+#
+# scripts/local-setup.sh fills in the tokens; never commit real tokens.
+# In production download this file from System Console > Plugins > Matrix
+# bridge instead, which generates it from the configured values.
 
 id: mattermost-bridge
 
-# URL where Matrix will send events - points to the Mattermost plugin endpoint
-# For local development, use the Docker host or host.docker.internal
+# Where Synapse delivers events: the plugin's appservice endpoint on Mattermost.
 url: http://host.docker.internal:8066/plugins/com.mattermost.plugin-matrix-bridge
 
-# Token that Mattermost uses to authenticate to Matrix (Application Service token)
-# IMPORTANT: Generate this in Mattermost plugin settings and copy here
-as_token: 3ede8005d958202feb44354a4b485ad323df4710311981ece60ddbf724af26d9
+# Generated in the plugin settings and copied here by scripts/local-setup.sh.
+as_token: REPLACE_WITH_AS_TOKEN
+hs_token: REPLACE_WITH_HS_TOKEN
 
-# Token that Matrix uses to send events to Mattermost (Homeserver token)  
-# IMPORTANT: Generate this in Mattermost plugin settings and copy here
-hs_token: 7edce377072ab4375495e8560f8aa63f1abac29bfcf83294b3f07ae020c8b05d
-
-# The localpart of the bridge bot user (@_mattermost_bridge:test.local)
+# The bridge bot (@_mattermost_bridge:test.local)
 sender_localpart: _mattermost_bridge
 
-# Rate limiting for this application service
 rate_limited: false
 
-# Namespaces define which users/rooms/aliases the bridge controls
 namespaces:
-  # Users created by the bridge (ghost users for Mattermost users)
   users:
+    # Ghost users representing Mattermost users
     - exclusive: true
       regex: "@_mattermost_.*:test\\.local"
+    # Mirror mode only: the bridge owns every account on its dedicated homeserver.
+    # Remove this entry when not using mirror mode.
     - exclusive: true
       regex: "@.*:test\\.local"
-  
-  # Room aliases created by the bridge
   aliases:
     - exclusive: true
       regex: "#_mattermost_.*:test\\.local"
-    - exclusive: true
-      regex: "#.*:test\\.local"
-  
-  # Rooms - empty means the bridge doesn't exclusively own any room IDs
+    - exclusive: false
+      regex: "#mattermost-bridge-.*:test\\.local"
   rooms: []
 
-# Protocols this bridge supports (empty for basic bridging)
-protocols: []
+# Deliver typing and presence to the bridge (spec v1.13 name plus the MSC2409
+# name understood by older homeservers).
+receive_ephemeral: true
+de.sorunome.msc2409.push_ephemeral: true

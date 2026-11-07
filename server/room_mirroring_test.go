@@ -58,12 +58,12 @@ func TestRoomMirroring(t *testing.T) {
 			matrixServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == "POST" && r.URL.Path == "/_matrix/client/v3/createRoom" {
 					createRoomCalled = true
-					json.NewDecoder(r.Body).Decode(&requestBody)
+					_ = json.NewDecoder(r.Body).Decode(&requestBody)
 
 					response := map[string]string{
 						"room_id": "!newroom:example.com",
 					}
-					json.NewEncoder(w).Encode(response)
+					_ = json.NewEncoder(w).Encode(response)
 					return
 				}
 				w.WriteHeader(http.StatusOK)
@@ -77,12 +77,14 @@ func TestRoomMirroring(t *testing.T) {
 				// We match arguments loosely or exactly?
 				// Loose matching for now to verify Set is called.
 				mockKV.On("Set", mock.Anything, mock.Anything).Return(nil).Twice()
+				// The hook re-checks that nobody mapped the channel meanwhile.
+				mockKV.On("Get", mock.Anything).Return([]byte(nil), nil).Maybe()
 			}
 
 			// Create Matrix Client
 			testLogger := matrix.NewTestLogger(t)
 			matrixClient := matrix.NewClientWithLoggerAndRateLimit(matrixServer.URL, "dummy_token", "dummy_bot", testLogger, matrix.TestRateLimitConfig())
-			
+
 			// Setup Plugin
 			plugin := &Plugin{
 				kvstore:      mockKV,

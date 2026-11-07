@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -23,4 +24,63 @@ func hexToUnicode(hexStr string) string {
 	}
 
 	return result.String()
+}
+
+// shortcodePattern matches Mattermost emoji shortcodes such as :wave: or :+1:.
+var shortcodePattern = regexp.MustCompile(`:([a-z0-9_+\-]+):`)
+
+// replaceEmojiShortcodes turns known :shortcodes: into Unicode emoji so they
+// render in Matrix clients, which have no shortcode support. Text inside
+// code spans and code blocks is left alone, and unknown names (custom emoji)
+// are kept as written.
+func replaceEmojiShortcodes(text string) string {
+	if !strings.Contains(text, ":") {
+		return text
+	}
+	var out strings.Builder
+	rest := text
+	for rest != "" {
+		// Find the next code segment (``` block or ` span) and only replace before it.
+		fence := strings.Index(rest, "```")
+		tick := strings.Index(rest, "`")
+		start, delim := -1, ""
+		switch {
+		case fence >= 0 && (tick < 0 || fence <= tick):
+			start, delim = fence, "```"
+		case tick >= 0:
+			start, delim = tick, "`"
+		}
+		if start < 0 {
+			out.WriteString(replaceShortcodesInPlainText(rest))
+			break
+		}
+		out.WriteString(replaceShortcodesInPlainText(rest[:start]))
+		end := strings.Index(rest[start+len(delim):], delim)
+		if end < 0 {
+			out.WriteString(rest[start:])
+			break
+		}
+		closeAt := start + len(delim) + end + len(delim)
+		out.WriteString(rest[start:closeAt])
+		rest = rest[closeAt:]
+	}
+	return out.String()
+}
+
+func replaceShortcodesInPlainText(text string) string {
+	return shortcodePattern.ReplaceAllStringFunc(text, func(match string) string {
+		name := strings.Trim(match, ":")
+		index, ok := emojiNameToIndex[name]
+		if !ok {
+			return match
+		}
+		hex, ok := emojiIndexToUnicode[index]
+		if !ok {
+			return match
+		}
+		if unicode := hexToUnicode(hex); unicode != "" {
+			return unicode
+		}
+		return match
+	})
 }

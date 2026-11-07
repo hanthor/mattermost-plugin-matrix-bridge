@@ -1,11 +1,14 @@
 package main
 
 import (
+	"html"
 	"net/url"
 	"regexp"
 	"strings"
 
-	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 	"github.com/pkg/errors"
 )
 
@@ -153,16 +156,21 @@ func parseDisplayName(displayName string) (firstName, lastName string) {
 
 // convertHTMLToMarkdown converts Matrix HTML content to Mattermost-compatible markdown
 func convertHTMLToMarkdown(logger Logger, htmlContent string) string {
-	converter := md.NewConverter("", true, &md.Options{
-		StrongDelimiter:  "**",     // Use ** for bold (Mattermost standard)
-		EmDelimiter:      "*",      // Use * for italic
-		CodeBlockStyle:   "fenced", // Use ``` code blocks
-		HeadingStyle:     "atx",    // Use # headers
-		HorizontalRule:   "---",    // Use --- for hr
-		BulletListMarker: "-",      // Use - for bullets
-	})
+	conv := converter.NewConverter(
+		converter.WithPlugins(
+			base.NewBasePlugin(),
+			commonmark.NewCommonmarkPlugin(
+				commonmark.WithStrongDelimiter("**"), // Use ** for bold (Mattermost standard)
+				commonmark.WithEmDelimiter("*"),      // Use * for italic
+				commonmark.WithCodeBlockFence("```"), // Use ``` code blocks
+				commonmark.WithHeadingStyle("atx"),   // Use # headers
+				commonmark.WithHorizontalRule("---"), // Use --- for hr
+				commonmark.WithBulletListMarker("-"), // Use - for bullets
+			),
+		),
+	)
 
-	markdown, err := converter.ConvertString(htmlContent)
+	markdown, err := conv.ConvertString(htmlContent)
 	if err != nil {
 		logger.LogWarn("Failed to convert HTML to markdown", "error", err, "html", htmlContent)
 		// Return original content if conversion fails
@@ -174,8 +182,17 @@ func convertHTMLToMarkdown(logger Logger, htmlContent string) string {
 
 // cleanupMarkdown cleans up conversion artifacts from HTML-to-markdown conversion
 func cleanupMarkdown(markdown string) string {
+	// The converter emits CommonMark hard line breaks ("  \n") for <br>.
+	// Mattermost already renders a single newline as a line break, so the
+	// trailing spaces are just noise.
+	cleaned := strings.ReplaceAll(markdown, "  \n", "\n")
+
+	// Mattermost never renders raw HTML, so entities such as &lt; would be
+	// shown literally. Decode them back to plain characters.
+	cleaned = html.UnescapeString(cleaned)
+
 	// Remove excessive newlines
-	cleaned := regexp.MustCompile(`\n{3,}`).ReplaceAllString(markdown, "\n\n")
+	cleaned = regexp.MustCompile(`\n{3,}`).ReplaceAllString(cleaned, "\n\n")
 
 	// Trim leading/trailing whitespace
 	cleaned = strings.TrimSpace(cleaned)

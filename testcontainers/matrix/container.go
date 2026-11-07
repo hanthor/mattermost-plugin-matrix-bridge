@@ -44,7 +44,7 @@ func StartMatrixContainer(t *testing.T, config MatrixTestConfig) *Container {
 
 	// Create container with Synapse using bridge networking with dynamic port assignment
 	req := testcontainers.ContainerRequest{
-		Image: "matrixdotorg/synapse:v1.119.0",
+		Image: "matrixdotorg/synapse:v1.119.0", // newer images no longer log "SynapseSite starting"; upgrading needs a new readiness check
 		Env: map[string]string{
 			"SYNAPSE_SERVER_NAME":  config.ServerName,
 			"SYNAPSE_REPORT_STATS": "no",
@@ -219,7 +219,7 @@ func (mc *Container) isMatrixReady() (bool, error) {
 // CreateRoom creates a test room and returns its room ID
 // Uses the Matrix client with proper rate limiting to avoid 429 errors
 func (mc *Container) CreateRoom(t *testing.T, roomName string) string {
-	roomIdentifier, err := mc.Client.CreateRoom(roomName, "", mc.ServerDomain, true, "")
+	roomIdentifier, err := mc.Client.CreateRoom(roomName, "", mc.ServerDomain, true, "", false, "")
 	require.NoError(t, err)
 
 	// The client returns either a room alias or room ID

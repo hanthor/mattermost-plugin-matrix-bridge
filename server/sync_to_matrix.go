@@ -66,40 +66,73 @@ func (b *MattermostToMatrixBridge) getGhostUser(userID string) (string, bool) {
 	return "", false
 }
 
+// resolveSender decides which Matrix identity sends on behalf of a Mattermost
+// user. A linked account with a stored token is used directly (double
+// puppeting); otherwise the ghost (or mirror-mode account) is used through the
+// appservice token.
+func (b *MattermostToMatrixBridge) resolveSender(userID string) (matrixUserID string, client *matrix.Client, puppet bool, err error) {
+	if link, ok := newIdentityStore(b.kvstore).Link(userID); ok && link.Puppeted() {
+		return link.MatrixUserID, b.matrixClient.AsPuppet(link.AccessToken), true, nil
+	}
+	matrixUserID, err = b.GetMatrixUserID(userID)
+	if err != nil {
+		return "", nil, false, err
+	}
+	return matrixUserID, b.matrixClient, false, nil
+}
+
+// ensureSenderInRoom makes sure the sending identity is in the room: puppets
+// join with their own token, ghosts are invited and joined by the bot.
+func (b *MattermostToMatrixBridge) ensureSenderInRoom(client *matrix.Client, matrixUserID, roomID, userID string) error {
+	if !client.IsPuppet() {
+		return b.ensureGhostUserInRoom(matrixUserID, roomID, userID)
+	}
+	key := kvstore.BuildGhostRoomKey(userID, roomID)
+	if b.roomMembershipCache != nil {
+		if m, found := b.roomMembershipCache.Get(key); found && m == "joined" {
+			return nil
+		}
+	}
+	if err := client.JoinRoomAsUser(roomID, matrixUserID); err != nil {
+		return errors.Wrap(err, "failed to join room as linked user")
+	}
+	if b.roomMembershipCache != nil {
+		b.roomMembershipCache.Set(key, "joined")
+	}
+	return nil
+}
+
 // GetMatrixUserID returns the Matrix user ID for a Mattermost user
 // If Mirror Mode is enabled, creates and returns real Matrix user, otherwise returns ghost user ID
 func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error) {
 	config := b.configGetter.getConfiguration()
-	
+
 	if config.EnableMirrorMode {
 		// Mirror Mode: Create or get real Matrix user based on username
 		user, appErr := b.API.GetUser(userID)
 		if appErr != nil {
 			return "", errors.Wrap(appErr, "failed to get Mattermost user for mirror mode")
 		}
-		
+
 		serverDomain := config.MatrixServerDomain
 		if serverDomain == "" {
-			serverDomain = "synapse" // Default to "synapse" if not configured
+			serverDomain = b.matrixClient.ServerDomain()
 		}
-		
+
 		matrixUserID := fmt.Sprintf("@%s:%s", user.Username, serverDomain)
-		
+
 		// Check if user already exists in our tracking
 		existingUserID, err := b.kvstore.Get(fmt.Sprintf("mirror_user_%s", userID))
 		if err == nil && len(existingUserID) > 0 {
 			b.logger.LogDebug("Using existing mirrored Matrix user", "mattermost_user_id", userID, "matrix_user_id", matrixUserID)
 			return matrixUserID, nil
 		}
-		
+
 		// Create the Matrix user
-		password := config.MirrorModePassword
-		if password == "" {
-			password = "mattermost-mirror-" + userID // Generate a default password
-		}
-		
+		password := config.GetMirrorModePassword()
+
 		b.logger.LogInfo("Creating Matrix user in mirror mode", "mattermost_user_id", userID, "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
-		
+
 		regResp, err := b.matrixClient.RegisterUserWithASToken(user.Username, password)
 		if err != nil {
 			b.logger.LogWarn("Failed to register Matrix user, may already exist", "error", err, "matrix_user_id", matrixUserID)
@@ -107,7 +140,7 @@ func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error
 		} else {
 			b.logger.LogInfo("Successfully registered Matrix user", "matrix_user_id", regResp.UserID)
 		}
-		
+
 		// Sync user profile if enabled
 		if config.SyncUserProfiles {
 			// Set display name
@@ -119,19 +152,19 @@ func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error
 					b.logger.LogDebug("Set Matrix user display name", "matrix_user_id", matrixUserID, "display_name", displayName)
 				}
 			}
-			
+
 			// TODO: Sync avatar - would need to upload Mattermost profile picture to Matrix
 			// This requires fetching the profile picture from Mattermost and uploading to Matrix media store
 		}
-		
+
 		// Track that we've created this user
 		if err := b.kvstore.Set(fmt.Sprintf("mirror_user_%s", userID), []byte(matrixUserID)); err != nil {
 			b.logger.LogWarn("Failed to track mirrored user", "error", err, "user_id", userID)
 		}
-		
+
 		return matrixUserID, nil
 	}
-	
+
 	// Ghost mode: create or get ghost user
 	return b.CreateOrGetGhostUser(userID)
 }
@@ -180,10 +213,16 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 		b.logger.LogWarn("Failed to cache ghost user ID", "error", err, "ghost_user_id", ghostUser.UserID)
 		// Continue anyway, the ghost user was created successfully
 	}
-	
+
 	// Also cache in memory
 	if b.ghostUserCache != nil {
 		b.ghostUserCache.Set(ghostUserKey, ghostUser.UserID)
+	}
+
+	// The ghost carries this profile now; remember it so the next activity
+	// does not resync an unchanged profile.
+	if err := b.kvstore.Set(profileFingerprintKeyPrefix+userID, []byte(profileFingerprint(user))); err != nil {
+		b.logger.LogDebug("Failed to store profile fingerprint for new ghost", "error", err, "user_id", userID)
 	}
 
 	if displayName != "" {
@@ -191,10 +230,10 @@ func (b *MattermostToMatrixBridge) CreateOrGetGhostUser(userID string) (string, 
 	} else {
 		b.logger.LogDebug("Created new ghost user", "mattermost_user_id", userID, "ghost_user_id", ghostUser.UserID)
 	}
-	
+
 	// Record ghost user creation
 	b.metrics.RecordGhostUserCreated()
-	
+
 	return ghostUser.UserID, nil
 }
 
@@ -347,7 +386,7 @@ func (b *MattermostToMatrixBridge) SyncUserToMatrix(user *model.User) error {
 	// Check if we have a ghost user for this Mattermost user
 	ghostUserID, exists := b.getGhostUser(user.Id)
 	if !exists {
-		b.logger.LogDebug("No ghost user found for user sync", "user_id", user.Id, "username", user.Username)
+		b.logger.LogInfo("No ghost user found for user sync", "user_id", user.Id, "username", user.Username)
 		return nil // No ghost user exists yet, nothing to update
 	}
 
@@ -368,7 +407,7 @@ func (b *MattermostToMatrixBridge) SyncUserToMatrix(user *model.User) error {
 			b.logger.LogError("Failed to update ghost user display name", "error", err, "user_id", user.Id, "ghost_user_id", ghostUserID, "display_name", displayName)
 			// Continue to avatar update even if display name fails
 		} else {
-			b.logger.LogDebug("Updated ghost user display name", "user_id", user.Id, "ghost_user_id", ghostUserID, "display_name", displayName)
+			b.logger.LogInfo("Updated ghost user display name", "user_id", user.Id, "ghost_user_id", ghostUserID, "display_name", displayName)
 		}
 	}
 
@@ -390,7 +429,6 @@ func (b *MattermostToMatrixBridge) SyncUserToMatrix(user *model.User) error {
 	return nil
 }
 
-// SyncPostToMatrix handles syncing a single post from Mattermost to Matrix
 // SyncPostsToMatrix syncs multiple posts to Matrix for a single channel, optimizing room resolution
 func (b *MattermostToMatrixBridge) SyncPostsToMatrix(posts []*model.Post, channelID string) error {
 	if len(posts) == 0 {
@@ -441,6 +479,7 @@ func (b *MattermostToMatrixBridge) syncPostToMatrixWithResolvedRoom(post *model.
 	if appErr != nil {
 		return errors.Wrap(appErr, "failed to get user")
 	}
+	b.syncProfileIfChanged(user)
 
 	// Check if this post already has a Matrix event ID (indicating it's an edit)
 	config := b.getConfiguration()
@@ -487,6 +526,7 @@ func (b *MattermostToMatrixBridge) syncPostToMatrixWithResolvedRoom(post *model.
 	return nil
 }
 
+// SyncPostToMatrix syncs a single post (create, edit or delete) to the Matrix room mapped to channelID.
 func (b *MattermostToMatrixBridge) SyncPostToMatrix(post *model.Post, channelID string) error {
 	// Check if this is a post deletion
 	if post.DeleteAt != 0 {
@@ -536,14 +576,14 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		return nil
 	}
 
-	// Get Matrix user ID (either ghost or real user depending on config)
-	matrixUserID, err := b.GetMatrixUserID(user.Id)
+	// Get the sending identity: a linked Matrix account, or a ghost
+	matrixUserID, sender, _, err := b.resolveSender(user.Id)
 	if err != nil {
 		return errors.Wrap(err, "failed to get Matrix user ID")
 	}
 
-	// Ensure user is joined to the room
-	err = b.ensureGhostUserInRoom(matrixUserID, matrixRoomID, user.Id)
+	// Ensure the sender is joined to the room
+	err = b.ensureSenderInRoom(sender, matrixUserID, matrixRoomID, user.Id)
 	if err != nil {
 		return errors.Wrap(err, "failed to ensure user is in room")
 	}
@@ -613,7 +653,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	// Send message using consolidated method
 	messageRequest := matrix.MessageRequest{
 		RoomID:        matrixRoomID,
-		GhostUserID:   matrixUserID,  // This can be either ghost or real user
+		GhostUserID:   matrixUserID, // This can be either ghost or real user
 		Message:       finalPlainText,
 		HTMLMessage:   finalHTMLContent,
 		ThreadEventID: threadEventID,
@@ -622,7 +662,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		Mentions:      finalMentions,
 	}
 
-	sendResponse, err := b.matrixClient.SendMessage(messageRequest)
+	sendResponse, err := sender.SendMessage(messageRequest)
 	if err != nil {
 		return errors.Wrap(err, "failed to send message to Matrix")
 	}
@@ -631,8 +671,9 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		b.logger.LogDebug("Posted message with file attachments to Matrix", "post_id", post.Id, "file_count", len(pendingFiles))
 	}
 
-	// Store the Matrix event ID as a post property for reaction mapping
-	if sendResponse != nil && sendResponse.EventID != "" {
+	// Store the Matrix event ID as a post property for reaction mapping.
+	// System messages cannot be updated through the API, so skip them.
+	if sendResponse != nil && sendResponse.EventID != "" && !post.IsSystemMessage() {
 		if post.Props == nil {
 			post.Props = make(map[string]any)
 		}
@@ -655,10 +696,10 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	}
 
 	b.logger.LogDebug("Successfully created post in Matrix", "post_id", post.Id, "matrix_user_id", matrixUserID, "event_id", sendResponse.EventID)
-	
+
 	// Record successful message sync
 	b.metrics.RecordMessageToMatrix()
-	
+
 	return nil
 }
 
@@ -670,14 +711,14 @@ func (b *MattermostToMatrixBridge) updatePostInMatrix(post *model.Post, matrixRo
 		return nil
 	}
 
-	// Create or get ghost user
-	ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
+	// Resolve the sending identity (linked account or ghost)
+	ghostUserID, sender, _, err := b.resolveSender(user.Id)
 	if err != nil {
 		return errors.Wrap(err, "failed to create or get ghost user")
 	}
 
-	// Ensure ghost user is still in the room
-	err = b.ensureGhostUserInRoom(ghostUserID, matrixRoomID, user.Id)
+	// Ensure the sender is still in the room
+	err = b.ensureSenderInRoom(sender, ghostUserID, matrixRoomID, user.Id)
 	if err != nil {
 		return errors.Wrap(err, "failed to ensure ghost user is in room")
 	}
@@ -764,7 +805,7 @@ func (b *MattermostToMatrixBridge) updatePostInMatrix(post *model.Post, matrixRo
 	}
 
 	// Send edit as ghost user with proper HTML formatting support
-	_, err = b.matrixClient.EditMessageAsGhost(matrixRoomID, eventID, finalPlainText, finalHTMLContent, ghostUserID)
+	_, err = sender.EditMessageAsGhost(matrixRoomID, eventID, finalPlainText, finalHTMLContent, ghostUserID)
 	if err != nil {
 		return errors.Wrap(err, "failed to edit message as ghost user")
 	}
@@ -904,14 +945,14 @@ func (b *MattermostToMatrixBridge) addReactionToMatrix(reaction *model.Reaction,
 		return nil
 	}
 
-	// Create or get ghost user
-	ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
+	// Resolve the sending identity (linked account or ghost)
+	ghostUserID, sender, _, err := b.resolveSender(user.Id)
 	if err != nil {
 		return errors.Wrap(err, "failed to create or get ghost user for reaction")
 	}
 
-	// Ensure ghost user is in the room
-	err = b.ensureGhostUserInRoom(ghostUserID, matrixRoomID, user.Id)
+	// Ensure the sender is in the room
+	err = b.ensureSenderInRoom(sender, ghostUserID, matrixRoomID, user.Id)
 	if err != nil {
 		return errors.Wrap(err, "failed to ensure ghost user is in room for reaction")
 	}
@@ -920,8 +961,14 @@ func (b *MattermostToMatrixBridge) addReactionToMatrix(reaction *model.Reaction,
 	emoji := b.convertEmojiForMatrix(reaction.EmojiName)
 
 	// Send reaction as ghost user
-	_, err = b.matrixClient.SendReactionAsGhost(matrixRoomID, matrixEventID, emoji, ghostUserID)
+	_, err = sender.SendReactionAsGhost(matrixRoomID, matrixEventID, emoji, ghostUserID)
 	if err != nil {
+		// The same reaction already exists in the room (hooks can fire more than
+		// once for one reaction); the desired state is reached.
+		if strings.Contains(err.Error(), "M_DUPLICATE_ANNOTATION") {
+			b.logger.LogDebug("Reaction already present in Matrix, treating as synced", "post_id", reaction.PostId, "emoji", reaction.EmojiName, "ghost_user_id", ghostUserID)
+			return nil
+		}
 		return errors.Wrap(err, "failed to send reaction as ghost user")
 	}
 
@@ -1101,42 +1148,29 @@ func (b *MattermostToMatrixBridge) addMatrixMentionsWithData(content map[string]
 			continue
 		}
 
-		var matrixUserID string
-		var displayName string
+		displayName := user.GetDisplayName(model.ShowFullName)
+		if displayName == "" {
+			displayName = user.Username
+		}
 
-		// Check if this user has a Matrix ghost user (Mattermost user → Matrix ghost)
-		if ghostUserID, exists := b.getGhostUser(user.Id); exists {
+		var matrixUserID string
+		// A user who came from Matrix is mentioned as their real Matrix
+		// account, never as a ghost of their Mattermost shadow.
+		if originalMatrixUserID, err := b.GetMatrixUserIDFromMattermostUser(user.Id); err == nil && originalMatrixUserID != "" {
+			matrixUserID = originalMatrixUserID
+			b.logger.LogDebug("Mentioning bridged Matrix user by their own account", "username", username, "matrix_user_id", matrixUserID)
+		} else if user.IsRemote() {
+			b.logger.LogDebug("Skipping mention of remote user without a Matrix mapping", "username", username)
+			continue
+		} else if ghostUserID, exists := b.getGhostUser(user.Id); exists {
 			matrixUserID = ghostUserID
-			displayName = user.GetDisplayName(model.ShowFullName)
-			if displayName == "" {
-				displayName = user.Username // Fallback to username
-			}
-			b.logger.LogDebug("Found existing Matrix ghost user for Mattermost user mention", "username", username, "ghost_user_id", ghostUserID, "display_name", displayName)
 		} else {
-			// Check if this is a Matrix user represented in Mattermost (Matrix user → Mattermost user)
-			originalMatrixUserID, err := b.GetMatrixUserIDFromMattermostUser(user.Id)
-			if err == nil && originalMatrixUserID != "" {
-				matrixUserID = originalMatrixUserID
-				displayName = user.GetDisplayName(model.ShowFullName)
-				if displayName == "" {
-					displayName = user.Username // Fallback to username
-				}
-				b.logger.LogDebug("Found original Matrix user for bridged user mention", "username", username, "original_matrix_user_id", originalMatrixUserID, "display_name", displayName)
-			} else {
-				// No existing ghost user or original Matrix user found - create new ghost user for mention
-				b.logger.LogDebug("Creating new ghost user for mentioned user", "username", username, "user_id", user.Id)
-				ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
-				if err != nil {
-					b.logger.LogWarn("Failed to create ghost user for mentioned user", "username", username, "user_id", user.Id, "error", err)
-					continue
-				}
-				matrixUserID = ghostUserID
-				displayName = user.GetDisplayName(model.ShowFullName)
-				if displayName == "" {
-					displayName = user.Username // Fallback to username
-				}
-				b.logger.LogDebug("Created new Matrix ghost user for mention", "username", username, "ghost_user_id", ghostUserID, "display_name", displayName)
+			ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
+			if err != nil {
+				b.logger.LogWarn("Failed to create ghost user for mentioned user", "username", username, "user_id", user.Id, "error", err)
+				continue
 			}
+			matrixUserID = ghostUserID
 		}
 
 		matrixUserIDs = append(matrixUserIDs, matrixUserID)

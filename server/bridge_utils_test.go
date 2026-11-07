@@ -200,7 +200,7 @@ func TestExtractMatrixMessageContent(t *testing.T) {
 					},
 				},
 			},
-			expected: " * Edited message", // Falls back to top-level body
+			expected: ` \* Edited message`, // Falls back to top-level body; plain text is escaped for Mattermost
 		},
 		{
 			name: "edit event with empty m.new_content",

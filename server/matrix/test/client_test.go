@@ -97,7 +97,7 @@ func (suite *MatrixClientTestSuite) testRoomOperations() {
 		roomTopic := "Integration test room"
 		mattermostChannelID := "test-channel-123"
 
-		roomIdentifier, err := suite.client.CreateRoom(roomName, roomTopic, suite.matrixContainer.ServerDomain, true, mattermostChannelID)
+		roomIdentifier, err := suite.client.CreateRoom(roomName, roomTopic, suite.matrixContainer.ServerDomain, true, mattermostChannelID, false, "")
 		require.NoError(suite.T(), err, "Should create room successfully")
 		assert.NotEmpty(suite.T(), roomIdentifier, "Room identifier should not be empty")
 		suite.T().Logf("Created room: %s", roomIdentifier)
@@ -105,7 +105,7 @@ func (suite *MatrixClientTestSuite) testRoomOperations() {
 
 	suite.Run("JoinRoom", func() {
 		// Create a room first
-		roomIdentifier, err := suite.client.CreateRoom("Join Test Room", "Testing room joining", suite.matrixContainer.ServerDomain, false, "test-join-channel")
+		roomIdentifier, err := suite.client.CreateRoom("Join Test Room", "Testing room joining", suite.matrixContainer.ServerDomain, false, "test-join-channel", false, "")
 		require.NoError(suite.T(), err, "Should create room for join test")
 
 		// Join the room as the AS bot
@@ -115,7 +115,7 @@ func (suite *MatrixClientTestSuite) testRoomOperations() {
 
 	suite.Run("ResolveRoomAlias", func() {
 		// Create a room first
-		roomIdentifier, err := suite.client.CreateRoom("Resolve Test Room", "Testing alias resolution", suite.matrixContainer.ServerDomain, false, "test-resolve-channel")
+		roomIdentifier, err := suite.client.CreateRoom("Resolve Test Room", "Testing alias resolution", suite.matrixContainer.ServerDomain, false, "test-resolve-channel", false, "")
 		require.NoError(suite.T(), err, "Should create room for alias test")
 
 		// Resolve the alias to room ID
@@ -201,7 +201,7 @@ func (suite *MatrixClientTestSuite) testUserOperations() {
 // testMessageOperations tests message sending, editing, reactions, and redactions
 func (suite *MatrixClientTestSuite) testMessageOperations() {
 	// Create a test room and ghost user for message tests
-	roomIdentifier, err := suite.client.CreateRoom("Message Test Room", "Testing messages", suite.matrixContainer.ServerDomain, false, "test-message-channel")
+	roomIdentifier, err := suite.client.CreateRoom("Message Test Room", "Testing messages", suite.matrixContainer.ServerDomain, false, "test-message-channel", false, "")
 	require.NoError(suite.T(), err, "Should create room for message tests")
 
 	roomID, err := suite.client.ResolveRoomAlias(roomIdentifier)
@@ -408,7 +408,7 @@ func BenchmarkMatrixClientOperations(b *testing.B) {
 	b.Run("CreateRoom", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			roomName := fmt.Sprintf("Benchmark Room %d", i)
-			_, err := client.CreateRoom(roomName, "Benchmark test", matrixContainer.ServerDomain, false, fmt.Sprintf("bench-channel-%d", i))
+			_, err := client.CreateRoom(roomName, "Benchmark test", matrixContainer.ServerDomain, false, fmt.Sprintf("bench-channel-%d", i), false, "")
 			if err != nil {
 				b.Fatalf("Failed to create room: %v", err)
 			}
@@ -417,7 +417,7 @@ func BenchmarkMatrixClientOperations(b *testing.B) {
 
 	b.Run("SendMessage", func(b *testing.B) {
 		// Create room and user once
-		roomID, _ := client.CreateRoom("Benchmark Messages", "Message benchmark", matrixContainer.ServerDomain, false, "bench-msg-channel")
+		roomID, _ := client.CreateRoom("Benchmark Messages", "Message benchmark", matrixContainer.ServerDomain, false, "bench-msg-channel", false, "")
 		resolvedRoomID, _ := client.ResolveRoomAlias(roomID)
 		ghostUser, _ := client.CreateGhostUser("bench-user", "Bench User", nil, "")
 		err := client.JoinRoomAsUser(resolvedRoomID, ghostUser.UserID)
@@ -574,7 +574,7 @@ func (suite *MatrixClientTestSuite) TestMatrixClientErrorHandling() {
 		err := networkFailClient.TestConnection()
 		assert.Error(suite.T(), err, "Should fail with network error")
 
-		_, err = networkFailClient.CreateRoom("Test", "Test", "test.local", false, "test")
+		_, err = networkFailClient.CreateRoom("Test", "Test", "test.local", false, "test", false, "")
 		assert.Error(suite.T(), err, "Should fail with network error")
 
 		_, err = networkFailClient.GetServerInfo()
@@ -585,7 +585,7 @@ func (suite *MatrixClientTestSuite) TestMatrixClientErrorHandling() {
 // TestMatrixClientWithFiles tests file attachment handling
 func (suite *MatrixClientTestSuite) TestMatrixClientWithFiles() {
 	// Create test room and user
-	roomIdentifier, err := suite.client.CreateRoom("File Test Room", "Testing file attachments", suite.matrixContainer.ServerDomain, false, "test-file-channel")
+	roomIdentifier, err := suite.client.CreateRoom("File Test Room", "Testing file attachments", suite.matrixContainer.ServerDomain, false, "test-file-channel", false, "")
 	require.NoError(suite.T(), err, "Should create room for file tests")
 
 	roomID, err := suite.client.ResolveRoomAlias(roomIdentifier)
@@ -1219,7 +1219,7 @@ func TestMXCURIValidationErrorReportingWithBetterErrorMessages(t *testing.T) {
 func (suite *MatrixClientTestSuite) testAdvancedRoomOperations() {
 	suite.Run("GetRoomJoinRule", func() {
 		// Create a public room
-		publicRoomIdentifier, err := suite.client.CreateRoom("Public Test Room", "Testing public room join rules", suite.matrixContainer.ServerDomain, true, "test-public-channel")
+		publicRoomIdentifier, err := suite.client.CreateRoom("Public Test Room", "Testing public room join rules", suite.matrixContainer.ServerDomain, true, "test-public-channel", false, "")
 		require.NoError(suite.T(), err, "Should create public room")
 
 		publicRoomID, err := suite.client.ResolveRoomAlias(publicRoomIdentifier)
@@ -1232,7 +1232,7 @@ func (suite *MatrixClientTestSuite) testAdvancedRoomOperations() {
 		suite.T().Logf("Public room %s has join rule: %s", publicRoomID, joinRule)
 
 		// Create a private room
-		privateRoomIdentifier, err := suite.client.CreateRoom("Private Test Room", "Testing private room join rules", suite.matrixContainer.ServerDomain, false, "test-private-channel")
+		privateRoomIdentifier, err := suite.client.CreateRoom("Private Test Room", "Testing private room join rules", suite.matrixContainer.ServerDomain, false, "test-private-channel", false, "")
 		require.NoError(suite.T(), err, "Should create private room")
 
 		privateRoomID, err := suite.client.ResolveRoomAlias(privateRoomIdentifier)
@@ -1255,7 +1255,7 @@ func (suite *MatrixClientTestSuite) testAdvancedRoomOperations() {
 		roomTopic := "Testing application service bot auto-join"
 		channelID := "test-appbot-channel"
 
-		roomIdentifier, err := suite.client.CreateRoom(roomName, roomTopic, suite.matrixContainer.ServerDomain, false, channelID)
+		roomIdentifier, err := suite.client.CreateRoom(roomName, roomTopic, suite.matrixContainer.ServerDomain, false, channelID, false, "")
 		require.NoError(suite.T(), err, "Should create room successfully")
 
 		roomID, err := suite.client.ResolveRoomAlias(roomIdentifier)
@@ -1297,7 +1297,7 @@ func (suite *MatrixClientTestSuite) testAdvancedRoomOperations() {
 
 		// Test with public room - should join directly
 		suite.Run("PublicRoom", func() {
-			publicRoomIdentifier, err := suite.client.CreateRoom("Public Ghost Test Room", "Testing ghost user in public room", suite.matrixContainer.ServerDomain, true, "test-ghost-public-channel")
+			publicRoomIdentifier, err := suite.client.CreateRoom("Public Ghost Test Room", "Testing ghost user in public room", suite.matrixContainer.ServerDomain, true, "test-ghost-public-channel", false, "")
 			require.NoError(suite.T(), err, "Should create public room")
 
 			publicRoomID, err := suite.client.ResolveRoomAlias(publicRoomIdentifier)
@@ -1324,7 +1324,7 @@ func (suite *MatrixClientTestSuite) testAdvancedRoomOperations() {
 
 		// Test with private room - should invite then join
 		suite.Run("PrivateRoom", func() {
-			privateRoomIdentifier, err := suite.client.CreateRoom("Private Ghost Test Room", "Testing ghost user in private room", suite.matrixContainer.ServerDomain, false, "test-ghost-private-channel")
+			privateRoomIdentifier, err := suite.client.CreateRoom("Private Ghost Test Room", "Testing ghost user in private room", suite.matrixContainer.ServerDomain, false, "test-ghost-private-channel", false, "")
 			require.NoError(suite.T(), err, "Should create private room")
 
 			privateRoomID, err := suite.client.ResolveRoomAlias(privateRoomIdentifier)
@@ -1351,7 +1351,7 @@ func (suite *MatrixClientTestSuite) testAdvancedRoomOperations() {
 
 		// Test idempotency - joining user already in room
 		suite.Run("IdempotentJoin", func() {
-			roomIdentifier, err := suite.client.CreateRoom("Idempotent Test Room", "Testing idempotent join", suite.matrixContainer.ServerDomain, false, "test-idempotent-channel")
+			roomIdentifier, err := suite.client.CreateRoom("Idempotent Test Room", "Testing idempotent join", suite.matrixContainer.ServerDomain, false, "test-idempotent-channel", false, "")
 			require.NoError(suite.T(), err, "Should create room")
 
 			roomID, err := suite.client.ResolveRoomAlias(roomIdentifier)
@@ -1387,7 +1387,7 @@ func (suite *MatrixClientTestSuite) testAdvancedRoomOperations() {
 
 	suite.Run("InviteUserToRoom", func() {
 		// Create test room and users
-		roomIdentifier, err := suite.client.CreateRoom("Invite Test Room", "Testing user invitations", suite.matrixContainer.ServerDomain, false, "test-invite-channel")
+		roomIdentifier, err := suite.client.CreateRoom("Invite Test Room", "Testing user invitations", suite.matrixContainer.ServerDomain, false, "test-invite-channel", false, "")
 		require.NoError(suite.T(), err, "Should create room")
 
 		roomID, err := suite.client.ResolveRoomAlias(roomIdentifier)

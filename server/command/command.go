@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
@@ -25,25 +26,25 @@ type Configuration interface {
 // MetricsSummary holds a snapshot of all metrics at a point in time.
 // This type is defined in the main server package to avoid circular dependencies.
 type MetricsSummary = struct {
-	MessagesToMatrix     uint64            `json:"messages_to_matrix"`
-	MessagesFromMatrix   uint64            `json:"messages_from_matrix"`
-	MessageSyncErrors    uint64            `json:"message_sync_errors"`
-	MessageEditsSynced   uint64            `json:"message_edits_synced"`
-	ReactionsAdded       uint64            `json:"reactions_added"`
-	ReactionsRemoved     uint64            `json:"reactions_removed"`
-	GhostUsersCreated    uint64            `json:"ghost_users_created"`
-	RoomsCreated         uint64            `json:"rooms_created"`
-	ChannelsCreated      uint64            `json:"channels_created"`
-	UsersSynced          uint64            `json:"users_synced"`
-	MatrixAPICalls       uint64            `json:"matrix_api_calls"`
-	MatrixAPIErrors      uint64            `json:"matrix_api_errors"`
-	MatrixAPIRetries     uint64            `json:"matrix_api_retries"`
-	MessageLatencyAvgMs  float64           `json:"message_latency_avg_ms"`
-	MessageLatencyMaxMs  uint64            `json:"message_latency_max_ms"`
-	APILatencyAvgMs      float64           `json:"api_latency_avg_ms"`
-	APILatencyMaxMs      uint64            `json:"api_latency_max_ms"`
-	ErrorsByType         map[string]uint64 `json:"errors_by_type"`
-	UptimeSeconds        float64           `json:"uptime_seconds"`
+	MessagesToMatrix    uint64            `json:"messages_to_matrix"`
+	MessagesFromMatrix  uint64            `json:"messages_from_matrix"`
+	MessageSyncErrors   uint64            `json:"message_sync_errors"`
+	MessageEditsSynced  uint64            `json:"message_edits_synced"`
+	ReactionsAdded      uint64            `json:"reactions_added"`
+	ReactionsRemoved    uint64            `json:"reactions_removed"`
+	GhostUsersCreated   uint64            `json:"ghost_users_created"`
+	RoomsCreated        uint64            `json:"rooms_created"`
+	ChannelsCreated     uint64            `json:"channels_created"`
+	UsersSynced         uint64            `json:"users_synced"`
+	MatrixAPICalls      uint64            `json:"matrix_api_calls"`
+	MatrixAPIErrors     uint64            `json:"matrix_api_errors"`
+	MatrixAPIRetries    uint64            `json:"matrix_api_retries"`
+	MessageLatencyAvgMs float64           `json:"message_latency_avg_ms"`
+	MessageLatencyMaxMs uint64            `json:"message_latency_max_ms"`
+	APILatencyAvgMs     float64           `json:"api_latency_avg_ms"`
+	APILatencyMaxMs     uint64            `json:"api_latency_max_ms"`
+	ErrorsByType        map[string]uint64 `json:"errors_by_type"`
+	UptimeSeconds       float64           `json:"uptime_seconds"`
 }
 
 // MetricsAccessor interface for accessing plugin metrics
@@ -60,6 +61,30 @@ type MigrationResult struct {
 	ReverseDMMappingsCreated int
 }
 
+// MetricsProvider exposes the read-only metrics snapshot used by the
+// /matrix metrics command. The main package's *Metrics satisfies it.
+type MetricsProvider interface {
+	GetMessagesToMatrix() uint64
+	GetMessagesFromMatrix() uint64
+	GetMessageSyncErrors() uint64
+	GetMessageEditsSynced() uint64
+	GetReactionsAdded() uint64
+	GetReactionsRemoved() uint64
+	GetGhostUsersCreated() uint64
+	GetRoomsCreated() uint64
+	GetChannelsCreated() uint64
+	GetUsersSynced() uint64
+	GetMatrixAPICalls() uint64
+	GetMatrixAPIErrors() uint64
+	GetMatrixAPIRetries() uint64
+	GetMessageLatencyAvg() float64
+	GetMessageLatencyMax() uint64
+	GetAPILatencyAvg() float64
+	GetAPILatencyMax() uint64
+	GetErrorsByType() map[string]uint64
+	GetUptime() time.Duration
+}
+
 // PluginAccessor defines the interface for plugin functionality needed by command handlers
 type PluginAccessor interface {
 	// Matrix client access
@@ -72,27 +97,7 @@ type PluginAccessor interface {
 	GetConfiguration() Configuration
 
 	// Metrics access
-	GetMetrics() interface {
-		GetMessagesToMatrix() uint64
-		GetMessagesFromMatrix() uint64
-		GetMessageSyncErrors() uint64
-		GetMessageEditsSynced() uint64
-		GetReactionsAdded() uint64
-		GetReactionsRemoved() uint64
-		GetGhostUsersCreated() uint64
-		GetRoomsCreated() uint64
-		GetChannelsCreated() uint64
-		GetUsersSynced() uint64
-		GetMatrixAPICalls() uint64
-		GetMatrixAPIErrors() uint64
-		GetMatrixAPIRetries() uint64
-		GetMessageLatencyAvg() float64
-		GetMessageLatencyMax() uint64
-		GetAPILatencyAvg() float64
-		GetAPILatencyMax() uint64
-		GetErrorsByType() map[string]uint64
-		GetUptime() time.Duration
-	}
+	GetMetrics() MetricsProvider
 
 	// Ghost user management
 	CreateOrGetGhostUser(mattermostUserID string) (string, error)
@@ -107,9 +112,18 @@ type PluginAccessor interface {
 	// Shared channel access
 	GetRemoteID() string
 
+	// InvalidateChannelMapping drops cached channel → room lookups after a
+	// mapping changed.
+	InvalidateChannelMapping(channelID string)
+
 	// Migration access
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
+
+	// Identity linking (one person on both networks)
+	CreateIdentityLinkCode(mattermostUserID string) (string, error)
+	GetIdentityLink(mattermostUserID string) (matrixUserID string, puppeted bool, ok bool)
+	UnlinkIdentity(mattermostUserID string) error
 
 	// Backfill synchronization
 	SyncUser(userID string) error
@@ -252,7 +266,9 @@ const (
 	matrixCommandTrigger = "matrix"
 
 	// Main command usage
-	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|migrate] [room_name|room_alias|room_id]"
+	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|migrate] [room_name|room_alias|room_id]"
+	linkCommandDesc    = "Link your Matrix account so you are one identity on both networks"
+	unlinkCommandDesc  = "Remove the link to your Matrix account"
 
 	// Subcommand descriptions for autocomplete
 	testCommandDesc    = "Test Matrix server connection and configuration"
@@ -291,6 +307,9 @@ const (
 	// Sharing status messages
 	channelSharingEnabled = "\n\n✅ **Channel sharing enabled** - Messages will now sync to Matrix!"
 	channelSharingFailed  = "\n\n⚠️ **Note:** Failed to automatically enable channel sharing. You may need to manually enable shared channels for this channel to start syncing."
+	// channelSharingUnavailable is shown when Shared Channels is off on the
+	// server; the bridge then syncs through plugin hooks, which needs no setup.
+	channelSharingUnavailable = "\n\nℹ️ Shared Channels is not enabled on this server; the bridge syncs this channel through plugin hooks."
 
 	// Directory status messages
 	publishedToDirectory    = "\n**Directory:** Published to public directory"
@@ -334,13 +353,10 @@ const (
 	backfillInvalidMode  = "❌ Invalid backfill mode. Use: users, teams, channels, or all"
 )
 
-// NewCommandHandler creates and registers all slash commands for the Matrix Bridge plugin.
-func NewCommandHandler(plugin PluginAccessor) Command {
-	// Cache frequently used services for reduced verbosity
-	client := plugin.GetPluginAPIClient()
-	kvstore := plugin.GetKVStore()
-	pluginAPI := plugin.GetPluginAPI()
-
+// buildMatrixAutocompleteData describes the /matrix command tree used for
+// slash command registration. Tests reuse it so the expected registration
+// never drifts from what the plugin actually registers.
+func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData := model.NewAutocompleteData(matrixCommandTrigger, "[subcommand]", "Matrix bridge commands")
 	matrixData.AddCommand(model.NewAutocompleteData("test", "", testCommandDesc))
 
@@ -378,6 +394,20 @@ func NewCommandHandler(plugin PluginAccessor) Command {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("link", "", linkCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("unlink", "", unlinkCommandDesc))
+
+	return matrixData
+}
+
+// NewCommandHandler creates and registers all slash commands for the Matrix Bridge plugin.
+func NewCommandHandler(plugin PluginAccessor) Command {
+	// Cache frequently used services for reduced verbosity
+	client := plugin.GetPluginAPIClient()
+	kvstore := plugin.GetKVStore()
+	pluginAPI := plugin.GetPluginAPI()
+
+	matrixData := buildMatrixAutocompleteData()
 
 	err := client.SlashCommand.Register(&model.Command{
 		Trigger:          matrixCommandTrigger,
@@ -475,7 +505,7 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 	}
 
 	// Validate room identifier format (should start with ! or # and contain a colon)
-	if (!strings.HasPrefix(roomIdentifier, "!") && !strings.HasPrefix(roomIdentifier, "#")) || !strings.Contains(roomIdentifier, ":") {
+	if !isValidRoomIdentifier(roomIdentifier) {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
 			Text:         roomIdentifierError,
@@ -531,7 +561,7 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 		channel := &model.Channel{
 			TeamId:      args.TeamId,
 			Type:        model.ChannelTypeOpen,
-			DisplayName: strings.Title(strings.ReplaceAll(channelName, "-", " ")),
+			DisplayName: titleCase(strings.ReplaceAll(channelName, "-", " ")),
 			Name:        channelName,
 			Header:      fmt.Sprintf("Bridged to Matrix room: %s", roomIdentifier),
 		}
@@ -563,11 +593,12 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 					}
 				}
 			}
+			c.plugin.InvalidateChannelMapping(createdChannel.Id)
 
 			c.client.Log.Info("Created and mapped channel for Matrix room", "channel_id", createdChannel.Id, "channel_name", createdChannel.Name, "room_identifier", roomIdentifier)
 
 			responseText.WriteString(fmt.Sprintf("✅ **Created Mattermost channel** ~%s\n\n", createdChannel.Name))
-			responseText.WriteString(fmt.Sprintf("Messages between the Matrix room and Mattermost channel will now sync automatically."))
+			responseText.WriteString("Messages between the Matrix room and Mattermost channel will now sync automatically.")
 
 			// Add user to the channel
 			if _, appErr := c.client.Channel.AddUser(createdChannel.Id, args.UserId, args.UserId); appErr != nil {
@@ -594,7 +625,7 @@ func (c *Handler) executeMapCommand(args *model.CommandArgs, roomIdentifier stri
 	}
 
 	// Validate room identifier format (should start with ! or # and contain a colon)
-	if (!strings.HasPrefix(roomIdentifier, "!") && !strings.HasPrefix(roomIdentifier, "#")) || !strings.Contains(roomIdentifier, ":") {
+	if !isValidRoomIdentifier(roomIdentifier) {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
 			Text:         roomIdentifierError,
@@ -672,6 +703,7 @@ func (c *Handler) executeMapCommand(args *model.CommandArgs, roomIdentifier stri
 			}
 		}
 	}
+	c.plugin.InvalidateChannelMapping(args.ChannelId)
 
 	c.client.Log.Info("Channel mapping saved", "channel_id", args.ChannelId, "channel_name", channelName, "room_identifier", roomIdentifier)
 
@@ -807,6 +839,7 @@ func (c *Handler) executeUnmapCommand(args *model.CommandArgs) *model.CommandRes
 		// Continue - the main mapping was removed
 	}
 
+	c.plugin.InvalidateChannelMapping(args.ChannelId)
 	c.client.Log.Info("Removed Matrix room mapping", "channel_id", args.ChannelId, "room_identifier", matrixRoomIdentifier)
 
 	// Uninvite this plugin from the shared channel
@@ -838,6 +871,16 @@ func (c *Handler) executeCreateRoomCommand(args *model.CommandArgs, roomName str
 		return errResponse
 	}
 
+	// Channels created after the plugin was enabled already have a room;
+	// creating another would silently split the conversation.
+	if existing, err := c.kvstore.Get(kvstore.BuildChannelMappingKey(args.ChannelId)); err == nil && len(existing) > 0 {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text: fmt.Sprintf("ℹ️ This channel is already bridged to `%s`.\n\n"+
+				"Use `/matrix status` to inspect it, or `/matrix unmap` first if you really want a new room.", string(existing)),
+		}
+	}
+
 	// Get channel info for room name (if not provided) and topic
 	channel, appErr := c.client.Channel.Get(args.ChannelId)
 	channelName := args.ChannelId
@@ -866,11 +909,11 @@ func (c *Handler) executeCreateRoomCommand(args *model.CommandArgs, roomName str
 	// Create the Matrix room
 	// Extract server domain from Matrix server URL
 	serverDomain := c.extractServerDomain()
-	
+
 	// In Mirror Mode, use clean room names without _mattermost_ prefix
 	config := c.plugin.GetConfiguration()
 	skipPrefix := config.GetEnableMirrorMode()
-	
+
 	roomID, err := matrixClient.CreateRoom(roomName, topic, serverDomain, publish, args.ChannelId, skipPrefix, teamName)
 	if err != nil {
 		c.client.Log.Error("Failed to create Matrix room", "error", err, "room_name", roomName)
@@ -917,6 +960,7 @@ func (c *Handler) executeCreateRoomCommand(args *model.CommandArgs, roomName str
 		c.client.Log.Error("Failed to save room mapping", "error", err, "room_id", roomID, "channel_id", args.ChannelId)
 		// Continue anyway - the forward mapping was saved successfully
 	}
+	c.plugin.InvalidateChannelMapping(args.ChannelId)
 
 	// Share the channel and invite this plugin to receive sync messages
 	shareStatus := c.shareChannelAndInvitePlugin(args, channelName, topic)
@@ -1037,6 +1081,11 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 	}
 
 	subcommand := fields[1]
+
+	if denied := c.checkCommandPermission(args, subcommand); denied != nil {
+		return denied
+	}
+
 	switch subcommand {
 	case "test":
 		return c.executeTestCommand(args)
@@ -1149,6 +1198,10 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	case "metrics":
 		return c.executeMetricsCommand(args)
+	case "link":
+		return c.executeLinkCommand(args)
+	case "unlink":
+		return c.executeUnlinkCommand(args)
 	case "migrate":
 		return c.executeMigrateCommand(args)
 	default:
@@ -1159,8 +1212,44 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 	}
 }
 
+// checkCommandPermission enforces who may run each subcommand. Commands that
+// change bridge-wide state (user mappings, backfill, migrations, metrics)
+// require system admin. Commands that bridge a channel require the right to
+// manage that channel. Read-only commands are open to everyone.
+func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand string) *model.CommandResponse {
+	deny := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+
+	isSystemAdmin := func() bool {
+		return c.pluginAPI.HasPermissionTo(args.UserId, model.PermissionManageSystem)
+	}
+
+	switch subcommand {
+	case "map_user", "backfill", "migrate", "metrics":
+		if !isSystemAdmin() {
+			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
+		}
+	case "create", "map", "unmap", "join":
+		if isSystemAdmin() {
+			return nil
+		}
+		canManage := c.pluginAPI.HasPermissionToChannel(args.UserId, args.ChannelId, model.PermissionManagePublicChannelProperties) ||
+			c.pluginAPI.HasPermissionToChannel(args.UserId, args.ChannelId, model.PermissionManagePrivateChannelProperties)
+		if !canManage {
+			return deny("❌ You need permission to manage this channel to run `/matrix " + subcommand + "`.")
+		}
+	}
+	return nil
+}
+
 // shareChannelAndInvitePlugin shares a channel and invites this plugin to receive sync messages
 func (c *Handler) shareChannelAndInvitePlugin(args *model.CommandArgs, channelName, purpose string) string {
+	// Without Shared Channels the bridge runs on plugin hooks alone, which is
+	// a supported mode: say so instead of reporting a failure.
+	if !c.sharedChannelsEnabled() {
+		return channelSharingUnavailable
+	}
 	sharedChannel := &model.SharedChannel{
 		ChannelId:        args.ChannelId,
 		TeamId:           args.TeamId,
@@ -1194,6 +1283,19 @@ func (c *Handler) shareChannelAndInvitePlugin(args *model.CommandArgs, channelNa
 
 	c.client.Log.Info("Successfully invited plugin to shared channel", "channel_id", args.ChannelId, "remote_id", c.plugin.GetRemoteID())
 	return channelSharingEnabled
+}
+
+// sharedChannelsEnabled reports whether the server has Shared Channels
+// (Connected Workspaces) switched on.
+func (c *Handler) sharedChannelsEnabled() bool {
+	if c.pluginAPI == nil {
+		return false
+	}
+	cfg := c.pluginAPI.GetConfig()
+	if cfg == nil || cfg.ConnectedWorkspacesSettings.EnableSharedChannels == nil {
+		return false
+	}
+	return *cfg.ConnectedWorkspacesSettings.EnableSharedChannels
 }
 
 // extractServerDomain extracts the domain from the Matrix server URL
@@ -1319,35 +1421,35 @@ func (c *Handler) executeTestCommand(_ *model.CommandArgs) *model.CommandRespons
 
 func (c *Handler) executeMetricsCommand(_ *model.CommandArgs) *model.CommandResponse {
 	metrics := c.plugin.GetMetrics()
-	
+
 	var responseText strings.Builder
 	responseText.WriteString("📊 **Matrix Bridge Metrics**\n\n")
-	
+
 	// Message metrics
 	responseText.WriteString("**Messages**\n")
 	responseText.WriteString(fmt.Sprintf("• To Matrix: %d\n", metrics.GetMessagesToMatrix()))
 	responseText.WriteString(fmt.Sprintf("• From Matrix: %d\n", metrics.GetMessagesFromMatrix()))
 	responseText.WriteString(fmt.Sprintf("• Sync Errors: %d\n", metrics.GetMessageSyncErrors()))
 	responseText.WriteString(fmt.Sprintf("• Edits Synced: %d\n\n", metrics.GetMessageEditsSynced()))
-	
+
 	// Reaction metrics
 	responseText.WriteString("**Reactions**\n")
 	responseText.WriteString(fmt.Sprintf("• Added: %d\n", metrics.GetReactionsAdded()))
 	responseText.WriteString(fmt.Sprintf("• Removed: %d\n\n", metrics.GetReactionsRemoved()))
-	
+
 	// Entity metrics
 	responseText.WriteString("**Entities**\n")
 	responseText.WriteString(fmt.Sprintf("• Ghost Users Created: %d\n", metrics.GetGhostUsersCreated()))
 	responseText.WriteString(fmt.Sprintf("• Rooms Created: %d\n", metrics.GetRoomsCreated()))
 	responseText.WriteString(fmt.Sprintf("• Channels Created: %d\n", metrics.GetChannelsCreated()))
 	responseText.WriteString(fmt.Sprintf("• Users Synced: %d\n\n", metrics.GetUsersSynced()))
-	
+
 	// API metrics
 	responseText.WriteString("**Matrix API**\n")
 	responseText.WriteString(fmt.Sprintf("• API Calls: %d\n", metrics.GetMatrixAPICalls()))
 	responseText.WriteString(fmt.Sprintf("• API Errors: %d\n", metrics.GetMatrixAPIErrors()))
 	responseText.WriteString(fmt.Sprintf("• API Retries: %d\n\n", metrics.GetMatrixAPIRetries()))
-	
+
 	// Latency metrics
 	avgLatency := metrics.GetMessageLatencyAvg()
 	if avgLatency > 0 {
@@ -1361,7 +1463,7 @@ func (c *Handler) executeMetricsCommand(_ *model.CommandArgs) *model.CommandResp
 		}
 		responseText.WriteString("\n")
 	}
-	
+
 	// Error breakdown
 	errorsByType := metrics.GetErrorsByType()
 	if len(errorsByType) > 0 {
@@ -1371,10 +1473,10 @@ func (c *Handler) executeMetricsCommand(_ *model.CommandArgs) *model.CommandResp
 		}
 		responseText.WriteString("\n")
 	}
-	
+
 	// Uptime
 	responseText.WriteString(fmt.Sprintf("**Uptime:** %.1f seconds\n", metrics.GetUptime().Seconds()))
-	
+
 	return &model.CommandResponse{
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         responseText.String(),
@@ -1536,5 +1638,79 @@ func (c *Handler) executeMigrateCommand(_ *model.CommandArgs) *model.CommandResp
 			currentVersion, kvstore.CurrentKVStoreVersion,
 			userMappingsAdded, channelMappingsAdded, roomMappingsAdded,
 			dmMappingsAdded, reverseDMMappingsAdded),
+	}
+}
+
+// titleCase upper-cases the first letter of every space-separated word.
+func titleCase(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		r := []rune(w)
+		r[0] = unicode.ToUpper(r[0])
+		words[i] = string(r)
+	}
+	return strings.Join(words, " ")
+}
+
+// isValidRoomIdentifier accepts a room alias (#name:server) or a room ID.
+// Room IDs carry a ":server" suffix up to room version 11; from room version
+// 12 (MSC4291) they are an opaque "!<hash>" without a server part, so a
+// colon is only required for aliases.
+func isValidRoomIdentifier(roomIdentifier string) bool {
+	switch {
+	case strings.HasPrefix(roomIdentifier, "#"):
+		return strings.Contains(roomIdentifier, ":") && len(roomIdentifier) > 2
+	case strings.HasPrefix(roomIdentifier, "!"):
+		return len(roomIdentifier) > 1 && !strings.ContainsAny(roomIdentifier, " \t\n")
+	default:
+		return false
+	}
+}
+
+// executeLinkCommand issues a one-time code the user redeems with the bridge
+// bot in Matrix ("!mattermost link <code>").
+func (c *Handler) executeLinkCommand(args *model.CommandArgs) *model.CommandResponse {
+	if matrixUserID, puppeted, ok := c.plugin.GetIdentityLink(args.UserId); ok {
+		mode := "Your Mattermost messages are sent by a ghost user; send `!mattermost login <access_token>` to the bridge bot to post as your own account."
+		if puppeted {
+			mode = "Your Mattermost messages are sent as that account."
+		}
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         fmt.Sprintf("✅ Already linked to `%s`. %s Use `/matrix unlink` to remove the link.", matrixUserID, mode),
+		}
+	}
+
+	code, err := c.plugin.CreateIdentityLinkCode(args.UserId)
+	if err != nil {
+		c.client.Log.Error("Failed to create identity link code", "error", err, "user_id", args.UserId)
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "❌ Could not create a link code. Check plugin logs for details.",
+		}
+	}
+
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text: fmt.Sprintf("🔗 **Link your Matrix account**\n\n"+
+			"1. In your Matrix client, start a direct message with the bridge bot `@%s:<your Matrix server>`.\n"+
+			"2. Send it: `!mattermost link %s`\n\n"+
+			"The code expires in 15 minutes. Afterwards your Matrix messages in bridged rooms post as you here, "+
+			"and `!mattermost login <access_token>` lets your Mattermost messages appear from your Matrix account.",
+			matrix.BridgeBotLocalpart, code),
+	}
+}
+
+// executeUnlinkCommand removes the user's identity link.
+func (c *Handler) executeUnlinkCommand(args *model.CommandArgs) *model.CommandResponse {
+	if err := c.plugin.UnlinkIdentity(args.UserId); err != nil {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "❌ " + err.Error(),
+		}
+	}
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         "✅ Your Matrix account has been unlinked. Your messages will be bridged through a ghost user again.",
 	}
 }

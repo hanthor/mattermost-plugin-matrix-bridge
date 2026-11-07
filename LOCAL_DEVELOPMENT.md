@@ -24,9 +24,9 @@ If you prefer to set things up manually, follow these steps:
 ### Prerequisites
 
 - Docker and Docker Compose
-- Go 1.21+ (for building the plugin)
-- Node.js 18+ and npm (for building the webapp)
-- A Pro/Enterprise Mattermost license (for Shared Channels feature)
+- Go 1.26+ (for building the plugin)
+- Node.js 22+ and npm (for building the webapp)
+- Optional: a Mattermost Professional/Enterprise license. Shared Channels then also syncs through the Connected Workspaces framework; without it the bridge runs in hooks-only mode.
 
 ### Step 1: Build the Plugin
 
@@ -181,7 +181,7 @@ docker compose logs mattermost
 ```
 
 Common issues:
-- Missing Pro/Enterprise license (required for Shared Channels)
+- Shared Channels not enabled (optional; the bridge logs a warning and runs in hooks-only mode)
 - Plugin build errors
 
 ### Matrix connection fails

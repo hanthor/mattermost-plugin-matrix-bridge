@@ -1,0 +1,13 @@
+{
+  "name": "bridge-walkthrough",
+  "private": true,
+  "type": "module",
+  "description": "Playwright script that captures the walkthrough screenshots against the Complement e2e stack",
+  "scripts": {
+    "walkthrough": "node walkthrough.mjs"
+  },
+  "dependencies": {
+    "@mattermost/playwright-lib": "11.4.0",
+    "@playwright/test": "1.65.0"
+  }
+}

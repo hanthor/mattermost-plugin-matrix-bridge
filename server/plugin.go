@@ -131,6 +131,13 @@ func (p *Plugin) OnActivate() error {
 
 	p.initMatrixClient()
 
+	// Make sure the bridge bot exists on the homeserver before it joins rooms.
+	if cfg := p.getConfiguration(); cfg.EnableSync && cfg.MatrixServerURL != "" && cfg.MatrixASToken != "" {
+		if err := p.matrixClient.EnsureBotRegistered(); err != nil {
+			p.logger.LogWarn("Could not register the bridge bot on the homeserver", "error", err)
+		}
+	}
+
 	// Run KV store migrations before initializing bridges
 	if err := p.runKVStoreMigrations(); err != nil {
 		return errors.Wrap(err, "failed to run KV store migrations")
@@ -149,7 +156,7 @@ func (p *Plugin) OnActivate() error {
 	job, err := cluster.Schedule(
 		p.API,
 		"BackgroundJob",
-		cluster.MakeWaitForRoundedInterval(1*time.Hour),
+		cluster.MakeWaitForRoundedInterval(profileSweepInterval),
 		p.runJob,
 	)
 	if err != nil {
@@ -191,6 +198,10 @@ func (p *Plugin) initMatrixClient() {
 	rateLimitMode := matrix.ParseRateLimitingMode(config.RateLimitingMode)
 	rateLimitConfig := matrix.GetRateLimitConfigByMode(rateLimitMode)
 	p.matrixClient = matrix.NewClientWithRateLimit(config.MatrixServerURL, config.MatrixASToken, p.remoteID, p.API, rateLimitConfig)
+	if config.MatrixServerDomain != "" {
+		// The homeserver's server_name may differ from the hostname in the URL.
+		p.matrixClient.SetServerDomain(config.MatrixServerDomain)
+	}
 }
 
 func (p *Plugin) initBridges() {
@@ -265,33 +276,21 @@ func (p *Plugin) GetKVStore() kvstore.KVStore {
 	return p.kvstore
 }
 
+// InvalidateChannelMapping drops the cached channel → room lookup after a
+// mapping was created, changed or removed outside the bridge utilities.
+func (p *Plugin) InvalidateChannelMapping(channelID string) {
+	if p.roomMappingCache != nil {
+		p.roomMappingCache.Delete(kvstore.BuildChannelMappingKey(channelID))
+	}
+}
+
 // GetConfiguration returns the plugin configuration
 func (p *Plugin) GetConfiguration() command.Configuration {
 	return p.getConfiguration()
 }
 
 // GetMetrics returns the metrics collector wrapped to satisfy the command interface
-func (p *Plugin) GetMetrics() interface {
-	GetMessagesToMatrix() uint64
-	GetMessagesFromMatrix() uint64
-	GetMessageSyncErrors() uint64
-	GetMessageEditsSynced() uint64
-	GetReactionsAdded() uint64
-	GetReactionsRemoved() uint64
-	GetGhostUsersCreated() uint64
-	GetRoomsCreated() uint64
-	GetChannelsCreated() uint64
-	GetUsersSynced() uint64
-	GetMatrixAPICalls() uint64
-	GetMatrixAPIErrors() uint64
-	GetMatrixAPIRetries() uint64
-	GetMessageLatencyAvg() float64
-	GetMessageLatencyMax() uint64
-	GetAPILatencyAvg() float64
-	GetAPILatencyMax() uint64
-	GetErrorsByType() map[string]uint64
-	GetUptime() time.Duration
-} {
+func (p *Plugin) GetMetrics() command.MetricsProvider {
 	return p.metrics
 }
 
@@ -403,30 +402,25 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 			p.logger.LogError("Failed to invite remote user to Matrix room", "error", err, "user_id", user.Id, "username", user.Username, "channel_id", channelMember.ChannelId)
 		}
 	} else {
-		// This is a local Mattermost user
+		// This is a local Mattermost user. Ghosts are created when the account
+		// is, so bring the name and avatar up to date before people see it.
+		p.mattermostToMatrixBridge.syncProfileIfChanged(user)
 		var matrixUserID string
-		
+
 		if config.EnableMirrorMode {
 			// Mirror Mode: Create or use real Matrix user based on username
-			serverDomain := config.MatrixServerDomain
-			if serverDomain == "" {
-				serverDomain = "synapse" // Default to "synapse" if not configured
-			}
-			matrixUserID = fmt.Sprintf("@%s:%s", user.Username, serverDomain)
+			matrixUserID = fmt.Sprintf("@%s:%s", user.Username, p.matrixServerDomain())
 			p.logger.LogDebug("Mirror mode: Adding Mattermost user to Matrix", "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
-			
+
 			// Auto-create the user if needed (will be idempotent)
-			password := config.MirrorModePassword
-			if password == "" {
-				password = "mattermost-mirror-" + user.Id
-			}
-			
+			password := config.GetMirrorModePassword()
+
 			_, err := p.matrixClient.RegisterUserWithASToken(user.Username, password)
 			if err != nil {
 				p.logger.LogWarn("Failed to register Matrix user (may already exist)", "error", err, "matrix_user_id", matrixUserID)
 				// Continue anyway - user likely exists
 			}
-			
+
 			// Sync profile if enabled
 			if config.SyncUserProfiles {
 				displayName := user.GetDisplayName(model.ShowFullName)
@@ -479,23 +473,6 @@ func (p *Plugin) UserHasBeenCreated(_ *plugin.Context, user *model.User) {
 	}
 }
 
-// UserHasUpdated is called when a user is updated in Mattermost
-func (p *Plugin) UserHasUpdated(_ *plugin.Context, user *model.User, _ *model.User) {
-	if user.IsBot {
-		return
-	}
-
-	config := p.getConfiguration()
-	if !config.EnableSync {
-		return
-	}
-
-	p.logger.LogDebug("User updated, syncing to Matrix", "user_id", user.Id, "username", user.Username)
-	if err := p.mattermostToMatrixBridge.SyncUserToMatrix(user); err != nil {
-		p.logger.LogError("Failed to sync user update to Matrix", "user_id", user.Id, "username", user.Username, "error", err)
-	}
-}
-
 // ChannelHasBeenCreated is called when a new channel is created in Mattermost
 func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel) {
 	config := p.getConfiguration()
@@ -539,7 +516,7 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 
 	// Get team name to include in room alias (prevents collisions across teams)
 	teamName := ""
-	if channel.TeamId != "" {
+	if channel.TeamId != "" && p.API != nil {
 		if team, err := p.API.GetTeam(channel.TeamId); err == nil && team != nil {
 			teamName = team.Name
 		}
@@ -557,8 +534,18 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 
 	p.logger.LogInfo("Created Matrix room for new channel", "room_id", roomID, "channel_name", channel.Name)
 
-	// Automatically map the created room to this channel (both directions)
+	// An administrator may have mapped the channel while the room was being
+	// created (/matrix create or /matrix map); never overwrite that.
 	mappingKey := kvstore.BuildChannelMappingKey(channel.Id)
+	if existing, err := p.kvstore.Get(mappingKey); err == nil && len(existing) > 0 && string(existing) != roomID {
+		p.logger.LogInfo("Channel was mapped while its room was being created; keeping the existing mapping", "channel_id", channel.Id, "existing_room", string(existing), "unused_room", roomID)
+		if err := p.matrixClient.LeaveRoomAsUser(roomID, p.BridgeBotUserID()); err != nil {
+			p.logger.LogDebug("Could not leave unused auto-created room", "room_id", roomID, "error", err)
+		}
+		return
+	}
+
+	// Automatically map the created room to this channel (both directions)
 	if err := p.kvstore.Set(mappingKey, []byte(roomID)); err != nil {
 		p.logger.LogError("Failed to save channel mapping", "error", err, "channel_id", channel.Id, "room_id", roomID)
 	}
@@ -568,6 +555,7 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *model.Channel
 	if err := p.kvstore.Set(roomMappingKey, []byte(channel.Id)); err != nil {
 		p.logger.LogError("Failed to save reverse room mapping", "error", err, "channel_id", channel.Id, "room_id", roomID)
 	}
+	p.InvalidateChannelMapping(channel.Id)
 
 	// If the channel belongs to a team, add it to the team's Matrix space
 	if channel.TeamId != "" {
@@ -591,8 +579,15 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 		return
 	}
 
-	// Skip bot posts to avoid loops
-	if post.UserId == "" || post.Props["from_matrix"] == "true" {
+	// Skip posts that came from Matrix to avoid loops. The prop is written as a
+	// bool by the inbound bridge, but accept the string form as well.
+	if post.UserId == "" || postOriginatedFromMatrix(post) {
+		return
+	}
+
+	// Join and leave notices are already mirrored as room membership; relaying
+	// the system post too would show them twice in Matrix.
+	if post.IsJoinLeaveMessage() {
 		return
 	}
 
@@ -604,12 +599,146 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 		return
 	}
 
+	// Shared channels are delivered through OnSharedChannelsSyncMsg, which also
+	// carries attachments. Let that path own them so a post is never sent twice.
+	if channel, appErr := p.API.GetChannel(post.ChannelId); appErr == nil && channel != nil && channel.IsShared() {
+		return
+	}
+
 	roomID := string(roomIDBytes)
 	p.logger.LogDebug("Syncing message to Matrix", "channel_id", post.ChannelId, "room_id", roomID, "post_id", post.Id)
+
+	// Upload attachments first so they are sent together with the message.
+	p.stageAttachmentsForPost(post)
 
 	// Sync the post to Matrix
 	if err := p.mattermostToMatrixBridge.SyncPostToMatrix(post, post.ChannelId); err != nil {
 		p.logger.LogError("Failed to sync message to Matrix", "error", err, "post_id", post.Id, "room_id", roomID)
+	}
+}
+
+// postOriginatedFromMatrix reports whether a post was created by the inbound
+// bridge.
+func postOriginatedFromMatrix(post *model.Post) bool {
+	switch v := post.GetProp("from_matrix").(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true"
+	default:
+		return false
+	}
+}
+
+// stageAttachmentsForPost uploads the post's files to the Matrix media
+// repository and registers them as pending so SyncPostToMatrix sends them with
+// the message. Shared channels receive files through
+// OnSharedChannelsAttachmentSyncMsg instead.
+func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
+	if len(post.FileIds) == 0 || p.matrixClient == nil || p.pendingFiles == nil {
+		return
+	}
+	for _, fileID := range post.FileIds {
+		fi, appErr := p.API.GetFileInfo(fileID)
+		if appErr != nil {
+			p.logger.LogWarn("Failed to get file info for attachment", "error", appErr, "file_id", fileID, "post_id", post.Id)
+			continue
+		}
+		if fi.Size > p.maxFileSize {
+			p.logger.LogWarn("Skipping attachment larger than the configured limit", "file_id", fileID, "size", fi.Size, "limit", p.maxFileSize)
+			continue
+		}
+		data, appErr := p.API.GetFile(fileID)
+		if appErr != nil {
+			p.logger.LogWarn("Failed to read attachment", "error", appErr, "file_id", fileID, "post_id", post.Id)
+			continue
+		}
+		mxcURI, err := p.matrixClient.UploadMedia(data, fi.Name, fi.MimeType)
+		if err != nil {
+			p.logger.LogWarn("Failed to upload attachment to Matrix", "error", err, "file_id", fileID, "post_id", post.Id)
+			continue
+		}
+		p.pendingFiles.AddFile(post.Id, &PendingFile{
+			FileID:   fi.Id,
+			Filename: fi.Name,
+			MxcURI:   mxcURI,
+			MimeType: fi.MimeType,
+			Size:     fi.Size,
+		})
+	}
+}
+
+// UserHasLeftChannel is called when a user leaves or is removed from a channel.
+// The user's ghost leaves the mapped Matrix room so membership stays in sync.
+func (p *Plugin) UserHasLeftChannel(_ *plugin.Context, channelMember *model.ChannelMember, _ *model.User) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.matrixClient == nil || p.mattermostToMatrixBridge == nil {
+		return
+	}
+
+	roomIdentifier, err := p.mattermostToMatrixBridge.GetMatrixRoomID(channelMember.ChannelId)
+	if err != nil || roomIdentifier == "" {
+		return
+	}
+
+	user, appErr := p.API.GetUser(channelMember.UserId)
+	if appErr != nil {
+		p.logger.LogWarn("Failed to get user for leave sync", "error", appErr, "user_id", channelMember.UserId)
+		return
+	}
+	if user.IsRemote() {
+		// Matrix-originated users leave on the Matrix side themselves.
+		return
+	}
+
+	ghostUserID, exists := p.mattermostToMatrixBridge.getGhostUser(user.Id)
+	if !exists {
+		return
+	}
+
+	roomID, err := p.matrixClient.ResolveRoomAlias(roomIdentifier)
+	if err != nil {
+		p.logger.LogWarn("Failed to resolve room for leave sync", "error", err, "room", roomIdentifier)
+		return
+	}
+
+	if err := p.matrixClient.LeaveRoomAsUser(roomID, ghostUserID); err != nil {
+		p.logger.LogWarn("Failed to remove ghost user from Matrix room", "error", err, "ghost_user_id", ghostUserID, "room_id", roomID)
+		return
+	}
+
+	// Forget the cached membership so a later re-join is synced again.
+	membershipKey := kvstore.BuildGhostRoomKey(user.Id, roomID)
+	if p.roomMembershipCache != nil {
+		p.roomMembershipCache.Delete(membershipKey)
+	}
+	if err := p.kvstore.Delete(membershipKey); err != nil {
+		p.logger.LogDebug("Failed to clear ghost room membership", "error", err, "key", membershipKey)
+	}
+
+	p.logger.LogInfo("Ghost user left Matrix room after leaving channel", "ghost_user_id", ghostUserID, "room_id", roomID, "channel_id", channelMember.ChannelId)
+}
+
+// MessageHasBeenDeleted redacts the Matrix event of a post deleted in
+// Mattermost. Shared channels deliver deletions through
+// OnSharedChannelsSyncMsg instead, so they are skipped here.
+func (p *Plugin) MessageHasBeenDeleted(_ *plugin.Context, post *model.Post) {
+	config := p.getConfiguration()
+	if !config.EnableSync || p.mattermostToMatrixBridge == nil || post == nil || postOriginatedFromMatrix(post) {
+		return
+	}
+
+	roomIDBytes, err := p.kvstore.Get(kvstore.BuildChannelMappingKey(post.ChannelId))
+	if err != nil || roomIDBytes == nil {
+		return
+	}
+
+	if channel, appErr := p.API.GetChannel(post.ChannelId); appErr == nil && channel != nil && channel.IsShared() {
+		return
+	}
+
+	if err := p.mattermostToMatrixBridge.deletePostFromMatrix(post, post.ChannelId); err != nil {
+		p.logger.LogError("Failed to redact deleted post in Matrix", "error", err, "post_id", post.Id)
 	}
 }
 

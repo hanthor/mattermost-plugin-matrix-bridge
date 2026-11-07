@@ -11,6 +11,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type env struct {
@@ -30,6 +31,10 @@ func (m *mockConfiguration) GetMatrixUsernamePrefixForServer(_ string) string {
 	return "matrix" // Use default prefix for tests
 }
 
+func (m *mockConfiguration) GetEnableMirrorMode() bool {
+	return false
+}
+
 // mockPlugin implements the PluginAccessor interface for testing
 type mockPlugin struct {
 	client       *pluginapi.Client
@@ -45,6 +50,34 @@ func (m *mockPlugin) GetMatrixClient() *matrix.Client {
 
 func (m *mockPlugin) GetKVStore() kvstore.KVStore {
 	return m.kvstore
+}
+
+func (m *mockPlugin) CreateIdentityLinkCode(_ string) (string, error) {
+	return "TESTCODE", nil
+}
+
+func (m *mockPlugin) GetIdentityLink(_ string) (string, bool, bool) {
+	return "", false, false
+}
+
+func (m *mockPlugin) UnlinkIdentity(_ string) error {
+	return nil
+}
+
+func (m *mockPlugin) SyncUser(_ string) error {
+	return nil
+}
+
+func (m *mockPlugin) SyncTeam(_ string) error {
+	return nil
+}
+
+func (m *mockPlugin) SyncChannel(_ string) error {
+	return nil
+}
+
+func (m *mockPlugin) GetMetrics() MetricsProvider {
+	return nil
 }
 
 func (m *mockPlugin) GetConfiguration() Configuration {
@@ -63,6 +96,8 @@ func (m *mockPlugin) GetPluginAPI() plugin.API {
 func (m *mockPlugin) GetPluginAPIClient() *pluginapi.Client {
 	return m.client
 }
+
+func (m *mockPlugin) InvalidateChannelMapping(_ string) {}
 
 func (m *mockPlugin) GetRemoteID() string {
 	return "test-remote-id"
@@ -89,6 +124,7 @@ func (m *mockPlugin) GetMatrixUserIDFromMattermostUser(mattermostUserID string) 
 
 func setupTest() *env {
 	api := &plugintest.API{}
+	allowAllPermissions(api)
 	driver := &plugintest.Driver{}
 	client := pluginapi.NewClient(api, driver)
 
@@ -96,6 +132,13 @@ func setupTest() *env {
 		client: client,
 		api:    api,
 	}
+}
+
+// allowAllPermissions makes every permission check succeed so command tests
+// can focus on behaviour. Permission denial is covered by TestCommandPermissions.
+func allowAllPermissions(api *plugintest.API) {
+	api.On("HasPermissionTo", mock.Anything, mock.Anything).Return(true).Maybe()
+	api.On("HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything).Return(true).Maybe()
 }
 
 func TestMatrixCreateCommandParsing(t *testing.T) {
@@ -341,27 +384,7 @@ func (t *testCommandHandler) Handle(args *model.CommandArgs) (*model.CommandResp
 }
 
 func setupCommandRegistration(env *env) {
-	// Matrix command registration
-	matrixData := model.NewAutocompleteData(matrixCommandTrigger, "[subcommand]", "Matrix bridge commands")
-	matrixData.AddCommand(model.NewAutocompleteData("test", "", testCommandDesc))
-
-	// Create command with argument completion
-	createCmd := model.NewAutocompleteData("create", createCommandHint, createCommandDesc)
-	createCmd.AddTextArgument("Optional room name (defaults to channel name)", "[room_name]", "")
-	createCmd.AddTextArgument("Optional publish flag", "[publish=true|false]", "")
-	matrixData.AddCommand(createCmd)
-
-	// Map command with argument completion
-	mapCmd := model.NewAutocompleteData("map", mapCommandHint, mapCommandDesc)
-	mapCmd.AddTextArgument("Matrix room alias or room ID", "[room_alias|room_id]", "")
-	matrixData.AddCommand(mapCmd)
-
-	// Unmap command
-	matrixData.AddCommand(model.NewAutocompleteData("unmap", unmapCommandHint, unmapCommandDesc))
-
-	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
-	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
-	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	matrixData := buildMatrixAutocompleteData()
 
 	env.api.On("RegisterCommand", &model.Command{
 		Trigger:          matrixCommandTrigger,

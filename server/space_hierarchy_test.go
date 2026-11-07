@@ -69,13 +69,13 @@ func TestSpaceHierarchy(t *testing.T) {
 
 		// Assertions
 		assert.True(t, createRoomCalled, "createRoom should be called")
-		
+
 		creationContent, ok := requestBody["creation_content"].(map[string]interface{})
 		assert.True(t, ok, "creation_content should be present")
 		if ok {
 			assert.Equal(t, "m.space", creationContent["type"], "Room type should be m.space")
 		}
-		
+
 		mockKV.AssertExpectations(t)
 	})
 
@@ -114,19 +114,21 @@ func TestSpaceHierarchy(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]string{"event_id": "$event"})
 				return
 			}
-			
+
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer matrixServer.Close()
 
 		mockKV := &MockKVStore{}
-		
+
 		// 1. ChannelHasBeenCreated calls Set(channel->room) with ALIAS as roomID
 		mockKV.On("Set", kvstore.BuildChannelMappingKey(testChannelID), []byte(expectedAlias)).Return(nil).Once()
 		// 2. ChannelHasBeenCreated calls Set(room->channel) with ALIAS as roomID
 		mockKV.On("Set", kvstore.BuildRoomMappingKey(expectedAlias), []byte(testChannelID)).Return(nil).Once()
-		
-		// 3. ChannelHasBeenCreated calls Get(team_mapping) to find space
+
+		// 3. ChannelHasBeenCreated re-checks the channel mapping, then calls
+		// Get(team_mapping) to find the space
+		mockKV.On("Get", kvstore.BuildChannelMappingKey(testChannelID)).Return([]byte(nil), nil).Maybe()
 		mockKV.On("Get", kvstore.BuildTeamMappingKey(testTeamID)).Return([]byte(testSpaceID), nil).Once()
 
 		// Setup Plugin
@@ -156,7 +158,7 @@ func TestSpaceHierarchy(t *testing.T) {
 		// Assertions
 		assert.True(t, createRoomCalled, "createRoom should be called")
 		assert.True(t, putSpaceChildCalled, "AddSpaceChild should be called")
-		
+
 		mockKV.AssertExpectations(t)
 	})
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +32,20 @@ type MatrixEvent struct {
 // MatrixTransaction represents a transaction from the Matrix homeserver
 type MatrixTransaction struct {
 	Events []MatrixEvent `json:"events"`
+	// Ephemeral carries EDUs (typing, presence, receipts) when the registration
+	// requests them with receive_ephemeral (spec v1.13).
+	Ephemeral []MatrixEvent `json:"ephemeral,omitempty"`
+	// MSC2409Ephemeral is the unstable-prefixed field older homeservers use.
+	MSC2409Ephemeral []MatrixEvent `json:"de.sorunome.msc2409.ephemeral,omitempty"`
+}
+
+// EphemeralEvents returns the ephemeral events of the transaction regardless
+// of which field the homeserver used.
+func (t *MatrixTransaction) EphemeralEvents() []MatrixEvent {
+	if len(t.Ephemeral) > 0 {
+		return t.Ephemeral
+	}
+	return t.MSC2409Ephemeral
 }
 
 // processedTransactions stores transaction IDs to prevent duplicate processing
@@ -165,6 +178,13 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	// Ephemeral events are cheap and time-sensitive, so handle them inline.
+	for _, edu := range transaction.EphemeralEvents() {
+		if err := p.processEphemeralEvent(edu); err != nil {
+			p.logger.LogDebug("Failed to process ephemeral event", "error", err, "event_type", edu.Type)
+		}
+	}
+
 	p.logger.LogDebug("Successfully processed Matrix transaction", "txn_id", txnID, "event_count", len(transaction.Events))
 
 	// Return success response
@@ -176,6 +196,17 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 
 // processMatrixEvent routes a single Matrix event to the appropriate handler
 func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
+	// The bridge bot accepts invites (so people can DM it) and answers
+	// "!mattermost" commands in any room it is in.
+	if p.isBridgeBotEvent(event) {
+		p.handleBridgeBotMembership(event)
+		return nil
+	}
+	if isBotCommand(event) && !p.isGhostUser(event.Sender) && event.Sender != p.BridgeBotUserID() {
+		p.handleBotCommand(event)
+		return nil
+	}
+
 	// Check if we have an existing mapping for this room
 	channelID, err := p.getChannelIDFromMatrixRoom(event.RoomID)
 	if err != nil {
@@ -223,6 +254,10 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		return p.matrixToMattermostBridge.syncMatrixMemberEventToMattermost(event, channelID)
 	case "m.room.redaction":
 		return p.matrixToMattermostBridge.syncMatrixRedactionToMattermost(event, channelID)
+	case "m.room.name":
+		return p.syncMatrixRoomNameToMattermost(event, channelID)
+	case "m.room.topic":
+		return p.syncMatrixRoomTopicToMattermost(event, channelID)
 	default:
 		p.logger.LogDebug("Ignoring unsupported event type", "event_type", event.Type, "event_id", event.EventID, "room_id", event.RoomID)
 		return nil
@@ -256,25 +291,14 @@ func (p *Plugin) getChannelIDFromMatrixRoom(roomID string) (string, error) {
 
 // isGhostUser checks if a Matrix user ID belongs to one of our ghost users
 func (p *Plugin) isGhostUser(userID string) bool {
-	config := p.getConfiguration()
-	if config.MatrixServerURL == "" {
-		p.logger.LogDebug("isGhostUser: no MatrixServerURL configured", "user_id", userID)
+	serverDomain := p.matrixServerDomain()
+	if serverDomain == "" {
+		p.logger.LogDebug("isGhostUser: no Matrix server domain configured", "user_id", userID)
 		return false
 	}
-
-	// Extract server domain (get the real domain, not sanitized for property keys)
-	parsedURL, err := url.Parse(config.MatrixServerURL)
-	if err != nil || parsedURL.Hostname() == "" {
-		p.logger.LogDebug("isGhostUser: failed to parse MatrixServerURL", "url", config.MatrixServerURL, "error", err)
-		return false
-	}
-	serverDomain := parsedURL.Hostname()
 
 	// Ghost users follow the pattern: @_mattermost_<mattermost_user_id>:<server_domain>
-	ghostUserPrefix := "@_mattermost_"
-	ghostUserSuffix := fmt.Sprintf(":%s", serverDomain)
-
-	return strings.HasPrefix(userID, ghostUserPrefix) && strings.HasSuffix(userID, ghostUserSuffix)
+	return strings.HasPrefix(userID, "@_mattermost_") && strings.HasSuffix(userID, ":"+serverDomain)
 }
 
 // handleMatrixInitiatedDM checks if an unmapped Matrix room is a potential DM that should be bridged

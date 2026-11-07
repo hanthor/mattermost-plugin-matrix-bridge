@@ -16,6 +16,8 @@ interface AdminConsoleConfig {
     matrix_server_url?: string;
     matrix_as_token?: string;
     matrix_hs_token?: string;
+    matrix_server_domain?: string;
+    enable_mirror_mode?: boolean;
 }
 
 const RegistrationDownload: React.FC<Props> = ({label, helpText, config}) => {
@@ -26,6 +28,8 @@ const RegistrationDownload: React.FC<Props> = ({label, helpText, config}) => {
         matrix_server_url: '',
         matrix_as_token: '',
         matrix_hs_token: '',
+        matrix_server_domain: '',
+        enable_mirror_mode: false,
     });
 
     useEffect(() => {
@@ -34,11 +38,15 @@ const RegistrationDownload: React.FC<Props> = ({label, helpText, config}) => {
             const serverUrlInput = document.querySelector('input[id$="matrix_server_url"]') as HTMLInputElement;
             const asTokenDiv = document.querySelector('div[id$="matrix_as_token"]') as HTMLDivElement;
             const hsTokenDiv = document.querySelector('div[id$="matrix_hs_token"]') as HTMLDivElement;
+            const serverDomainInput = document.querySelector('input[id$="matrix_server_domain"]') as HTMLInputElement;
+            const mirrorModeInput = document.querySelector('input[id$="enable_mirror_mode"][value="true"]') as HTMLInputElement;
 
             const values = {
                 matrix_server_url: serverUrlInput?.value || config?.matrix_server_url || '',
                 matrix_as_token: asTokenDiv?.textContent || config?.matrix_as_token || '',
                 matrix_hs_token: hsTokenDiv?.textContent || config?.matrix_hs_token || '',
+                matrix_server_domain: serverDomainInput?.value || config?.matrix_server_domain || '',
+                enable_mirror_mode: mirrorModeInput ? mirrorModeInput.checked : Boolean(config?.enable_mirror_mode),
             };
 
             setCurrentValues(values);
@@ -64,40 +72,46 @@ const RegistrationDownload: React.FC<Props> = ({label, helpText, config}) => {
             return;
         }
 
-        // Extract domain from server URL for namespace
-        let domain = 'matrix.org';
-        try {
-            if (currentValues.matrix_server_url) {
-                const url = new URL(currentValues.matrix_server_url);
-                domain = url.hostname;
+        // The server name (domain in user IDs) is the configured Matrix server
+        // domain when set, otherwise the hostname of the server URL.
+        let domain = currentValues.matrix_server_domain?.trim() || '';
+        if (!domain) {
+            try {
+                if (currentValues.matrix_server_url) {
+                    domain = new URL(currentValues.matrix_server_url).hostname;
+                }
+            } catch (e) {
+                domain = 'matrix.org';
             }
-        } catch (e) {
-            // Could not parse server URL, using default domain
         }
+        const escapedDomain = domain.replace(/\./g, '\\.');
+
+        // Mirror mode registers real @username:domain accounts, so the bridge
+        // must own the whole user namespace of its dedicated homeserver.
+        const mirrorNamespace = currentValues.enable_mirror_mode ? `
+    - exclusive: true
+      regex: "@.*:${escapedDomain}"` : '';
 
         const registrationYaml = `id: "mattermost-bridge"
 url: "${siteURL}/plugins/com.mattermost.plugin-matrix-bridge"
 as_token: "${currentValues.matrix_as_token}"
 hs_token: "${currentValues.matrix_hs_token}"
 sender_localpart: "_mattermost_bridge"
+rate_limited: false
 namespaces:
   users:
     - exclusive: true
-      regex: "@_mattermost_.*:${domain}"
+      regex: "@_mattermost_.*:${escapedDomain}"${mirrorNamespace}
   aliases:
     - exclusive: true
-      regex: "#_mattermost_.*:${domain}"
+      regex: "#_mattermost_.*:${escapedDomain}"
     - exclusive: false
-      regex: "#mattermost-bridge-.*:${domain}"
-  rooms:
-    - exclusive: false
-      regex: "!.*:${domain}"
-rate_limited: false
-protocols: ["mattermost"]
+      regex: "#mattermost-bridge-.*:${escapedDomain}"
+  rooms: []
+# Deliver typing and presence (spec v1.13 name and the MSC2409 name used by older homeservers).
+receive_ephemeral: true
 de.sorunome.msc2409.push_ephemeral: true
-permissions:
-  - "m.room.directory"
-  - "m.room.membership"`;
+`;
 
         // Create and download the file
         const blob = new Blob([registrationYaml], {type: 'text/yaml'});
