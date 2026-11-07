@@ -187,6 +187,9 @@ func (m *MattermostServer) InstallBridge(t *testing.T, ctx context.Context, admi
 			"matrix_hs_token":      cfg.HSToken,
 			"enable_sync":          true,
 			"rate_limiting_mode":   "disabled",
+			"enable_mirror_mode":   cfg.MirrorMode,
+			"matrix_admin_token":   cfg.AdminToken,
+			"sync_user_profiles":   true,
 		},
 	}
 	_, _, err = admin.PatchConfig(ctx, patch)
