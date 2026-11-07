@@ -4,7 +4,7 @@ Every screenshot on this page is produced automatically by
 [`e2e/walkthrough_test.go`](../e2e/walkthrough_test.go) against the code in
 this repository. The test deploys Synapse, Mattermost and Element Web in
 containers, creates demo people on both networks (Ada, Carol and Dave on
-Mattermost; Alice and Bob on Matrix, each with a name and avatar), drives
+Mattermost; Alice and Bob on Matrix, each with a name and a stock portrait), drives
 both web UIs with Playwright, and writes the images to
 [`docs/walkthrough/`](walkthrough/). The pictures therefore show the current
 release, not a hand-made mock-up, and the run fails if any step does not
@@ -232,7 +232,7 @@ may run what.
 | Piece | Role |
 | --- | --- |
 | [`e2e/walkthrough_test.go`](../e2e/walkthrough_test.go) | Gated on `E2E_WALKTHROUGH=1`. Deploys the stack with the shared harness, starts an Element Web container pointed at the Complement homeserver, writes the redacted registration file, and spawns the Playwright script with the URLs and credentials in `WALKTHROUGH_SCENARIO`. Fails if any step in the manifest failed. |
-| [`e2e/walkthrough/walkthrough.mjs`](../e2e/walkthrough/walkthrough.mjs) | Creates the demo people (rendered initials avatars, names), then drives Mattermost with [`@mattermost/playwright-lib`](https://www.npmjs.com/package/@mattermost/playwright-lib), Mattermost's own Playwright page objects (API login, `ChannelsPage`, `SystemConsolePage`), and captures a screenshot per step. Actions that are not what a picture is about go through the REST APIs so the images stay stable across UI releases. Writes `manifest.json` with the captions. |
+| [`e2e/walkthrough/walkthrough.mjs`](../e2e/walkthrough/walkthrough.mjs) | Creates the demo people (names and the stock portraits in `e2e/walkthrough/avatars/`), then drives Mattermost with [`@mattermost/playwright-lib`](https://www.npmjs.com/package/@mattermost/playwright-lib), Mattermost's own Playwright page objects (API login, `ChannelsPage`, `SystemConsolePage`), and captures a screenshot per step. Actions that are not what a picture is about go through the REST APIs so the images stay stable across UI releases. Writes `manifest.json` with the captions. |
 | [`e2e/walkthrough/element.mjs`](../e2e/walkthrough/element.mjs) | Element helpers mirrored from [element-web's Playwright suite](https://github.com/element-hq/element-web/tree/develop/apps/web/playwright): credential injection, toast handling, composer, member list and timeline selectors. |
 | [`.github/workflows/walkthrough.yml`](../.github/workflows/walkthrough.yml) | Runs the test in CI, uploads the images (and, on failure, per-step debug screenshots) as artifacts, and on `master` opens a pull request with the refreshed images. |
 

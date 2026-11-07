@@ -13,8 +13,9 @@
 // Output: PNGs named after their step plus manifest.json in scenario.outDir;
 // on failures, a screenshot and the page HTML per step in the debug directory.
 
-import {mkdirSync, readdirSync, unlinkSync, writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 import {ElementAppPage, populateLocalStorageWithCredentials} from './element.mjs';
 
@@ -123,18 +124,22 @@ async function matrixText(roomID, body, extra = {}, token = scenario.alice.token
     return matrixSend(roomID, 'm.room.message', {msgtype: 'm.text', body, ...extra}, token);
 }
 
-async function matrixUpload(png, filename, token = scenario.alice.token) {
-    const res = await matrixApi('POST', `/_matrix/media/v3/upload?filename=${encodeURIComponent(filename)}`, png, token, 'image/png');
+async function matrixUpload(data, filename, token = scenario.alice.token, contentType = 'image/png') {
+    const res = await matrixApi('POST', `/_matrix/media/v3/upload?filename=${encodeURIComponent(filename)}`, data, token, contentType);
     return res.content_uri;
 }
 
 const localpart = (userID) => userID.slice(1).split(':')[0];
+const here = dirname(fileURLToPath(import.meta.url));
 
-// ---------- Demo people: avatars and names ----------
+/** Stock portrait for a demo person (see avatars/README.md for sources). */
+const portrait = (key) => readFileSync(join(here, 'avatars', `${key}.jpg`));
+
+// ---------- Demo people: portraits and names ----------
 
 const browser = await chromium.launch();
 
-/** Renders an initials avatar (or a wider "image attachment") to PNG. */
+/** Renders a demo "image attachment" to PNG. */
 async function renderPNG({text, subtitle = '', color, width = 256, height = 256}) {
     const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: 1});
     const page = await context.newPage();
@@ -151,11 +156,11 @@ async function renderPNG({text, subtitle = '', color, width = 256, height = 256}
 }
 
 const people = {
-    ada: {username: scenario.adminUsername, first: 'Ada', last: 'Admin', initials: 'AA', color: '#1c58d9'},
-    carol: {username: scenario.carol.username, first: 'Carol', last: 'Carter', initials: 'CC', color: '#e07b00', id: scenario.carol.id},
-    dave: {username: scenario.dave.username, first: 'Dave', last: 'Diaz', initials: 'DD', color: '#7a3db8', id: scenario.dave.id},
-    alice: {userID: scenario.alice.userID, token: scenario.alice.token, name: 'Alice Anders', initials: 'AA', color: '#0dbd8b'},
-    bob: {userID: scenario.bob.userID, token: scenario.bob.token, name: 'Bob Brandt', initials: 'BB', color: '#d9534f'},
+    ada: {username: scenario.adminUsername, first: 'Ada', last: 'Admin'},
+    carol: {username: scenario.carol.username, first: 'Carol', last: 'Carter', id: scenario.carol.id},
+    dave: {username: scenario.dave.username, first: 'Dave', last: 'Diaz', id: scenario.dave.id},
+    alice: {userID: scenario.alice.userID, token: scenario.alice.token, name: 'Alice Anders'},
+    bob: {userID: scenario.bob.userID, token: scenario.bob.token, name: 'Bob Brandt'},
 };
 
 async function setUpPeople() {
@@ -167,12 +172,12 @@ async function setUpPeople() {
         const p = people[key];
         await mmApi('PUT', `/users/${p.id}/patch`, {first_name: p.first, last_name: p.last, position: key === 'ada' ? 'Workspace admin' : 'Mattermost user'});
         const form = new FormData();
-        form.append('image', new Blob([await renderPNG({text: p.initials, color: p.color})], {type: 'image/png'}), 'avatar.png');
+        form.append('image', new Blob([portrait(key)], {type: 'image/jpeg'}), `${key}.jpg`);
         await mmApi('POST', `/users/${p.id}/image`, form);
     }
     for (const key of ['alice', 'bob']) {
         const p = people[key];
-        const mxc = await matrixUpload(await renderPNG({text: p.initials, color: p.color}), 'avatar.png', p.token);
+        const mxc = await matrixUpload(portrait(key), `${key}.jpg`, p.token, 'image/jpeg');
         await matrixApi('PUT', `/_matrix/client/v3/profile/${encodeURIComponent(p.userID)}/displayname`, {displayname: p.name}, p.token);
         await matrixApi('PUT', `/_matrix/client/v3/profile/${encodeURIComponent(p.userID)}/avatar_url`, {avatar_url: mxc}, p.token);
     }
