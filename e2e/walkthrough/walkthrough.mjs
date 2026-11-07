@@ -512,7 +512,9 @@ await step('feature: room topic', async () => {
 await step('feature: membership', async () => {
     await mmApi('POST', `/channels/${channelID}/members`, {user_id: people.dave.id});
     await matrixApi('POST', `/_matrix/client/v3/join/${encodeURIComponent(roomID)}`, {}, scenario.bob.token);
-    await ada.waitForText(`@matrix:${localpart(scenario.bob.userID)}`);
+    // The join notice shows Bob's display name, or his username on servers that show usernames.
+    await ada.channels.centerView.container.getByText(new RegExp(`Bob Brandt|${localpart(scenario.bob.userID)}`)).last().waitFor({timeout: 60_000});
+    await sleep(750);
     await shot(ada.page, 'feature-mm-membership', 'Dave is added to the channel and Bob joins from Matrix: both show up on both sides.');
     await alice.app.viewRoomById(roomID);
     await alice.app.waitForMessage('joined the room');
