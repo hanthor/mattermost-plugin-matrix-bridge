@@ -1142,42 +1142,29 @@ func (b *MattermostToMatrixBridge) addMatrixMentionsWithData(content map[string]
 			continue
 		}
 
-		var matrixUserID string
-		var displayName string
+		displayName := user.GetDisplayName(model.ShowFullName)
+		if displayName == "" {
+			displayName = user.Username
+		}
 
-		// Check if this user has a Matrix ghost user (Mattermost user → Matrix ghost)
-		if ghostUserID, exists := b.getGhostUser(user.Id); exists {
+		var matrixUserID string
+		// A user who came from Matrix is mentioned as their real Matrix
+		// account, never as a ghost of their Mattermost shadow.
+		if originalMatrixUserID, err := b.GetMatrixUserIDFromMattermostUser(user.Id); err == nil && originalMatrixUserID != "" {
+			matrixUserID = originalMatrixUserID
+			b.logger.LogDebug("Mentioning bridged Matrix user by their own account", "username", username, "matrix_user_id", matrixUserID)
+		} else if user.IsRemote() {
+			b.logger.LogDebug("Skipping mention of remote user without a Matrix mapping", "username", username)
+			continue
+		} else if ghostUserID, exists := b.getGhostUser(user.Id); exists {
 			matrixUserID = ghostUserID
-			displayName = user.GetDisplayName(model.ShowFullName)
-			if displayName == "" {
-				displayName = user.Username // Fallback to username
-			}
-			b.logger.LogDebug("Found existing Matrix ghost user for Mattermost user mention", "username", username, "ghost_user_id", ghostUserID, "display_name", displayName)
 		} else {
-			// Check if this is a Matrix user represented in Mattermost (Matrix user → Mattermost user)
-			originalMatrixUserID, err := b.GetMatrixUserIDFromMattermostUser(user.Id)
-			if err == nil && originalMatrixUserID != "" {
-				matrixUserID = originalMatrixUserID
-				displayName = user.GetDisplayName(model.ShowFullName)
-				if displayName == "" {
-					displayName = user.Username // Fallback to username
-				}
-				b.logger.LogDebug("Found original Matrix user for bridged user mention", "username", username, "original_matrix_user_id", originalMatrixUserID, "display_name", displayName)
-			} else {
-				// No existing ghost user or original Matrix user found - create new ghost user for mention
-				b.logger.LogDebug("Creating new ghost user for mentioned user", "username", username, "user_id", user.Id)
-				ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
-				if err != nil {
-					b.logger.LogWarn("Failed to create ghost user for mentioned user", "username", username, "user_id", user.Id, "error", err)
-					continue
-				}
-				matrixUserID = ghostUserID
-				displayName = user.GetDisplayName(model.ShowFullName)
-				if displayName == "" {
-					displayName = user.Username // Fallback to username
-				}
-				b.logger.LogDebug("Created new Matrix ghost user for mention", "username", username, "ghost_user_id", ghostUserID, "display_name", displayName)
+			ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
+			if err != nil {
+				b.logger.LogWarn("Failed to create ghost user for mentioned user", "username", username, "user_id", user.Id, "error", err)
+				continue
 			}
+			matrixUserID = ghostUserID
 		}
 
 		matrixUserIDs = append(matrixUserIDs, matrixUserID)

@@ -396,7 +396,7 @@ await step('feature: formatted message to matrix', async () => {
 });
 
 await step('feature: formatted message to mattermost', async () => {
-    await alice.app.sendMessage('Hello from **Matrix**! Replies, edits, reactions and files all flow back the other way. :tada:');
+    await alice.app.sendMessage('Hello from **Matrix**! Replies, edits, reactions and files all flow back the other way. 🎉');
     await ada.waitForText('Hello from');
     await shot(ada.page, 'feature-mm-message-from-matrix', 'Alice\'s reply arrives in Mattermost as a remote user with her Matrix display name and avatar.');
 });
@@ -427,11 +427,11 @@ await step('feature: threads', async () => {
 await step('feature: edits', async () => {
     await mmApi('PUT', `/posts/${helloPostID}/patch`, {message: 'Welcome to the **Bridge Demo**! Everything posted here is mirrored to Matrix: _formatting_, `code`, [links](https://matrix.org) and lists:\n- bridged in both directions\n- with your name and avatar\n- **and edits**'});
     await alice.app.waitForMessage('and edits');
-    await alice.page.locator('.mx_EventTile_edited').first().waitFor({timeout: 60_000});
+    await alice.page.getByText('(edited)').first().waitFor({timeout: 60_000});
     await shot(alice.page, 'feature-element-edit', 'Ada edits her post; Element shows the edited message with the "(edited)" marker.');
     const own = await matrixApi('GET', `/_matrix/client/v3/rooms/${encodeURIComponent(roomID)}/messages?dir=b&limit=30`);
     const mine = (own.chunk || []).find((ev) => ev.sender === scenario.alice.userID && (ev.content?.body || '').includes('Hello from'));
-    const edited = 'Hello from **Matrix**! Replies, edits, reactions and files all flow back the other way, including edits. :tada:';
+    const edited = 'Hello from **Matrix**! Replies, edits, reactions and files all flow back the other way, including edits. 🎉';
     await matrixText(roomID, `* ${edited}`, {
         'm.new_content': {msgtype: 'm.text', body: edited},
         'm.relates_to': {rel_type: 'm.replace', event_id: mine.event_id},
@@ -474,7 +474,7 @@ await step('feature: attachments', async () => {
     const upload = await mmApi('POST', '/files', form);
     await mmApi('POST', '/posts', {channel_id: channelID, message: 'Images and files are re-uploaded on the other side.', file_ids: upload.file_infos.map((f) => f.id)});
     await alice.app.waitForMessage('Images and files');
-    await alice.page.locator('.mx_MImageBody').first().waitFor({timeout: 60_000});
+    await alice.page.locator('.mx_EventTile img[src*="media"]').last().waitFor({timeout: 60_000});
     await sleep(1500);
     await shot(alice.page, 'feature-element-attachment', 'An image attached in Mattermost arrives in Element as an m.image event.');
 

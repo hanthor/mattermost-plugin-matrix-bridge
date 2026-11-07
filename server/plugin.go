@@ -583,6 +583,12 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 		return
 	}
 
+	// Join and leave notices are already mirrored as room membership; relaying
+	// the system post too would show them twice in Matrix.
+	if post.IsJoinLeaveMessage() {
+		return
+	}
+
 	// Check if this channel is mapped to a Matrix room
 	mappingKey := kvstore.BuildChannelMappingKey(post.ChannelId)
 	roomIDBytes, err := p.kvstore.Get(mappingKey)
