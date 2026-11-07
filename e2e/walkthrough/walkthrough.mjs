@@ -28,7 +28,7 @@ process.env.PW_ADMIN_USERNAME = scenario.adminUsername;
 process.env.PW_ADMIN_PASSWORD = scenario.adminPassword;
 process.env.PW_ADMIN_EMAIL = scenario.adminEmail || 'admin@example.com';
 process.env.PW_HEADLESS = 'true';
-const {chromium} = await import('@playwright/test');
+const {chromium, expect} = await import('@playwright/test');
 const {TestBrowser, ChannelsPage, SystemConsolePage} = await import('@mattermost/playwright-lib');
 
 mkdirSync(scenario.outDir, {recursive: true});
@@ -125,19 +125,18 @@ async function mattermostSession(username, password) {
             await this.channels.centerView.postCreate.toBeVisible();
             await dismissMattermostTips(page);
         },
-        async post(text) {
+        /** Posts text and waits for it to render; waitFor is the plain text to look for once markdown is rendered. */
+        async post(text, waitFor = text) {
             await this.channels.postMessage(text);
-            await this.channels.centerView.waitUntilLastPostContains(text, 30_000);
+            await this.channels.centerView.waitUntilLastPostContains(waitFor, 30_000);
         },
+        /** Runs a slash command through the send button, which the autocomplete cannot swallow. */
         async slash(command) {
-            const input = this.channels.centerView.postCreate.input;
-            await this.channels.centerView.postCreate.writeMessage(command);
-            await input.press('Enter');
-            // The command autocomplete can swallow the first Enter.
-            await sleep(500);
-            if ((await input.inputValue()).trim() !== '') {
-                await input.press('Enter');
-            }
+            const postCreate = this.channels.centerView.postCreate;
+            await postCreate.writeMessage(command);
+            await page.keyboard.press('Escape');
+            await postCreate.sendMessage();
+            await expect(postCreate.input).toHaveValue('', {timeout: 10_000});
             await sleep(2500);
         },
         async close() {
@@ -230,12 +229,15 @@ await step('create and map a room', async () => {
 });
 
 await step('message from mattermost', async () => {
-    await admin.post('Hello Matrix! This message was written in **Mattermost**. :wave:');
+    await admin.post('Hello Matrix! This message was written in **Mattermost**. :wave:', 'This message was written in');
     await shot(admin.page, 'mattermost-message', 'A message posted in the Mattermost channel.');
 });
 
-await step('element login and bridged message', async () => {
+await step('element login', async () => {
     element = await elementSession();
+});
+
+await step('element bridged message', async () => {
     await element.app.viewRoomById(roomID);
     await element.app.waitForMessage('This message was written in');
     await shot(element.page, 'element-bridged-message', 'The same message in Element, sent by the Mattermost user\'s ghost account with their name and avatar.');
@@ -291,7 +293,7 @@ await step('link identities', async () => {
     await shot(element.page, 'element-bot-dm', 'In Element, the bridge bot confirms the link and, after `!mattermost login`, double puppeting.');
 
     // Carol's next Mattermost message appears from alice's own Matrix account.
-    await carol.post('This is Carol in Mattermost — but in Matrix it comes from my own account.');
+    await carol.post('This is Carol in Mattermost — but in Matrix it comes from my own account.', 'This is Carol in Mattermost');
     await element.app.viewRoomById(roomID);
     await element.app.waitForMessage('This is Carol in Mattermost');
     await shot(element.page, 'element-double-puppet', 'Carol\'s Mattermost message in Element, sent by her linked Matrix account rather than a ghost.');
