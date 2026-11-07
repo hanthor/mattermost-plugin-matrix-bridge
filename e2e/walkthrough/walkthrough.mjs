@@ -481,7 +481,8 @@ await step('feature: attachments', async () => {
     const photo = await renderPNG({text: 'Hello Mattermost', subtitle: 'from-matrix.png · sent from Element', color: '#0dbd8b', width: 640, height: 360});
     const mxc = await matrixUpload(photo, 'from-matrix.png');
     await matrixSend(roomID, 'm.room.message', {msgtype: 'm.image', body: 'from-matrix.png', url: mxc, info: {mimetype: 'image/png', w: 640, h: 360, size: photo.length}});
-    await ada.waitForText('from-matrix.png');
+    // Mattermost shows a lone image without its filename: wait for a second rendered image.
+    await ada.page.waitForFunction(() => document.querySelectorAll('[data-testid="channel_view"] .single-image-view__toggle, [data-testid="channel_view"] .image-loaded').length >= 2, null, {timeout: 60_000});
     await sleep(2000);
     await shot(ada.page, 'feature-mm-attachment', 'An image sent from Element shows up as a file attachment in Mattermost.');
 });
