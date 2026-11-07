@@ -43,7 +43,12 @@ func NewMattermostToMatrixBridge(utils *BridgeUtils, fileTracker FileTracker, po
 
 // MattermostToMatrix-specific utility methods
 
+// getGhostUser returns the bridge-controlled Matrix account of a Mattermost
+// user if one exists: the mirror account in mirror mode, otherwise the ghost.
 func (b *MattermostToMatrixBridge) getGhostUser(userID string) (string, bool) {
+	if acct, ok := newMirrorStore(b.kvstore).Account(userID); ok {
+		return acct.MatrixUserID, true
+	}
 	ghostUserKey := kvstore.BuildGhostUserKey(userID)
 
 	// Check cache first
@@ -102,71 +107,11 @@ func (b *MattermostToMatrixBridge) ensureSenderInRoom(client *matrix.Client, mat
 	return nil
 }
 
-// GetMatrixUserID returns the Matrix user ID for a Mattermost user
-// If Mirror Mode is enabled, creates and returns real Matrix user, otherwise returns ghost user ID
+// GetMatrixUserID returns the bridge-controlled Matrix account that acts for a
+// Mattermost user, creating it on first use: a ghost, or in mirror mode the
+// user's mirror account.
 func (b *MattermostToMatrixBridge) GetMatrixUserID(userID string) (string, error) {
-	config := b.configGetter.getConfiguration()
-
-	if config.EnableMirrorMode {
-		// Mirror Mode: Create or get real Matrix user based on username
-		user, appErr := b.API.GetUser(userID)
-		if appErr != nil {
-			return "", errors.Wrap(appErr, "failed to get Mattermost user for mirror mode")
-		}
-
-		serverDomain := config.MatrixServerDomain
-		if serverDomain == "" {
-			serverDomain = b.matrixClient.ServerDomain()
-		}
-
-		matrixUserID := fmt.Sprintf("@%s:%s", user.Username, serverDomain)
-
-		// Check if user already exists in our tracking
-		existingUserID, err := b.kvstore.Get(fmt.Sprintf("mirror_user_%s", userID))
-		if err == nil && len(existingUserID) > 0 {
-			b.logger.LogDebug("Using existing mirrored Matrix user", "mattermost_user_id", userID, "matrix_user_id", matrixUserID)
-			return matrixUserID, nil
-		}
-
-		// Create the Matrix user
-		password := config.GetMirrorModePassword()
-
-		b.logger.LogInfo("Creating Matrix user in mirror mode", "mattermost_user_id", userID, "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
-
-		regResp, err := b.matrixClient.RegisterUserWithASToken(user.Username, password)
-		if err != nil {
-			b.logger.LogWarn("Failed to register Matrix user, may already exist", "error", err, "matrix_user_id", matrixUserID)
-			// Continue anyway - user might already exist
-		} else {
-			b.logger.LogInfo("Successfully registered Matrix user", "matrix_user_id", regResp.UserID)
-		}
-
-		// Sync user profile if enabled
-		if config.SyncUserProfiles {
-			// Set display name
-			displayName := user.GetDisplayName(model.ShowFullName)
-			if displayName != "" {
-				if err := b.matrixClient.SetUserDisplayName(matrixUserID, displayName); err != nil {
-					b.logger.LogWarn("Failed to set Matrix user display name", "error", err, "matrix_user_id", matrixUserID)
-				} else {
-					b.logger.LogDebug("Set Matrix user display name", "matrix_user_id", matrixUserID, "display_name", displayName)
-				}
-			}
-
-			// TODO: Sync avatar - would need to upload Mattermost profile picture to Matrix
-			// This requires fetching the profile picture from Mattermost and uploading to Matrix media store
-		}
-
-		// Track that we've created this user
-		if err := b.kvstore.Set(fmt.Sprintf("mirror_user_%s", userID), []byte(matrixUserID)); err != nil {
-			b.logger.LogWarn("Failed to track mirrored user", "error", err, "user_id", userID)
-		}
-
-		return matrixUserID, nil
-	}
-
-	// Ghost mode: create or get ghost user
-	return b.CreateOrGetGhostUser(userID)
+	return b.ensureAccount(userID)
 }
 
 // CreateOrGetGhostUser creates a new Matrix ghost user for a Mattermost user, or returns existing one
@@ -392,10 +337,11 @@ func (b *MattermostToMatrixBridge) SyncUserToMatrix(user *model.User) error {
 
 	b.logger.LogDebug("Found ghost user for user sync", "user_id", user.Id, "ghost_user_id", ghostUserID)
 
-	// If the user isn't a ghost (doesn't start with defined prefix), do not attempt to update profile.
-	// This supports custom mapping to real Matrix users without errors.
-	if !strings.HasPrefix(ghostUserID, "@_mattermost_") {
-		b.logger.LogDebug("Skipping profile sync for non-ghost user", "user_id", user.Id, "ghost_user_id", ghostUserID)
+	// Only accounts the bridge manages get their profile synced: ghosts and
+	// unclaimed mirror accounts. A mapped real Matrix user or a claimed
+	// account has a profile of its own.
+	if !b.ownsAccount(ghostUserID) {
+		b.logger.LogDebug("Skipping profile sync for an account the bridge does not manage", "user_id", user.Id, "matrix_user_id", ghostUserID)
 		return nil
 	}
 
@@ -1165,7 +1111,7 @@ func (b *MattermostToMatrixBridge) addMatrixMentionsWithData(content map[string]
 		} else if ghostUserID, exists := b.getGhostUser(user.Id); exists {
 			matrixUserID = ghostUserID
 		} else {
-			ghostUserID, err := b.CreateOrGetGhostUser(user.Id)
+			ghostUserID, err := b.ensureAccount(user.Id)
 			if err != nil {
 				b.logger.LogWarn("Failed to create ghost user for mentioned user", "username", username, "user_id", user.Id, "error", err)
 				continue
@@ -1461,7 +1407,7 @@ func (b *MattermostToMatrixBridge) getOrCreateDMRoom(channelID string, userIDs [
 			}
 		} else {
 			// This is a local Mattermost user - create or get ghost user
-			ghostUserID, err := b.CreateOrGetGhostUser(userID)
+			ghostUserID, err := b.ensureAccount(userID)
 			if err != nil {
 				b.logger.LogWarn("Failed to create ghost user for DM", "user_id", userID, "error", err)
 				continue

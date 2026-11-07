@@ -47,6 +47,10 @@ type BridgeConfig struct {
 	MatrixServerDomain string
 	ASToken            string
 	HSToken            string
+	// MirrorMode enables mirror mode; AdminToken is a Matrix admin token for
+	// /matrix claim.
+	MirrorMode bool
+	AdminToken string
 }
 
 // StartMattermost starts Postgres and Mattermost on the given network.
@@ -183,6 +187,9 @@ func (m *MattermostServer) InstallBridge(t *testing.T, ctx context.Context, admi
 			"matrix_hs_token":      cfg.HSToken,
 			"enable_sync":          true,
 			"rate_limiting_mode":   "disabled",
+			"enable_mirror_mode":   cfg.MirrorMode,
+			"matrix_admin_token":   cfg.AdminToken,
+			"sync_user_profiles":   true,
 		},
 	}
 	_, _, err = admin.PatchConfig(ctx, patch)

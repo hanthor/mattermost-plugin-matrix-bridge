@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -105,6 +104,12 @@ func (p *Plugin) OnActivate() error {
 	p.logger = NewPluginAPILogger(p.API)
 
 	p.kvstore = kvstore.NewKVStore(p.client)
+
+	// Re-apply the pinned account mode now that the store is available; the
+	// first configuration change arrives before activation.
+	pinned := p.getConfiguration().Clone()
+	p.applyAccountModeLock(pinned)
+	p.setConfiguration(pinned)
 
 	p.postTracker = NewPostTracker(DefaultPostTrackerMaxEntries)
 	p.pendingFiles = NewPendingFileTracker()
@@ -296,7 +301,7 @@ func (p *Plugin) GetMetrics() command.MetricsProvider {
 
 // CreateOrGetGhostUser gets an existing ghost user or creates a new one for a Mattermost user
 func (p *Plugin) CreateOrGetGhostUser(mattermostUserID string) (string, error) {
-	return p.mattermostToMatrixBridge.CreateOrGetGhostUser(mattermostUserID)
+	return p.mattermostToMatrixBridge.ensureAccount(mattermostUserID)
 }
 
 // GetMatrixUserIDFromMattermostUser looks up the original Matrix user ID for a remote Mattermost user
@@ -405,39 +410,10 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 		// This is a local Mattermost user. Ghosts are created when the account
 		// is, so bring the name and avatar up to date before people see it.
 		p.mattermostToMatrixBridge.syncProfileIfChanged(user)
-		var matrixUserID string
-
-		if config.EnableMirrorMode {
-			// Mirror Mode: Create or use real Matrix user based on username
-			matrixUserID = fmt.Sprintf("@%s:%s", user.Username, p.matrixServerDomain())
-			p.logger.LogDebug("Mirror mode: Adding Mattermost user to Matrix", "mattermost_username", user.Username, "matrix_user_id", matrixUserID)
-
-			// Auto-create the user if needed (will be idempotent)
-			password := config.GetMirrorModePassword()
-
-			_, err := p.matrixClient.RegisterUserWithASToken(user.Username, password)
-			if err != nil {
-				p.logger.LogWarn("Failed to register Matrix user (may already exist)", "error", err, "matrix_user_id", matrixUserID)
-				// Continue anyway - user likely exists
-			}
-
-			// Sync profile if enabled
-			if config.SyncUserProfiles {
-				displayName := user.GetDisplayName(model.ShowFullName)
-				if displayName != "" {
-					if err := p.matrixClient.SetUserDisplayName(matrixUserID, displayName); err != nil {
-						p.logger.LogWarn("Failed to sync display name", "error", err, "matrix_user_id", matrixUserID)
-					}
-				}
-			}
-		} else {
-			// Ghost mode: create ghost user
-			ghostUserID, err := p.CreateOrGetGhostUser(user.Id)
-			if err != nil {
-				p.logger.LogError("Failed to create or get ghost user", "error", err, "user_id", user.Id, "username", user.Username)
-				return
-			}
-			matrixUserID = ghostUserID
+		matrixUserID, err := p.mattermostToMatrixBridge.ensureAccount(user.Id)
+		if err != nil {
+			p.logger.LogError("Failed to create or get the Matrix account for the user", "error", err, "user_id", user.Id, "username", user.Username)
+			return
 		}
 
 		// Resolve room alias to room ID if needed

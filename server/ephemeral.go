@@ -40,7 +40,7 @@ func (p *Plugin) handleMatrixTyping(event MatrixEvent) error {
 
 	for _, raw := range rawUserIDs {
 		matrixUserID, ok := raw.(string)
-		if !ok || p.isGhostUser(matrixUserID) {
+		if !ok || p.isBridgeAccount(matrixUserID) {
 			continue
 		}
 		mattermostUserID := p.lookupMattermostUserForMatrixUser(matrixUserID)
@@ -57,7 +57,7 @@ func (p *Plugin) handleMatrixTyping(event MatrixEvent) error {
 // handleMatrixPresence mirrors Matrix presence onto the Mattermost status of
 // the corresponding bridged user.
 func (p *Plugin) handleMatrixPresence(event MatrixEvent) error {
-	if event.Sender == "" || p.isGhostUser(event.Sender) {
+	if event.Sender == "" || p.isBridgeAccount(event.Sender) {
 		return nil
 	}
 	mattermostUserID := p.lookupMattermostUserForMatrixUser(event.Sender)

@@ -3,8 +3,6 @@ package main
 import (
 	"reflect"
 
-	"github.com/mattermost/mattermost/server/public/model"
-
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
 	"github.com/pkg/errors"
 )
@@ -32,8 +30,13 @@ type configuration struct {
 	RateLimitingMode     string `json:"rate_limiting_mode"`
 	EnableMirrorMode     bool   `json:"enable_mirror_mode"`   // Hijack Matrix server to mirror Mattermost
 	MatrixServerDomain   string `json:"matrix_server_domain"` // e.g. "synapse" for @user:synapse
-	MirrorModePassword   string `json:"mirror_mode_password"` // Default password for auto-created users
+	MirrorModePassword   string `json:"mirror_mode_password"` // Legacy: one shared password for every mirrored account
+	MatrixAdminToken     string `json:"matrix_admin_token"`   // Synapse admin token; lets /matrix claim set a one-time password
 	SyncUserProfiles     bool   `json:"sync_user_profiles"`   // Sync display names and avatars
+
+	// accountModePinned is set when EnableMirrorMode was overridden because
+	// accounts already exist in the other mode.
+	accountModePinned bool
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -108,6 +111,7 @@ func (p *Plugin) OnConfigurationChange() error {
 		"enable_mirror_mode", configuration.EnableMirrorMode,
 		"sync_user_profiles", configuration.SyncUserProfiles,
 		"mirror_mode_password_set", configuration.MirrorModePassword != "",
+		"admin_token_set", configuration.MatrixAdminToken != "",
 		"matrix_server_domain", configuration.MatrixServerDomain,
 	)
 
@@ -116,11 +120,34 @@ func (p *Plugin) OnConfigurationChange() error {
 		return errors.Wrap(err, "invalid plugin configuration")
 	}
 
+	p.applyAccountModeLock(configuration)
 	p.setConfiguration(configuration)
 
 	p.initMatrixClient()
 
 	return nil
+}
+
+// applyAccountModeLock keeps the account mode the bridge started with.
+// Switching between ghosts and mirror accounts once accounts exist would give
+// every user two Matrix identities and two sets of room memberships, so the
+// mode recorded with the first account wins over the setting.
+func (p *Plugin) applyAccountModeLock(cfg *configuration) {
+	if p.kvstore == nil {
+		return
+	}
+	recorded := effectiveAccountMode(p.kvstore)
+	if recorded == "" {
+		return
+	}
+	wantMirror := recorded == accountModeMirror
+	if cfg.EnableMirrorMode == wantMirror {
+		return
+	}
+	p.API.LogError("The mirror mode setting differs from the mode the existing Matrix accounts were created in; keeping the existing mode. Use /matrix migrate ghosts-to-mirror to change modes",
+		"setting_enable_mirror_mode", cfg.EnableMirrorMode, "account_mode", recorded)
+	cfg.EnableMirrorMode = wantMirror
+	cfg.accountModePinned = true
 }
 
 // validateConfiguration checks that required configuration fields are present
@@ -168,15 +195,4 @@ func (c *configuration) GetMatrixUsernamePrefixForServer(_ string) string {
 // GetEnableMirrorMode returns whether Mirror Mode is enabled
 func (c *configuration) GetEnableMirrorMode() bool {
 	return c.EnableMirrorMode
-}
-
-// GetMirrorModePassword returns the password used when registering a mirrored
-// Matrix account. When no password is configured a random one is generated so
-// that mirrored accounts never receive a guessable password derived from
-// public identifiers such as the Mattermost user ID.
-func (c *configuration) GetMirrorModePassword() string {
-	if c.MirrorModePassword != "" {
-		return c.MirrorModePassword
-	}
-	return model.NewRandomString(32)
 }

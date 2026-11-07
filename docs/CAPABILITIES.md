@@ -67,6 +67,16 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Double puppeting (use my own Matrix account) | Mattermost → Matrix | ✅ | "!mattermost login <access_token>" lets the bridge send as the linked Matrix account. |
 | Automatic linking through shared SSO (OIDC / Matrix Authentication Service) | Mattermost → Matrix | ❌ | Match accounts by verified email from a shared identity provider so linking is zero-touch. |
 
+## Mirror mode
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Real @username accounts instead of ghosts | Mattermost → Matrix | ✅ | Created without credentials; the first account pins the mode so it cannot be switched under existing accounts. |
+| Name collisions with existing accounts | Mattermost → Matrix | ✅ | A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status. |
+| Claiming an account | Matrix → Mattermost | ✅ | /matrix claim with an admin token, or the first message from the person's own client after shared login. Their messages then post as them and the bridge keeps sending through the appservice. |
+| Shared login with Mattermost as the identity provider | Matrix → Mattermost | 🟡 | Documented for Matrix Authentication Service; nothing in the plugin sets it up. |
+| Ghosts to mirror accounts migration | Mattermost → Matrix | ❌ | Planned: /matrix migrate ghosts-to-mirror. |
+
 ## Rooms
 
 | Capability | Direction | Status | Notes |
@@ -97,7 +107,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 25
-- 🟡 partial: 2
-- ❌ gap: 27
+- ✅ supported: 28
+- 🟡 partial: 3
+- ❌ gap: 28
 - — n/a: 0

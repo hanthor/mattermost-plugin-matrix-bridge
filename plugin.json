@@ -76,11 +76,20 @@
             },
             {
                 "key": "mirror_mode_password",
-                "display_name": "Mirror Mode Default Password",
+                "display_name": "Mirror Mode Shared Password (legacy)",
                 "type": "text",
-                "help_text": "Password for Matrix accounts created in Mirror Mode. Leave empty to generate a unique random password per user (recommended unless users must log in to Element directly).",
+                "help_text": "Not recommended. When empty, mirrored Matrix accounts are created without any credentials and people claim them with /matrix claim or shared login. When set, every mirrored account gets this one password.",
                 "placeholder": "",
                 "default": ""
+            },
+            {
+                "key": "matrix_admin_token",
+                "display_name": "Matrix Admin Access Token",
+                "type": "text",
+                "help_text": "Optional. A Synapse admin access token that lets /matrix claim set a one-time password for a mirrored account. Not needed when people sign in to Matrix with shared login.",
+                "placeholder": "",
+                "default": "",
+                "secret": true
             },
             {
                 "key": "sync_user_profiles",

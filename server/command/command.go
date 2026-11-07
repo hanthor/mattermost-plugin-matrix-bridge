@@ -85,6 +85,23 @@ type MetricsProvider interface {
 	GetUptime() time.Duration
 }
 
+// MirrorStatus describes the account mode of the bridge for /matrix status.
+type MirrorStatus struct {
+	// Mode is "ghost" or "mirror".
+	Mode string
+	// Pinned is set when the mode was fixed by existing accounts and the
+	// setting asks for a different one.
+	Pinned bool
+	// ConfiguredMirror is what the setting asks for.
+	ConfiguredMirror bool
+	Accounts         int
+	Claimed          int
+	Collisions       int
+	// ClaimSupported is true when the bridge can set a password for a
+	// mirrored account (an admin token is configured).
+	ClaimSupported bool
+}
+
 // PluginAccessor defines the interface for plugin functionality needed by command handlers
 type PluginAccessor interface {
 	// Matrix client access
@@ -119,6 +136,12 @@ type PluginAccessor interface {
 	// Migration access
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
+
+	// Mirror mode: account mode and claiming (see docs/CALLS_AND_MIRROR_MODE.md)
+	MirrorStatus() MirrorStatus
+	// ClaimMirrorAccount hands a mirrored account to its person. When the
+	// bridge can set a password it returns a one-time password to show once.
+	ClaimMirrorAccount(mattermostUserID string) (matrixUserID, oneTimePassword string, err error)
 
 	// Identity linking (one person on both networks)
 	CreateIdentityLinkCode(mattermostUserID string) (string, error)
@@ -269,6 +292,7 @@ const (
 	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|migrate] [room_name|room_alias|room_id]"
 	linkCommandDesc    = "Link your Matrix account so you are one identity on both networks"
 	unlinkCommandDesc  = "Remove the link to your Matrix account"
+	claimCommandDesc   = "Mirror mode: take over your mirrored Matrix account"
 
 	// Subcommand descriptions for autocomplete
 	testCommandDesc    = "Test Matrix server connection and configuration"
@@ -396,6 +420,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("link", "", linkCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("unlink", "", unlinkCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("claim", "", claimCommandDesc))
 
 	return matrixData
 }
@@ -1194,8 +1219,10 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 	case "status":
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         statusCommandResponse,
+			Text:         statusCommandResponse + c.accountModeStatus(),
 		}
+	case "claim":
+		return c.executeClaimCommand(args)
 	case "metrics":
 		return c.executeMetricsCommand(args)
 	case "link":
@@ -1713,4 +1740,47 @@ func (c *Handler) executeUnlinkCommand(args *model.CommandArgs) *model.CommandRe
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         "✅ Your Matrix account has been unlinked. Your messages will be bridged through a ghost user again.",
 	}
+}
+
+// accountModeStatus reports how Mattermost users appear in Matrix.
+func (c *Handler) accountModeStatus() string {
+	st := c.plugin.MirrorStatus()
+	var sb strings.Builder
+	if st.Mode == "mirror" {
+		sb.WriteString(fmt.Sprintf("\n- Accounts: **mirror mode**, %d mirrored account(s), %d claimed by their people", st.Accounts, st.Claimed))
+		if st.Collisions > 0 {
+			sb.WriteString(fmt.Sprintf("\n- ⚠️ %d account(s) use a suffixed name because the natural name was already taken on the homeserver", st.Collisions))
+		}
+		if !st.ClaimSupported {
+			sb.WriteString("\n- People can claim an account through shared login; set an admin token to also let `/matrix claim` hand out a one-time password")
+		}
+	} else {
+		sb.WriteString("\n- Accounts: **ghost users** (`@_mattermost_<id>`)")
+	}
+	if st.Pinned {
+		want := "ghost users"
+		if st.ConfiguredMirror {
+			want = "mirror mode"
+		}
+		sb.WriteString(fmt.Sprintf("\n- ⚠️ The setting asks for %s, but accounts already exist in the other mode, so it is ignored. Use `/matrix migrate ghosts-to-mirror` to change modes", want))
+	}
+	return sb.String()
+}
+
+// executeClaimCommand lets a person take over their mirrored account.
+func (c *Handler) executeClaimCommand(args *model.CommandArgs) *model.CommandResponse {
+	reply := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+	if c.plugin.MirrorStatus().Mode != "mirror" {
+		return reply("ℹ️ Claiming applies to mirror mode, where every Mattermost user has a Matrix account of their own. Use `/matrix link` to connect an existing Matrix account instead.")
+	}
+	matrixUserID, password, err := c.plugin.ClaimMirrorAccount(args.UserId)
+	if err != nil {
+		return reply("❌ " + err.Error())
+	}
+	if password == "" {
+		return reply(fmt.Sprintf("✅ `%s` is now yours. Log in to Matrix with your single sign-on account; the bridge keeps posting as you from Mattermost.", matrixUserID))
+	}
+	return reply(fmt.Sprintf("✅ `%s` is now yours.\n\nOne-time password (shown once, change it after your first login): `%s`\n\nThe bridge keeps posting as you from Mattermost.", matrixUserID, password))
 }

@@ -133,6 +133,9 @@ func TestUserSyncFeature(t *testing.T) {
 	ghostUserID := "@_mattermost_" + mmUserID + ":matrix.org" // must match the ghost namespace or sync is skipped
 	ghostUserKey := kvstore.BuildGhostUserKey(mmUserID)
 	mockKV.On("Get", ghostUserKey).Return([]byte(ghostUserID), nil)
+	// Mirror mode records: this user has none.
+	mockKV.On("Get", mirrorAccountKeyPrefix+mmUserID).Return([]byte(nil), nil).Maybe()
+	mockKV.On("Get", legacyMirrorUserPrefix+mmUserID).Return([]byte(nil), nil).Maybe()
 	mockKV.On("Get", profileFingerprintKeyPrefix+mmUserID).Return([]byte(nil), nil)
 	mockKV.On("Set", profileFingerprintKeyPrefix+mmUserID, mock.Anything).Return(nil)
 

@@ -91,6 +91,20 @@ func bridgeBlueprint() b.Blueprint {
 // registers cleanup with t.
 func NewHarness(t *testing.T) *Harness {
 	t.Helper()
+	return NewHarnessWithOptions(t, HarnessOptions{})
+}
+
+// HarnessOptions tunes the deployment.
+type HarnessOptions struct {
+	// MirrorMode runs the bridge in mirror mode: Mattermost users get real
+	// @username accounts instead of ghosts, and a Matrix admin token is
+	// configured so /matrix claim can hand accounts over.
+	MirrorMode bool
+}
+
+// NewHarnessWithOptions is NewHarness with options.
+func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
+	t.Helper()
 	ctx := context.Background()
 
 	deployment := complement.OldDeploy(t, bridgeBlueprint())
@@ -115,12 +129,18 @@ func NewHarness(t *testing.T) *Harness {
 
 	h.Admin, h.AdminUser = mm.CreateAdmin(t, ctx)
 	h.Team = mm.CreateTeam(t, ctx, h.Admin, "e2e")
-	mm.InstallBridge(t, ctx, h.Admin, BridgeConfig{
+	cfg := BridgeConfig{
 		MatrixServerURL:    fmt.Sprintf("http://%s:8008", HSName),
 		MatrixServerDomain: HSName,
 		ASToken:            asToken,
 		HSToken:            hsToken,
-	})
+		MirrorMode:         opts.MirrorMode,
+	}
+	if opts.MirrorMode {
+		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})
+		cfg.AdminToken = admin.AccessToken
+	}
+	mm.InstallBridge(t, ctx, h.Admin, cfg)
 	h.waitForBridgeCommands(ctx)
 
 	return h

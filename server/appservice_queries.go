@@ -23,6 +23,9 @@ func (p *Plugin) handleAppServiceUserQuery(w http.ResponseWriter, r *http.Reques
 	matrixUserID := mux.Vars(r)["userId"]
 
 	mattermostUserID := p.extractMattermostUserIDFromGhost(matrixUserID)
+	if mattermostUserID == "" && p.getConfiguration().EnableMirrorMode {
+		mattermostUserID = p.mirrorUserForMatrixID(matrixUserID)
+	}
 	if mattermostUserID == "" || !strings.HasSuffix(matrixUserID, ":"+p.matrixServerDomain()) {
 		writeMatrixError(w, http.StatusNotFound, "M_NOT_FOUND", "User is not managed by this bridge")
 		return
@@ -38,7 +41,7 @@ func (p *Plugin) handleAppServiceUserQuery(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if _, err := p.mattermostToMatrixBridge.CreateOrGetGhostUser(mattermostUserID); err != nil {
+	if _, err := p.mattermostToMatrixBridge.ensureAccount(mattermostUserID); err != nil {
 		p.logger.LogWarn("Failed to provision ghost user for appservice query", "error", err, "matrix_user_id", matrixUserID)
 		writeMatrixError(w, http.StatusInternalServerError, "M_UNKNOWN", "Failed to provision user")
 		return
