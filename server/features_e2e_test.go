@@ -200,8 +200,8 @@ func (suite *FeaturesE2ETestSuite) TestUserPuppeting_Real() {
 	t.Logf("Created Ghost User: %s", ghostID)
 
 	// 2. Update User (Profile Sync)
-	// This usually triggers profile updates.
-	suite.plugin.UserHasUpdated(nil, user, user)
+	// Mattermost has no profile-change hook; the bridge resyncs on activity.
+	suite.plugin.mattermostToMatrixBridge.syncProfileIfChanged(user)
 
 	// If no error logged, it likely worked.
 	// Real check would be GET /_matrix/client/v3/profile/{ghostID}

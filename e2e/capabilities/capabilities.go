@@ -97,7 +97,7 @@ var All = []Capability{
 	{ID: "ephemeral.read_receipts.in", Area: "Ephemeral", Name: "Read receipts", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Mattermost has no plugin API to mark a channel viewed for another user."},
 
 	// Users
-	{ID: "users.profile", Area: "Users", Name: "Display name and avatar", Direction: MattermostToMatrix, Status: Supported, Notes: ""},
+	{ID: "users.profile", Area: "Users", Name: "Display name and avatar", Direction: MattermostToMatrix, Status: Supported, Notes: "Refreshed on the user's next activity or by a 15-minute sweep; Mattermost has no profile-change hook."},
 	{ID: "users.profile.in", Area: "Users", Name: "Display name and avatar", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
 	{ID: "users.deactivation", Area: "Users", Name: "Deactivated users leave rooms", Direction: MattermostToMatrix, Status: Unsupported, Notes: "UserHasBeenDeactivated should make the ghost leave and deactivate."},
 	{ID: "identity.link", Area: "Users", Name: "Self-service account linking", Direction: MatrixToMattermost, Status: Supported, Notes: "/matrix link issues a code; \"!mattermost link <code>\" to the bridge bot binds the accounts. Linked Matrix users post as their real Mattermost account."},

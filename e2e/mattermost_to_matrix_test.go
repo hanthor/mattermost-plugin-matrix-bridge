@@ -173,13 +173,18 @@ func TestMattermostToMatrix(t *testing.T) {
 	})
 
 	t.Run("profile changes update the ghost display name", func(t *testing.T) {
-		dave, _ := h.CreateMattermostUser("dave")
+		dave, daveClient := h.CreateMattermostUser("dave")
 		_, _, err := h.Admin.AddChannelMember(ctx, channel.Id, dave.Id)
 		require.NoError(t, err)
 		daveGhost := h.GhostUserID(dave.Id)
 		alice.MustSyncUntil(t, client.SyncReq{}, client.SyncJoinedTo(daveGhost, roomID))
 
 		_, _, err = h.Admin.PatchUser(ctx, dave.Id, &model.UserPatch{FirstName: model.NewPointer("David"), LastName: model.NewPointer("Example")})
+		require.NoError(t, err)
+
+		// Mattermost has no profile-change hook: the ghost is refreshed on the
+		// user's next activity in a bridged channel (and by a periodic sweep).
+		_, _, err = daveClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "Hello, I renamed myself"})
 		require.NoError(t, err)
 
 		WaitFor(t, bridgeTimeout, "ghost display name to update", func() bool {

@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,9 +38,10 @@ func TestIdentityLinking(t *testing.T) {
 	t.Run("the bot accepts the invite and answers help", func(t *testing.T) {
 		SendMatrixText(t, alice, dm, "!mattermost help")
 		reply := WaitForMatrixEvent(t, alice, dm, func(ev gjson.Result) bool {
-			return ev.Get("sender").Str == h.BridgeBotUserID() && ev.Get("content.msgtype").Str == "m.notice"
+			return ev.Get("sender").Str == h.BridgeBotUserID() && ev.Get("content.msgtype").Str == "m.notice" &&
+				strings.Contains(ev.Get("content.body").Str, "!mattermost link")
 		})
-		assert.Contains(t, reply.Get("content.body").Str, "!mattermost link")
+		assert.Contains(t, reply.Get("content.body").Str, "!mattermost whoami")
 		capabilities.Verify(t, "integration.bot_commands.in", true)
 	})
 

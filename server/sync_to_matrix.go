@@ -473,6 +473,7 @@ func (b *MattermostToMatrixBridge) syncPostToMatrixWithResolvedRoom(post *model.
 	if appErr != nil {
 		return errors.Wrap(appErr, "failed to get user")
 	}
+	b.syncProfileIfChanged(user)
 
 	// Check if this post already has a Matrix event ID (indicating it's an edit)
 	config := b.getConfiguration()
@@ -664,8 +665,9 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		b.logger.LogDebug("Posted message with file attachments to Matrix", "post_id", post.Id, "file_count", len(pendingFiles))
 	}
 
-	// Store the Matrix event ID as a post property for reaction mapping
-	if sendResponse != nil && sendResponse.EventID != "" {
+	// Store the Matrix event ID as a post property for reaction mapping.
+	// System messages cannot be updated through the API, so skip them.
+	if sendResponse != nil && sendResponse.EventID != "" && !post.IsSystemMessage() {
 		if post.Props == nil {
 			post.Props = make(map[string]any)
 		}

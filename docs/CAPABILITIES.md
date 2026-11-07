@@ -60,7 +60,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
-| Display name and avatar | Mattermost → Matrix | ✅ |  |
+| Display name and avatar | Mattermost → Matrix | ✅ | Refreshed on the user's next activity or by a 15-minute sweep; Mattermost has no profile-change hook. |
 | Display name and avatar | Matrix → Mattermost | ✅ |  |
 | Deactivated users leave rooms | Mattermost → Matrix | ❌ | UserHasBeenDeactivated should make the ghost leave and deactivate. |
 | Self-service account linking | Matrix → Mattermost | ✅ | /matrix link issues a code; "!mattermost link <code>" to the bridge bot binds the accounts. Linked Matrix users post as their real Mattermost account. |

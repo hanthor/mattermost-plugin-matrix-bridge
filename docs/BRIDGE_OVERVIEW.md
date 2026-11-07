@@ -76,10 +76,13 @@ The bridge listens to Mattermost events and forwards them to Matrix:
 
 - **`MessageHasBeenPosted`**: Sends Mattermost messages to Matrix rooms
 - **`UserHasBeenCreated`**: Creates corresponding Matrix ghost users
-- **`UserHasUpdated`**: Syncs profile changes (name, avatar) to Matrix
 - **`ChannelHasBeenCreated`**: Creates Matrix rooms for new channels
 - **`TeamHasBeenCreated`**: Creates Matrix Spaces for teams
 - **`UserHasJoinedChannel`**: Joins ghost users to Matrix rooms
+
+Mattermost has no hook for profile changes, so ghost display names and
+avatars are refreshed when a user is next active in a bridged channel and by
+a periodic sweep ([`server/profile_sync.go`](../server/profile_sync.go)).
 
 #### 2. Application Service (Matrix → Mattermost)
 The bridge runs an HTTP server that receives Matrix events:

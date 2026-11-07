@@ -133,6 +133,8 @@ func TestUserSyncFeature(t *testing.T) {
 	ghostUserID := "@_mattermost_" + mmUserID + ":matrix.org" // must match the ghost namespace or sync is skipped
 	ghostUserKey := kvstore.BuildGhostUserKey(mmUserID)
 	mockKV.On("Get", ghostUserKey).Return([]byte(ghostUserID), nil)
+	mockKV.On("Get", profileFingerprintKeyPrefix+mmUserID).Return([]byte(nil), nil)
+	mockKV.On("Set", profileFingerprintKeyPrefix+mmUserID, mock.Anything).Return(nil)
 
 	// Setup API Mock
 	api := &plugintest.API{}
@@ -206,11 +208,10 @@ func TestUserSyncFeature(t *testing.T) {
 			LastName:  "User",
 		}
 
-		// UserHasUpdated calls SyncUserToMatrix
-		// Pass user as both previous and new to ensure no panic regardless of which argument is used
-		plugin.UserHasUpdated(nil, user, user)
+		// Mattermost has no profile-change hook; the bridge resyncs on activity.
+		plugin.mattermostToMatrixBridge.syncProfileIfChanged(user)
 
-		assert.True(t, uploadCalled, "UploadAvatarFromData should be called via Hook")
-		assert.True(t, setAvatarCalled, "SetAvatarURL should be called via Hook")
+		assert.True(t, uploadCalled, "UploadAvatarFromData should be called on profile change")
+		assert.True(t, setAvatarCalled, "SetAvatarURL should be called on profile change")
 	})
 }

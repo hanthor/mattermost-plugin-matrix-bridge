@@ -108,7 +108,6 @@ The main plugin entry point that integrates with Mattermost.
 ```go
 MessageHasBeenPosted(c *plugin.Context, post *model.Post)
 UserHasBeenCreated(c *plugin.Context, user *model.User)
-UserHasUpdated(c *plugin.Context, user *model.User)
 ChannelHasBeenCreated(c *plugin.Context, channel *model.Channel)
 TeamHasBeenCreated(c *plugin.Context, team *model.Team)
 UserHasJoinedChannel(c *plugin.Context, channelMember *model.ChannelMember, actor *model.User)
@@ -474,7 +473,6 @@ remote_user_@bob:matrix.org:
 ```go
 MessageHasBeenPosted(*plugin.Context, *model.Post)
 UserHasBeenCreated(*plugin.Context, *model.User)
-UserHasUpdated(*plugin.Context, *model.User)
 ChannelHasBeenCreated(*plugin.Context, *model.Channel)
 TeamHasBeenCreated(*plugin.Context, *model.Team)
 UserHasJoinedChannel(*plugin.Context, *model.ChannelMember, *model.User)

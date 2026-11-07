@@ -156,7 +156,7 @@ func (p *Plugin) OnActivate() error {
 	job, err := cluster.Schedule(
 		p.API,
 		"BackgroundJob",
-		cluster.MakeWaitForRoundedInterval(1*time.Hour),
+		cluster.MakeWaitForRoundedInterval(profileSweepInterval),
 		p.runJob,
 	)
 	if err != nil {
@@ -460,23 +460,6 @@ func (p *Plugin) UserHasBeenCreated(_ *plugin.Context, user *model.User) {
 	p.logger.LogDebug("User created, ensuring Matrix ghost user exists", "user_id", user.Id, "username", user.Username)
 	if _, err := p.CreateOrGetGhostUser(user.Id); err != nil {
 		p.logger.LogError("Failed to create ghost user for new user", "user_id", user.Id, "username", user.Username, "error", err)
-	}
-}
-
-// UserHasUpdated is called when a user is updated in Mattermost
-func (p *Plugin) UserHasUpdated(_ *plugin.Context, user *model.User, _ *model.User) {
-	if user.IsBot {
-		return
-	}
-
-	config := p.getConfiguration()
-	if !config.EnableSync {
-		return
-	}
-
-	p.logger.LogInfo("User updated, syncing profile to Matrix", "user_id", user.Id, "username", user.Username)
-	if err := p.mattermostToMatrixBridge.SyncUserToMatrix(user); err != nil {
-		p.logger.LogError("Failed to sync user update to Matrix", "user_id", user.Id, "username", user.Username, "error", err)
 	}
 }
 

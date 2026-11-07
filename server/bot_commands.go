@@ -38,7 +38,7 @@ func (p *Plugin) handleBridgeBotMembership(event MatrixEvent) {
 	}
 	p.logger.LogInfo("Bridge bot accepted an invite", "room_id", event.RoomID, "inviter", event.Sender)
 	if strings.HasPrefix(event.Sender, "@") {
-		_ = p.matrixClient.SendNotice(event.RoomID, "Hi! I'm the Mattermost bridge. Send `!mattermost help` to see what I can do.")
+		_ = p.matrixClient.SendNotice(event.RoomID, "Hi! I'm the Mattermost bridge.\n\n"+botHelpText)
 	}
 }
 
@@ -60,7 +60,15 @@ func (p *Plugin) handleBotCommand(event MatrixEvent) {
 	if reply == "" || p.matrixClient == nil {
 		return
 	}
-	if err := p.matrixClient.SendNotice(event.RoomID, reply); err != nil {
+	err := p.matrixClient.SendNotice(event.RoomID, reply)
+	if err != nil && strings.Contains(err.Error(), "M_FORBIDDEN") {
+		// The command can arrive in the same transaction as the invite,
+		// before the bot has joined: join and try once more.
+		if joinErr := p.matrixClient.JoinRoom(event.RoomID); joinErr == nil {
+			err = p.matrixClient.SendNotice(event.RoomID, reply)
+		}
+	}
+	if err != nil {
 		p.logger.LogWarn("Failed to answer bridge bot command", "error", err, "room_id", event.RoomID)
 	}
 }
