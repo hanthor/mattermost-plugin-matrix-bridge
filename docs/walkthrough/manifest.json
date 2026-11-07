@@ -1,0 +1,133 @@
+{
+  "generatedAtUTC": "2026-11-07T20:32:57Z",
+  "steps": [
+    {
+      "file": "setup-mm-plugin-management.png",
+      "caption": "System Console → Plugins → Plugin Management: upload the bridge bundle and enable it."
+    },
+    {
+      "file": "setup-mm-plugin-settings.png",
+      "caption": "The bridge settings: homeserver URL and the two appservice tokens the plugin generated."
+    },
+    {
+      "file": "setup-mm-registration-download.png",
+      "caption": "Further down, the registration file for the homeserver is generated from these settings."
+    },
+    {
+      "file": "setup-mm-matrix-test.png",
+      "caption": "`/matrix test` confirms the homeserver connection and the appservice permissions."
+    },
+    {
+      "file": "setup-mm-matrix-create.png",
+      "caption": "For a channel that existed before the bridge, `/matrix create publish=true` creates a public Matrix room and bridges it."
+    },
+    {
+      "file": "setup-mm-matrix-status.png",
+      "caption": "A channel created after the bridge was enabled gets a room automatically; `/matrix status` shows it."
+    },
+    {
+      "file": "setup-element-room-preview.png",
+      "caption": "In Element, a Matrix user opens the bridged room: the bridge bot created it, so it is a normal Matrix room."
+    },
+    {
+      "file": "setup-element-members.png",
+      "caption": "After joining, the member list shows the bridge bot and a ghost user for every channel member."
+    },
+    {
+      "file": "setup-mm-matrix-user-joined.png",
+      "caption": "Back in Mattermost, the Matrix user appears as a remote user who joined the channel."
+    },
+    {
+      "file": "feature-mm-message.png",
+      "caption": "Ada posts a formatted message in Mattermost."
+    },
+    {
+      "file": "feature-element-message.png",
+      "caption": "The same message in Element, sent by Ada's ghost user with her name and avatar, formatting intact."
+    },
+    {
+      "file": "feature-mm-message-from-matrix.png",
+      "caption": "Alice's reply arrives in Mattermost as a remote user with her Matrix display name and avatar."
+    },
+    {
+      "file": "feature-mm-thread.png",
+      "caption": "A Mattermost thread with a reply from Carol and one from Alice on Matrix."
+    },
+    {
+      "file": "feature-element-thread.png",
+      "caption": "In Element the same conversation is a Matrix thread under Ada's message."
+    },
+    {
+      "file": "feature-element-edit.png",
+      "caption": "Ada edits her post; Element shows the edited message with the \"(edited)\" marker."
+    },
+    {
+      "file": "feature-mm-edit.png",
+      "caption": "Alice edits her Matrix message; Mattermost updates the post and marks it \"Edited\"."
+    },
+    {
+      "file": "feature-mm-reactions.png",
+      "caption": "Reactions from both networks on one post: Carol's 🎉 from Mattermost and Alice's 👍 from Matrix."
+    },
+    {
+      "file": "feature-element-reactions.png",
+      "caption": "The same reactions in Element."
+    },
+    {
+      "file": "feature-mm-mention.png",
+      "caption": "Alice mentions Carol's ghost in Element; Mattermost renders it as an @carol mention."
+    },
+    {
+      "file": "feature-element-mention.png",
+      "caption": "Ada mentions Alice's remote account in Mattermost; Element shows a pill for Alice."
+    },
+    {
+      "file": "feature-element-attachment.png",
+      "caption": "An image attached in Mattermost arrives in Element as an m.image event."
+    },
+    {
+      "file": "feature-mm-attachment.png",
+      "caption": "An image sent from Element shows up as a file attachment in Mattermost."
+    },
+    {
+      "file": "feature-mm-typing.png",
+      "caption": "Typing in Element shows a typing indicator in Mattermost (appservice ephemeral events)."
+    },
+    {
+      "file": "feature-mm-topic.png",
+      "caption": "Alice changes the room topic in Matrix; the Mattermost channel header follows."
+    },
+    {
+      "file": "feature-element-topic.png",
+      "caption": "The room in Element with the new topic."
+    },
+    {
+      "file": "feature-mm-membership.png",
+      "caption": "Dave is added to the channel and Bob joins from Matrix: both show up on both sides."
+    },
+    {
+      "file": "feature-element-membership.png",
+      "caption": "Element's member list: the bridge bot, Matrix users, and a ghost for each Mattermost member."
+    },
+    {
+      "file": "feature-mm-matrix-link.png",
+      "caption": "`/matrix link` gives Carol a one-time code for the bridge bot in Matrix."
+    },
+    {
+      "file": "feature-element-bot-dm.png",
+      "caption": "In Element, the bridge bot confirms the link and, after `!mattermost login`, double puppeting."
+    },
+    {
+      "file": "feature-element-double-puppet.png",
+      "caption": "Carol's Mattermost message in Element, sent by her linked Matrix account rather than a ghost."
+    },
+    {
+      "file": "ops-mm-matrix-status.png",
+      "caption": "`/matrix status` shows the bridge state of the current channel."
+    },
+    {
+      "file": "ops-mm-matrix-list.png",
+      "caption": "`/matrix list` shows every bridged channel in the team."
+    }
+  ]
+}
