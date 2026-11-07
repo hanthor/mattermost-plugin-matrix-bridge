@@ -44,7 +44,13 @@ func (p *Plugin) ReactionHasBeenRemoved(_ *plugin.Context, reaction *model.React
 		return
 	}
 
-	p.queueReaction(reaction, post.ChannelId)
+	// The hook may hand us the reaction without DeleteAt set; the sync code
+	// uses DeleteAt to tell removals from additions.
+	removed := *reaction
+	if removed.DeleteAt == 0 {
+		removed.DeleteAt = model.GetMillis()
+	}
+	p.queueReaction(&removed, post.ChannelId)
 }
 
 // queueReaction batches a reaction for asynchronous sync. When the batcher is

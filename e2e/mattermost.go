@@ -173,6 +173,8 @@ func (m *MattermostServer) InstallBridge(t *testing.T, ctx context.Context, admi
 	require.Equal(t, PluginID, manifest.Id)
 
 	patch := &model.Config{}
+	patch.LogSettings.ConsoleLevel = model.NewPointer("DEBUG")
+	patch.LogSettings.FileLevel = model.NewPointer("DEBUG")
 	patch.PluginSettings.Plugins = map[string]map[string]any{
 		PluginID: {
 			"matrix_server_url":    cfg.MatrixServerURL,
@@ -199,7 +201,19 @@ func envOr(key, fallback string) string {
 
 func dumpContainerLogs(t *testing.T, c testcontainers.Container, name string) {
 	t.Helper()
-	reader, err := c.Logs(context.Background())
+	ctx := context.Background()
+
+	// Prefer the server's own log file, filtered to the plugin, because the
+	// docker log stream is not reliably complete at this point.
+	if code, out, err := c.Exec(ctx, []string{"sh", "-c", "grep -F '" + PluginID + "' /mattermost/logs/mattermost.log | tail -n 400"}); err == nil && code == 0 {
+		data, _ := io.ReadAll(out)
+		if len(data) > 0 {
+			t.Logf("=== %s plugin logs (from log file) ===\n%s", name, string(data))
+			return
+		}
+	}
+
+	reader, err := c.Logs(ctx)
 	if err != nil {
 		return
 	}

@@ -474,7 +474,7 @@ func (p *Plugin) UserHasUpdated(_ *plugin.Context, user *model.User, _ *model.Us
 		return
 	}
 
-	p.logger.LogDebug("User updated, syncing to Matrix", "user_id", user.Id, "username", user.Username)
+	p.logger.LogInfo("User updated, syncing profile to Matrix", "user_id", user.Id, "username", user.Username)
 	if err := p.mattermostToMatrixBridge.SyncUserToMatrix(user); err != nil {
 		p.logger.LogError("Failed to sync user update to Matrix", "user_id", user.Id, "username", user.Username, "error", err)
 	}
