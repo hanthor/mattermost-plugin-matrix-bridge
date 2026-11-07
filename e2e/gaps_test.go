@@ -383,14 +383,17 @@ func TestCapabilityGaps(t *testing.T) {
 		capabilities.Verify(t, "integration.widget", works)
 	})
 
-	t.Run("bridge bot answers commands in a DM", func(t *testing.T) {
+	t.Run("bridge bot can link a room from Matrix", func(t *testing.T) {
 		dm := alice.MustCreateRoom(t, map[string]interface{}{"preset": "private_chat", "is_direct": true, "invite": []string{h.BridgeBotUserID()}})
-		SendMatrixText(t, alice, dm, "!mattermost help")
+		SendMatrixText(t, alice, dm, "!mattermost rooms")
 		works := TryFor(probeTimeout, func() bool {
 			return timelineHas(t, alice, dm, func(ev gjson.Result) bool {
-				return ev.Get("type").Str == "m.room.message" && ev.Get("sender").Str == h.BridgeBotUserID()
+				return ev.Get("type").Str == "m.room.message" && ev.Get("sender").Str == h.BridgeBotUserID() &&
+					!strings.Contains(ev.Get("content.body").Str, "Unknown command")
 			})
 		})
+		// Partial: the DM commands exist (covered by TestIdentityLinking); room
+		// management from Matrix does not.
 		capabilities.Verify(t, "integration.bot_commands.in", works)
 	})
 

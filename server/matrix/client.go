@@ -186,6 +186,7 @@ type Client struct {
 	httpClient   *http.Client
 	logger       Logger
 	serverDomain string // explicit server domain for testing
+	puppetToken  string // when set, requests act as a real user with this token instead of impersonating via the AS token
 
 	// Rate limiting
 	rateLimitConfig     RateLimitConfig
@@ -366,11 +367,6 @@ func (c *Client) RedactEventAsGhost(roomID, eventID, ghostUserID string) (*SendE
 	}
 	reqURL := c.serverURL + endpoint
 
-	// Add user_id query parameter for impersonation
-	if ghostUserID != "" {
-		reqURL += "?user_id=" + url.QueryEscape(ghostUserID)
-	}
-
 	jsonData, err := json.Marshal(content)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal redaction content")
@@ -382,7 +378,7 @@ func (c *Client) RedactEventAsGhost(roomID, eventID, ghostUserID string) (*SendE
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	c.authorize(req, ghostUserID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -579,18 +575,13 @@ func (c *Client) JoinRoomAsUser(roomIdentifier, userID string) error {
 	encodedIdentifier := url.PathEscape(roomIdentifier)
 	requestURL := c.serverURL + "/_matrix/client/v3/join/" + encodedIdentifier
 
-	// Add user_id query parameter for impersonation
-	if userID != "" {
-		requestURL += "?user_id=" + url.QueryEscape(userID)
-	}
-
 	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer([]byte("{}")))
 	if err != nil {
 		return errors.Wrap(err, "failed to create join request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken) // Use AS token for impersonation
+	c.authorize(req, userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -834,6 +825,69 @@ func (c *Client) EnsureBotRegistered() error {
 	return err
 }
 
+// AsPuppet returns a copy of the client that acts as a real Matrix user with
+// the given access token (double puppeting). Requests made through the copy
+// send the token instead of the appservice token and omit user_id.
+func (c *Client) AsPuppet(token string) *Client {
+	cp := *c
+	cp.puppetToken = token
+	return &cp
+}
+
+// IsPuppet reports whether the client acts as a real user.
+func (c *Client) IsPuppet() bool {
+	return c.puppetToken != ""
+}
+
+// authorize sets the Authorization header and, when impersonating through
+// the appservice, the user_id query parameter.
+func (c *Client) authorize(req *http.Request, userID string) {
+	if c.puppetToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.puppetToken)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	if userID != "" {
+		q := req.URL.Query()
+		q.Set("user_id", userID)
+		req.URL.RawQuery = q.Encode()
+	}
+}
+
+// WhoAmI returns the user ID that owns an access token.
+func (c *Client) WhoAmI(token string) (string, error) {
+	req, err := http.NewRequest("GET", c.serverURL+"/_matrix/client/v3/account/whoami", nil)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create whoami request")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to send whoami request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("whoami failed: HTTP %d - %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", errors.Wrap(err, "failed to parse whoami response")
+	}
+	return out.UserID, nil
+}
+
+// SendNotice sends an m.notice as the appservice bot.
+func (c *Client) SendNotice(roomID, text string) error {
+	_, err := c.sendEventAsUser(roomID, "m.room.message", map[string]any{
+		"msgtype": "m.notice",
+		"body":    text,
+	}, "")
+	return err
+}
+
 // LeaveRoomAsUser makes the given (ghost) user leave a room.
 func (c *Client) LeaveRoomAsUser(roomID, userID string) error {
 	if c.serverURL == "" || c.asToken == "" {
@@ -845,16 +899,13 @@ func (c *Client) LeaveRoomAsUser(roomID, userID string) error {
 		return errors.Wrap(err, "invalid room ID")
 	}
 	requestURL := c.serverURL + endpoint
-	if userID != "" {
-		requestURL += "?user_id=" + url.QueryEscape(userID)
-	}
 
 	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer([]byte("{}")))
 	if err != nil {
 		return errors.Wrap(err, "failed to create leave request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	c.authorize(req, userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -1957,11 +2008,6 @@ func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID s
 	}
 	reqURL := c.serverURL + endpoint
 
-	// Add user_id query parameter for impersonation
-	if userID != "" {
-		reqURL += "?user_id=" + url.QueryEscape(userID)
-	}
-
 	jsonData, err := json.Marshal(content)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal event content")
@@ -1973,7 +2019,7 @@ func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID s
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken) // Use AS token for impersonation
+	c.authorize(req, userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -2323,11 +2369,6 @@ func (c *Client) sendCustomEventAsUser(roomID, eventType string, content any, us
 	}
 	reqURL := c.serverURL + endpoint
 
-	// Add user_id query parameter for impersonation
-	if userID != "" {
-		reqURL += "?user_id=" + url.QueryEscape(userID)
-	}
-
 	jsonData, err := json.Marshal(content)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal event content")
@@ -2339,7 +2380,7 @@ func (c *Client) sendCustomEventAsUser(roomID, eventType string, content any, us
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	c.authorize(req, userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

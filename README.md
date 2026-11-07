@@ -22,6 +22,7 @@ Matrix users appear in Mattermost as remote users with their names and avatars.
 | @-mentions (`m.mentions`) | ✅ | ✅ |
 | User display names and avatars | ✅ | ✅ |
 | Membership (join and leave) | ✅ | ✅ |
+| One identity on both sides (`/matrix link`, double puppeting) | ✅ | ✅ |
 | Channel ↔ room creation, team ↔ space | ✅ | — |
 | Room name and topic → channel name and header | — | ✅ |
 | Typing notifications | — | ✅ |
@@ -93,6 +94,10 @@ In any Mattermost channel:
 /matrix list                           # show all mappings
 /matrix unmap                          # stop bridging this channel
 ```
+
+People who use both networks can link their accounts with `/matrix link`
+and, optionally, let the bridge post as their own Matrix account; see
+[docs/COMMANDS.md](docs/COMMANDS.md#identity-matrix-link-and-matrix-unlink).
 
 New public and private channels get a Matrix room automatically, and new teams
 get a Matrix space. See [docs/COMMANDS.md](docs/COMMANDS.md) for every command.

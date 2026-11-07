@@ -4,6 +4,7 @@
 |----------|----------------|----------|
 | [../README.md](../README.md) | Feature matrix, quick start for the Mattermost and Matrix sides, configuration reference, troubleshooting | Everyone |
 | [CAPABILITIES.md](CAPABILITIES.md) | Generated, test-enforced matrix of what is bridged in each direction, including known gaps | Everyone |
+| [PLAN.md](PLAN.md) | The plan as draft issues: identity, parity, ephemeral sync, integration UI, migration toolkit, operations | Everyone |
 | [ROADMAP.md](ROADMAP.md) | Plan for closing the gaps and integrating natively on both the Mattermost and Matrix side | Everyone |
 | [COMMANDS.md](COMMANDS.md) | Every `/matrix` slash command, its arguments and who may run it | Users, admins |
 | [BRIDGE_OVERVIEW.md](BRIDGE_OVERVIEW.md) | How the bridge works: ghost users, spaces, federation, security model, supported features | Admins, developers |

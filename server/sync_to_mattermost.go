@@ -532,12 +532,15 @@ func (b *MatrixToMattermostBridge) getOrCreateMattermostUser(matrixUserID string
 				}
 			}
 
-			// Check if we need to update their profile
-			context := &ProfileUpdateContext{
-				EventID: "",
-				Source:  "api",
+			// Bridge-created remote users mirror the Matrix profile; linked real
+			// accounts keep their own Mattermost profile.
+			if existingUser.IsRemote() {
+				context := &ProfileUpdateContext{
+					EventID: "",
+					Source:  "api",
+				}
+				b.updateMattermostUserProfile(existingUser, matrixUserID, context)
 			}
-			b.updateMattermostUserProfile(existingUser, matrixUserID, context)
 			return mattermostUserID, nil
 		}
 

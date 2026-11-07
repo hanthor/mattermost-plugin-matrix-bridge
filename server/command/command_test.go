@@ -52,6 +52,18 @@ func (m *mockPlugin) GetKVStore() kvstore.KVStore {
 	return m.kvstore
 }
 
+func (m *mockPlugin) CreateIdentityLinkCode(_ string) (string, error) {
+	return "TESTCODE", nil
+}
+
+func (m *mockPlugin) GetIdentityLink(_ string) (string, bool, bool) {
+	return "", false, false
+}
+
+func (m *mockPlugin) UnlinkIdentity(_ string) error {
+	return nil
+}
+
 func (m *mockPlugin) SyncUser(_ string) error {
 	return nil
 }

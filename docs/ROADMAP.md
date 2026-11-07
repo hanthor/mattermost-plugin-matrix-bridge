@@ -7,7 +7,8 @@ Service on the Matrix side. That lets us integrate deeply on both ends:
 plugin UI, slash commands and hooks in Mattermost; widgets, bot commands,
 state events and MSCs in Matrix.
 
-The source of truth for what works today is
+The detailed plan with one section per intended GitHub issue, including the
+migration track, is in [PLAN.md](PLAN.md). The source of truth for what works today is
 [CAPABILITIES.md](CAPABILITIES.md), generated from
 `e2e/capabilities/capabilities.go`. The end-to-end suite probes every row:
 `TestCapabilityGaps` runs each documented gap against real servers and fails
@@ -51,6 +52,15 @@ probe waiting for it.
 | Presence Mattermost → Matrix | Same websocket (`status_change`) → `PUT /presence/{ghost}/status`; custom status → `status_msg`. |
 | Read receipts Mattermost → Matrix | `channel_viewed` websocket event → `m.read` receipt from the ghost on the latest bridged event. |
 | Read receipts Matrix → Mattermost | Blocked on a Mattermost plugin API to set another user's `LastViewedAt`; propose it upstream (`API.ViewChannelAsUser`). |
+
+## Phase 1b — One identity on both sides (shipped)
+
+- `/matrix link` + `!mattermost link <code>` bind a Mattermost and a Matrix
+  account; the Matrix account then posts as the real Mattermost user.
+- `!mattermost login <access_token>` enables double puppeting: Mattermost
+  messages, edits and reactions are sent as the linked Matrix account.
+- Next: zero-touch linking through shared SSO (OIDC / Matrix Authentication
+  Service), and using the linked account for membership and presence too.
 
 ## Phase 3 — Deep integration
 

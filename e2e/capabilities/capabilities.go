@@ -100,7 +100,9 @@ var All = []Capability{
 	{ID: "users.profile", Area: "Users", Name: "Display name and avatar", Direction: MattermostToMatrix, Status: Supported, Notes: ""},
 	{ID: "users.profile.in", Area: "Users", Name: "Display name and avatar", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
 	{ID: "users.deactivation", Area: "Users", Name: "Deactivated users leave rooms", Direction: MattermostToMatrix, Status: Unsupported, Notes: "UserHasBeenDeactivated should make the ghost leave and deactivate."},
-	{ID: "users.puppeting", Area: "Users", Name: "Double puppeting (use my own Matrix account)", Direction: MattermostToMatrix, Status: Partial, Notes: "/matrix map_user links an account, but needs admin and no profile sync."},
+	{ID: "identity.link", Area: "Users", Name: "Self-service account linking", Direction: MatrixToMattermost, Status: Supported, Notes: "/matrix link issues a code; \"!mattermost link <code>\" to the bridge bot binds the accounts. Linked Matrix users post as their real Mattermost account."},
+	{ID: "users.puppeting", Area: "Users", Name: "Double puppeting (use my own Matrix account)", Direction: MattermostToMatrix, Status: Supported, Notes: "\"!mattermost login <access_token>\" lets the bridge send as the linked Matrix account."},
+	{ID: "identity.sso", Area: "Users", Name: "Automatic linking through shared SSO (OIDC / Matrix Authentication Service)", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Match accounts by verified email from a shared identity provider so linking is zero-touch."},
 
 	// Membership and rooms
 	{ID: "membership.join_leave", Area: "Rooms", Name: "Join and leave", Direction: MattermostToMatrix, Status: Supported, Notes: ""},
@@ -120,7 +122,7 @@ var All = []Capability{
 
 	// Deep integration
 	{ID: "integration.widget", Area: "Integration", Name: "Matrix widget showing the Mattermost channel", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Plugin can serve a widget page; the bot sets im.vector.modular.widgets."},
-	{ID: "integration.bot_commands.in", Area: "Integration", Name: "Bridge bot commands in Matrix (!mattermost …)", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Link/unlink rooms and look up channels from Matrix."},
+	{ID: "integration.bot_commands.in", Area: "Integration", Name: "Bridge bot commands in Matrix (!mattermost …)", Direction: MatrixToMattermost, Status: Partial, Notes: "help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet."},
 	{ID: "integration.channel_header", Area: "Integration", Name: "Channel header shows the linked room", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Webapp channel header button and RHS."},
 	{ID: "integration.backfill", Area: "Integration", Name: "Message history backfill", Direction: MattermostToMatrix, Status: Unsupported, Notes: "/matrix backfill only creates ghosts, spaces and rooms."},
 }

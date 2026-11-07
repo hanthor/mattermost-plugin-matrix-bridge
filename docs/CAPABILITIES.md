@@ -63,7 +63,9 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Display name and avatar | Mattermost → Matrix | ✅ |  |
 | Display name and avatar | Matrix → Mattermost | ✅ |  |
 | Deactivated users leave rooms | Mattermost → Matrix | ❌ | UserHasBeenDeactivated should make the ghost leave and deactivate. |
-| Double puppeting (use my own Matrix account) | Mattermost → Matrix | 🟡 | /matrix map_user links an account, but needs admin and no profile sync. |
+| Self-service account linking | Matrix → Mattermost | ✅ | /matrix link issues a code; "!mattermost link <code>" to the bridge bot binds the accounts. Linked Matrix users post as their real Mattermost account. |
+| Double puppeting (use my own Matrix account) | Mattermost → Matrix | ✅ | "!mattermost login <access_token>" lets the bridge send as the linked Matrix account. |
+| Automatic linking through shared SSO (OIDC / Matrix Authentication Service) | Mattermost → Matrix | ❌ | Match accounts by verified email from a shared identity provider so linking is zero-touch. |
 
 ## Rooms
 
@@ -89,13 +91,13 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
-| Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | ❌ | Link/unlink rooms and look up channels from Matrix. |
+| Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
 | Channel header shows the linked room | Mattermost → Matrix | ❌ | Webapp channel header button and RHS. |
 | Message history backfill | Mattermost → Matrix | ❌ | /matrix backfill only creates ghosts, spaces and rooms. |
 
 ## Totals
 
-- ✅ supported: 23
+- ✅ supported: 25
 - 🟡 partial: 3
 - ❌ gap: 26
 - — n/a: 0

@@ -116,6 +116,11 @@ type PluginAccessor interface {
 	RunKVStoreMigrations() error
 	RunKVStoreMigrationsWithResults() (*MigrationResult, error)
 
+	// Identity linking (one person on both networks)
+	CreateIdentityLinkCode(mattermostUserID string) (string, error)
+	GetIdentityLink(mattermostUserID string) (matrixUserID string, puppeted bool, ok bool)
+	UnlinkIdentity(mattermostUserID string) error
+
 	// Backfill synchronization
 	SyncUser(userID string) error
 	SyncTeam(teamID string) error
@@ -257,7 +262,9 @@ const (
 	matrixCommandTrigger = "matrix"
 
 	// Main command usage
-	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|migrate] [room_name|room_alias|room_id]"
+	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|migrate] [room_name|room_alias|room_id]"
+	linkCommandDesc    = "Link your Matrix account so you are one identity on both networks"
+	unlinkCommandDesc  = "Remove the link to your Matrix account"
 
 	// Subcommand descriptions for autocomplete
 	testCommandDesc    = "Test Matrix server connection and configuration"
@@ -380,6 +387,8 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("link", "", linkCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("unlink", "", unlinkCommandDesc))
 
 	return matrixData
 }
@@ -1168,6 +1177,10 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		}
 	case "metrics":
 		return c.executeMetricsCommand(args)
+	case "link":
+		return c.executeLinkCommand(args)
+	case "unlink":
+		return c.executeUnlinkCommand(args)
 	case "migrate":
 		return c.executeMigrateCommand(args)
 	default:
@@ -1612,5 +1625,53 @@ func isValidRoomIdentifier(roomIdentifier string) bool {
 		return len(roomIdentifier) > 1 && !strings.ContainsAny(roomIdentifier, " \t\n")
 	default:
 		return false
+	}
+}
+
+// executeLinkCommand issues a one-time code the user redeems with the bridge
+// bot in Matrix ("!mattermost link <code>").
+func (c *Handler) executeLinkCommand(args *model.CommandArgs) *model.CommandResponse {
+	if matrixUserID, puppeted, ok := c.plugin.GetIdentityLink(args.UserId); ok {
+		mode := "Your Mattermost messages are sent by a ghost user; send `!mattermost login <access_token>` to the bridge bot to post as your own account."
+		if puppeted {
+			mode = "Your Mattermost messages are sent as that account."
+		}
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         fmt.Sprintf("✅ Already linked to `%s`. %s Use `/matrix unlink` to remove the link.", matrixUserID, mode),
+		}
+	}
+
+	code, err := c.plugin.CreateIdentityLinkCode(args.UserId)
+	if err != nil {
+		c.client.Log.Error("Failed to create identity link code", "error", err, "user_id", args.UserId)
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "❌ Could not create a link code. Check plugin logs for details.",
+		}
+	}
+
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text: fmt.Sprintf("🔗 **Link your Matrix account**\n\n"+
+			"1. In your Matrix client, start a direct message with the bridge bot `@%s:<your Matrix server>`.\n"+
+			"2. Send it: `!mattermost link %s`\n\n"+
+			"The code expires in 15 minutes. Afterwards your Matrix messages in bridged rooms post as you here, "+
+			"and `!mattermost login <access_token>` lets your Mattermost messages appear from your Matrix account.",
+			matrix.BridgeBotLocalpart, code),
+	}
+}
+
+// executeUnlinkCommand removes the user's identity link.
+func (c *Handler) executeUnlinkCommand(args *model.CommandArgs) *model.CommandResponse {
+	if err := c.plugin.UnlinkIdentity(args.UserId); err != nil {
+		return &model.CommandResponse{
+			ResponseType: model.CommandResponseTypeEphemeral,
+			Text:         "❌ " + err.Error(),
+		}
+	}
+	return &model.CommandResponse{
+		ResponseType: model.CommandResponseTypeEphemeral,
+		Text:         "✅ Your Matrix account has been unlinked. Your messages will be bridged through a ghost user again.",
 	}
 }

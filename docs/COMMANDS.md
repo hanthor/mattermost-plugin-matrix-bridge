@@ -494,13 +494,31 @@ Total: 37 mappings processed
 
 ---
 
+## Identity: `/matrix link` and `/matrix unlink`
+
+`/matrix link` issues a one-time code (valid 15 minutes). In your Matrix client,
+open a direct message with the bridge bot (`@_mattermost_bridge:<server>`) and
+send `!mattermost link <code>`. From then on your Matrix messages in bridged
+rooms post as your Mattermost account, and your Mattermost profile is left
+untouched.
+
+To also have your Mattermost messages appear from your own Matrix account
+(double puppeting), send the bot `!mattermost login <access_token>` (Element:
+Settings → Help & About → Access Token). The token is verified against the
+homeserver and must belong to you. `!mattermost logout` removes it,
+`!mattermost whoami` shows the current state, and `/matrix unlink` (or
+`!mattermost unlink`) removes the link.
+
+Bridge-bot commands available in Matrix: `help`, `whoami`, `link <code>`,
+`login <token>`, `logout`, `unlink`.
+
 ## Permissions
 
 ### User Permissions
 
 | Commands | Who may run them |
 |----------|------------------|
-| `test`, `list`, `status` | Any channel member |
+| `test`, `list`, `status`, `link`, `unlink` | Any channel member |
 | `create`, `map`, `unmap`, `join` | Users allowed to manage the channel's properties (channel admins and team/system admins) |
 | `map_user`, `backfill`, `migrate`, `metrics` | System administrators only |
 

@@ -196,6 +196,17 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 
 // processMatrixEvent routes a single Matrix event to the appropriate handler
 func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
+	// The bridge bot accepts invites (so people can DM it) and answers
+	// "!mattermost" commands in any room it is in.
+	if p.isBridgeBotEvent(event) {
+		p.handleBridgeBotMembership(event)
+		return nil
+	}
+	if isBotCommand(event) && !p.isGhostUser(event.Sender) && event.Sender != p.BridgeBotUserID() {
+		p.handleBotCommand(event)
+		return nil
+	}
+
 	// Check if we have an existing mapping for this room
 	channelID, err := p.getChannelIDFromMatrixRoom(event.RoomID)
 	if err != nil {
