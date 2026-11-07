@@ -193,6 +193,8 @@ func (m *MattermostServer) InstallBridge(t *testing.T, ctx context.Context, admi
 			"enable_mirror_mode":   cfg.MirrorMode,
 			"matrix_admin_token":   cfg.AdminToken,
 			"sync_user_profiles":   true,
+			"calls_mode":           cfg.CallsMode,
+			"element_call_url":     cfg.ElementCallURL,
 		},
 	}
 	_, _, err = admin.PatchConfig(ctx, patch)
