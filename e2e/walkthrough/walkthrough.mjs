@@ -73,12 +73,34 @@ async function mmApi(method, path, body, token = scenario.adminToken) {
 async function mmLogin(page, username, password) {
     // Log in through the API so the session cookies land in the browser
     // context, then skip the "view in app or browser" landing page.
-    const res = await page.context().request.post(`${scenario.mattermostURL}/api/v4/users/login`, {
-        data: {login_id: username, password},
+    const res = await fetch(`${scenario.mattermostURL}/api/v4/users/login`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({login_id: username, password}),
     });
-    if (!res.ok()) {
-        throw new Error(`login as ${username} failed: ${res.status()} ${await res.text()}`);
+    if (!res.ok) {
+        throw new Error(`login as ${username} failed: ${res.status} ${await res.text()}`);
     }
+    const user = await res.json();
+    const token = res.headers.get('token');
+    let csrf = '';
+    for (const header of res.headers.getSetCookie?.() || []) {
+        const m = /^MMCSRF=([^;]+)/.exec(header);
+        if (m) {
+            csrf = m[1];
+        }
+    }
+    if (!token) {
+        throw new Error(`login as ${username} returned no session token`);
+    }
+    // The webapp treats MMUSERID as "logged in" and sends MMCSRF back as the
+    // X-CSRF-Token header; the server only compares the two.
+    const cookie = (name, value, httpOnly) => ({name, value, url: scenario.mattermostURL, httpOnly, sameSite: 'Lax'});
+    await page.context().addCookies([
+        cookie('MMAUTHTOKEN', token, true),
+        cookie('MMUSERID', user.id, false),
+        cookie('MMCSRF', csrf || token.slice(0, 26), false),
+    ]);
     await page.context().addInitScript(() => {
         try {
             window.localStorage.setItem('__landingPageSeen__', 'true');
@@ -161,12 +183,13 @@ async function elementLogin(page) {
         deviceID: scenario.aliceDeviceID,
     });
     await page.goto(`${scenario.elementURL}/#/home`);
-    await page.locator('.mx_LeftPanel, .mx_HomePage, .mx_RoomView').first().waitFor({timeout: 90_000});
+    await page.locator('.mx_MatrixChat').first().waitFor({timeout: 90_000});
+    await sleep(2000);
     await dismissElementDialogs(page);
 }
 
 async function dismissElementDialogs(page) {
-    for (const label of [/skip/i, /dismiss/i, /close/i, /not now/i, /ok/i]) {
+    for (const label of [/^later$/i, /skip/i, /dismiss/i, /close/i, /not now/i, /^ok$/i]) {
         const button = page.getByRole('button', {name: label}).first();
         if (await button.isVisible().catch(() => false)) {
             await button.click().catch(() => {});
@@ -175,8 +198,17 @@ async function dismissElementDialogs(page) {
 }
 
 async function elementOpenRoom(page, roomID) {
+    if (!roomID) {
+        throw new Error('no room ID to open');
+    }
     await page.goto(`${scenario.elementURL}/#/room/${encodeURIComponent(roomID)}`);
+    await dismissElementDialogs(page);
+    const join = page.getByRole('button', {name: /join the discussion|^join$/i}).first();
+    if (await join.isVisible().catch(() => false)) {
+        await join.click().catch(() => {});
+    }
     await page.locator('.mx_BasicMessageComposer_input, [contenteditable=true]').first().waitFor({timeout: 60_000});
+    await dismissElementDialogs(page);
     await sleep(1500);
 }
 
