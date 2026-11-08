@@ -88,6 +88,7 @@ func TestBridgePanelAPI(t *testing.T) {
 
 	t.Run("an unbridged channel can be bridged from the panel", func(t *testing.T) {
 		scratch := h.CreateChannel("panel-scratch", "Panel scratch")
+		h.WaitForChannelRoom(scratch)
 		resp, _, err := h.Admin.ExecuteCommand(ctx, scratch.Id, "/matrix unmap")
 		require.NoError(t, err)
 		require.NotContains(t, resp.Text, "❌", resp.Text)

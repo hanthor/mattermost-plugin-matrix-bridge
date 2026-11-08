@@ -842,7 +842,7 @@ func (c *Handler) executeUnmapCommand(args *model.CommandArgs) *model.CommandRes
 	// Check if this channel has a Matrix room mapping
 	channelMappingKey := kvstore.BuildChannelMappingKey(args.ChannelId)
 	roomIDBytes, err := c.kvstore.Get(channelMappingKey)
-	if err != nil {
+	if err != nil || len(roomIDBytes) == 0 {
 		// Key not found is expected for unmapped channels
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,

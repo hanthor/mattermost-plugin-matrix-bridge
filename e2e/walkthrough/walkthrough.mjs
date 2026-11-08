@@ -608,7 +608,18 @@ await step('feature: bridge a channel from the panel', async () => {
     // A channel that is not bridged yet: unmap a scratch channel (new ones get a room automatically).
     const team = await mmApi('GET', `/teams/name/${scenario.teamName}`);
     const scratch = await mmApi('POST', '/channels', {team_id: team.id, name: 'scratch-demo', display_name: 'Scratch', type: 'O', purpose: 'Not bridged yet'});
-    await sleep(3000);
+    // Wait for the automatic room before taking it away again.
+    const waitUntil = Date.now() + 60_000;
+    for (;;) {
+        const list = await mmApi('POST', '/commands/execute', {channel_id: scratch.id, command: '/matrix list'});
+        if (/Scratch → `![^`]+`/.test(list.text || '')) {
+            break;
+        }
+        if (Date.now() > waitUntil) {
+            throw new Error(`no room was created for the scratch channel: ${list.text}`);
+        }
+        await sleep(1000);
+    }
     await mmApi('POST', '/commands/execute', {channel_id: scratch.id, command: '/matrix unmap'});
     await ada.openChannel('scratch-demo');
     await openBridgePanel(ada);
