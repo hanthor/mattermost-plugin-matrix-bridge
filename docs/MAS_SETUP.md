@@ -1,0 +1,186 @@
+# Shared login with Matrix Authentication Service and OpenID Connect
+
+For a migration to feel seamless, a person should sign in to Matrix with the
+same login they use for Mattermost, and land on the Matrix account the bridge
+already made for them in [mirror mode](MIRROR_MODE_SETUP.md). This guide sets
+that up with [Matrix Authentication Service](https://github.com/element-hq/matrix-authentication-service)
+(MAS) and an OpenID Connect (OIDC) identity provider.
+
+## How it fits together
+
+Mattermost cannot be the identity provider itself (it is an OAuth 2.0 provider,
+not an OpenID Connect one), so both sides trust one provider that can:
+
+```
+                     ┌────────────────────┐
+   people sign in ──▶│ OIDC identity      │◀── people sign in
+   to Mattermost     │ provider (Keycloak,│    to Matrix (Element)
+          │          │ Authentik, Entra…) │          │
+          ▼          └────────────────────┘          ▼
+   ┌────────────┐          same person            ┌─────┐   delegates   ┌─────────┐
+   │ Mattermost │  (same `sub`, same username)    │ MAS │ ────────────▶ │ Synapse │
+   └─────┬──────┘                                 └──▲──┘   sign-in     └────▲────┘
+         │ bridge plugin                              │ admin API             │ appservice
+         └────────────────────────────────────────────┴───────────────────────┘
+```
+
+- Mattermost signs people in with the provider (**OpenID Connect**, a
+  Mattermost Professional or Enterprise feature) and records the provider's
+  subject (`sub`) for each person.
+- MAS is Synapse's sign-in service and uses the same provider as an **upstream**
+  provider.
+- The bridge, in mirror mode, creates each person's Matrix account `@username`.
+  With MAS it also creates the account **in MAS** and **links it to the
+  person's subject at the provider**. When they later sign in to Element with
+  the provider, MAS recognises them and signs them in to that account. No
+  password, no matching on names, nothing to guess.
+
+Everyone who is not signed in to Mattermost with OpenID Connect (local
+passwords, LDAP, GitLab…) still gets an account, but has no subject to link, so
+they need the name-based fallback at the end of this guide.
+
+## Why the bridge has to tell MAS
+
+The bridge creates mirror accounts in Synapse through its appservice. MAS does
+not know about accounts it did not create, and refuses to create a user whose
+name Synapse already has (`409`: *the username is reserved by the homeserver*).
+Without help, the first sign-in of every migrated person would fail. MAS offers
+an admin API for this: create a user with `skip_homeserver_check` (meant for
+users an application service uses), then link it to the upstream provider
+subject. That is what the plugin does when the MAS settings below are filled in.
+
+## 1. The identity provider
+
+You need one OIDC client for MAS (Mattermost already has its own). Create a
+confidential client with:
+
+- **Redirect URI:** `https://mas.example.com/upstream/callback/<provider id>`
+  (the provider ID is the ULID you choose in step 2),
+- scopes `openid profile email`,
+- `preferred_username` (or whichever claim you use) release for each person.
+
+Make sure Mattermost and MAS see the **same** username: Mattermost's username
+becomes the Matrix localpart, and MAS must import the same claim as the
+localpart. Using `preferred_username` for both is the simple choice.
+
+## 2. MAS
+
+`config.yaml` of MAS (the relevant parts; see the
+[MAS documentation](https://element-hq.github.io/matrix-authentication-service/)
+for the rest):
+
+```yaml
+http:
+  public_base: https://mas.example.com/
+
+matrix:
+  kind: synapse
+  homeserver: example.com               # Synapse's server_name
+  endpoint: http://synapse:8008/
+  secret: "<a long random string, also used in Synapse below>"
+
+# Sign in only through the identity provider.
+passwords:
+  enabled: false
+
+# The client the bridge uses to talk to MAS.
+clients:
+  - client_id: 01J44QC8BCY7FCFM7WGHQGKMTJ        # a ULID of your choice
+    client_auth_method: client_secret_basic
+    client_secret: "<random secret for the bridge>"
+
+policy:
+  data:
+    admin_clients:
+      - 01J44QC8BCY7FCFM7WGHQGKMTJ
+
+upstream_oauth2:
+  providers:
+    - id: 01HQW90Z35CMXFJWQPHC3BGZGQ              # a ULID of your choice
+      human_name: "Company login"
+      issuer: https://idp.example.com/realms/company
+      client_id: "<the provider client for MAS>"
+      client_secret: "<its secret>"
+      scope: "openid profile email"
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{ user.preferred_username }}"
+          # The bridge links accounts itself, so nothing is matched by name here.
+          on_conflict: fail
+        displayname:
+          action: suggest
+          template: "{{ user.name }}"
+        email:
+          action: suggest
+          template: "{{ user.email }}"
+```
+
+The `clients` entry plus `admin_clients` lets the bridge use MAS's admin API
+with the client credentials grant (scope `urn:mas:admin`).
+
+## 3. Synapse
+
+Hand sign-in to MAS in `homeserver.yaml` (and keep the bridge's appservice
+registration exactly as in the [mirror mode guide](MIRROR_MODE_SETUP.md)):
+
+```yaml
+matrix_authentication_service:
+  enabled: true
+  endpoint: http://mas:8080/
+  secret: "<the same string as matrix.secret in MAS>"
+```
+
+The bridge registers its accounts with `inhibit_login: true`, which is what the
+Matrix specification requires of application services, so it keeps working with
+MAS in front of Synapse.
+
+## 4. The bridge
+
+In **System Console → Plugins → Mattermost bridge for Matrix**, next to **Enable
+Mirror Mode**:
+
+| Setting | Value |
+| --- | --- |
+| Matrix Authentication Service URL | `https://mas.example.com` (an address the Mattermost server can reach) |
+| MAS Admin Client ID | the `client_id` above |
+| MAS Admin Client Secret | its secret |
+| MAS Identity Provider ID | the upstream provider's `id` (the ULID) |
+
+Leave **Matrix Admin Access Token** empty: with MAS, Synapse no longer owns
+passwords, so `/matrix claim` does not set one. It marks the account as claimed
+and tells the person to sign in with the company login.
+
+## What happens
+
+1. A Mattermost person is bridged for the first time. The bridge registers
+   `@username` in Synapse, creates it in MAS, and, if they signed in to
+   Mattermost with OpenID Connect, links it to their provider subject.
+2. The person opens Element and chooses **Continue with Company login**. MAS
+   recognises their subject and signs them in to `@username`.
+3. They type a message. The bridge sees a message from an account it did not
+   send as, treats the account as claimed, and from then on their messages post
+   in Mattermost as them (see *Claiming accounts* in the
+   [mirror mode guide](MIRROR_MODE_SETUP.md#54-claiming-accounts)).
+
+If MAS is down when an account is created, the account still works for the
+bridge and the MAS part is retried the next time the account is used.
+
+## Name-based fallback
+
+For people without an OpenID Connect subject, MAS can link by matching the
+localpart instead. In the provider's `claims_imports.localpart`, change
+`on_conflict: fail` to `on_conflict: add`. **This lets anyone who can sign in
+to the provider as `ada` take over the Matrix account `@ada`.** Only use it
+when the provider guarantees usernames are unique and cannot be chosen freely
+by the person.
+
+## What is tested
+
+The plugin's side (account creation, the MAS requests, retry, claiming) is
+covered by unit tests against a fake MAS. A CI test against a real MAS, Synapse
+and OpenID Connect provider is tracked in
+[#43](https://github.com/hanthor/mattermost-plugin-matrix-bridge/issues/43);
+until it passes, treat the MAS ↔ Synapse parts of this guide (appservice
+accounts behind MAS in particular) as unverified in this repository and test
+them on a staging server first.

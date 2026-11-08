@@ -194,13 +194,15 @@ bridge must hand over credentials it does not have, and an appservice cannot
 set passwords. Two supported routes:
 
 - **Shared login (recommended).** The homeserver authenticates through
-  Matrix Authentication Service (or Synapse's OIDC) with **Mattermost as the
-  identity provider**, mapping the OIDC `preferred_username` to the same
-  localpart the bridge used. Claiming is then just "log in to Element with
-  your Mattermost account"; the bridge needs no secret and the mirrored
-  account becomes the person's account on first login. This is the same
-  piece of work as "automatic linking through shared SSO" in Epic 1, which
-  is why that item moves up.
+  Matrix Authentication Service (MAS) with an **OpenID Connect provider that
+  Mattermost also signs people in with** (Mattermost is an OAuth 2.0 provider,
+  not an OIDC one, so it cannot be the provider itself). MAS refuses to create
+  users that Synapse already has, so the bridge creates each mirror account in
+  MAS too (admin API, `skip_homeserver_check`) and links it to the person's
+  provider subject, which Mattermost records when they sign in with OpenID
+  Connect. Signing in to Element with the company login then lands on the
+  account the bridge made, with no password and no matching on names. Setup:
+  [MAS_SETUP.md](MAS_SETUP.md).
 - **Admin-token password reset (fallback).** An optional
   `matrix_admin_token` lets the bridge set a one-time password through the
   Synapse admin API and show it once to the user, who must change it on

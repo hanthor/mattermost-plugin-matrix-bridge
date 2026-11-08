@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/command"
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/mas"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 )
 
@@ -58,6 +60,11 @@ type mirrorAccount struct {
 	// did not send as the person's own.
 	Claimed   bool  `json:"claimed,omitempty"`
 	CreatedAt int64 `json:"created_at"`
+	// MASUserID is the account's ID in Matrix Authentication Service, and
+	// MASLinked is set once it is linked to the person's identity at the
+	// shared identity provider.
+	MASUserID string `json:"mas_user_id,omitempty"`
+	MASLinked bool   `json:"mas_linked,omitempty"`
 }
 
 type mirrorStore struct {
@@ -288,6 +295,12 @@ func (b *MattermostToMatrixBridge) ensureAccount(userID string) (string, error) 
 func (b *MattermostToMatrixBridge) ensureMirrorAccount(userID string) (string, error) {
 	store := newMirrorStore(b.kvstore)
 	if acct, ok := store.Account(userID); ok {
+		if cfg := b.configGetter.getConfiguration(); cfg.masConfigured() && (acct.MASUserID == "" || !acct.MASLinked) {
+			// An earlier attempt may have failed or MAS was configured later.
+			if user, appErr := b.API.GetUser(userID); appErr == nil {
+				b.provisionMAS(user, acct)
+			}
+		}
 		return acct.MatrixUserID, nil
 	}
 
@@ -336,6 +349,7 @@ func (b *MattermostToMatrixBridge) ensureMirrorAccount(userID string) (string, e
 			return "", err
 		}
 		recordAccountMode(b.kvstore, accountModeMirror)
+		b.provisionMAS(user, acct)
 		b.metrics.RecordGhostUserCreated()
 		b.logger.LogInfo("Created mirror account", "mattermost_user_id", userID, "matrix_user_id", matrixUserID, "collision", acct.Collision)
 
@@ -345,6 +359,45 @@ func (b *MattermostToMatrixBridge) ensureMirrorAccount(userID string) (string, e
 		return matrixUserID, nil
 	}
 	return "", errors.Errorf("no free Matrix localpart for Mattermost user %q after %d attempts", user.Username, maxMirrorLocalpartAttempts)
+}
+
+// openIDService is the Mattermost auth service name for generic OpenID Connect.
+const openIDService = "openid"
+
+// provisionMAS tells Matrix Authentication Service about a mirror account and,
+// when Mattermost signs the person in with the same OpenID Connect provider as
+// MAS, links the account to their identity there. It is best effort and safe
+// to repeat: failures are logged and retried the next time the account is used.
+func (b *MattermostToMatrixBridge) provisionMAS(user *model.User, acct *mirrorAccount) {
+	cfg := b.configGetter.getConfiguration()
+	if !cfg.masConfigured() || user == nil || acct == nil {
+		return
+	}
+	client := mas.Shared(cfg.MASURL, cfg.MASAdminClientID, cfg.MASAdminClientSecret)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	changed := false
+	if acct.MASUserID == "" {
+		id, _, err := client.EnsureUser(ctx, acct.Localpart, user.GetDisplayName(model.ShowFullName))
+		if err != nil {
+			b.logger.LogWarn("Could not create the mirror account in MAS", "error", err, "matrix_user_id", acct.MatrixUserID)
+			return
+		}
+		acct.MASUserID, changed = id, true
+	}
+	if !acct.MASLinked && cfg.MASUpstreamProviderID != "" && user.AuthService == openIDService && user.AuthData != nil && *user.AuthData != "" {
+		if err := client.LinkUpstream(ctx, acct.MASUserID, cfg.MASUpstreamProviderID, *user.AuthData, user.Email); err != nil {
+			b.logger.LogWarn("Could not link the mirror account to the identity provider in MAS", "error", err, "matrix_user_id", acct.MatrixUserID)
+		} else {
+			acct.MASLinked, changed = true, true
+		}
+	}
+	if changed {
+		if err := newMirrorStore(b.kvstore).save(acct); err != nil {
+			b.logger.LogWarn("Could not record the MAS account", "error", err, "matrix_user_id", acct.MatrixUserID)
+		}
+	}
 }
 
 // syncMirrorProfile sets the display name and avatar of a new mirror account.
@@ -461,7 +514,7 @@ func (p *Plugin) MirrorStatus() command.MirrorStatus {
 		Mode:             mode,
 		Pinned:           cfg.accountModePinned,
 		ConfiguredMirror: cfg.EnableMirrorMode != cfg.accountModePinned,
-		ClaimSupported:   cfg.MatrixAdminToken != "",
+		ClaimSupported:   cfg.MatrixAdminToken != "" && !cfg.masConfigured(),
 		Cutover:          cfg.CutoverMode,
 	}
 	if mode == accountModeMirror {
@@ -488,8 +541,18 @@ func (p *Plugin) ClaimMirrorAccount(mattermostUserID string) (string, string, er
 		return "", "", errors.Wrap(err, "could not create your Matrix account")
 	}
 
+	// With MAS the account is signed into through the identity provider, and
+	// Synapse no longer owns passwords.
+	if cfg.masConfigured() {
+		if user, appErr := p.API.GetUser(mattermostUserID); appErr == nil {
+			if acct, ok := newMirrorStore(p.kvstore).Account(mattermostUserID); ok {
+				p.mattermostToMatrixBridge.provisionMAS(user, acct)
+			}
+		}
+	}
+
 	password := ""
-	if cfg.MatrixAdminToken != "" {
+	if cfg.MatrixAdminToken != "" && !cfg.masConfigured() {
 		password = oneTimePassword()
 		if err := p.matrixClient.SetUserPasswordAsAdmin(cfg.MatrixAdminToken, matrixUserID, password); err != nil {
 			return "", "", errors.Wrap(err, "could not set a password for your Matrix account")

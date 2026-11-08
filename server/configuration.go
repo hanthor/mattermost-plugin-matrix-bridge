@@ -32,15 +32,27 @@ type configuration struct {
 	MatrixServerDomain   string `json:"matrix_server_domain"` // e.g. "synapse" for @user:synapse
 	MirrorModePassword   string `json:"mirror_mode_password"` // Legacy: one shared password for every mirrored account
 	MatrixAdminToken     string `json:"matrix_admin_token"`   // Synapse admin token; lets /matrix claim set a one-time password
-	CallsMode            string `json:"calls_mode"`           // off, presence (default) or element_call
-	ElementCallURL       string `json:"element_call_url"`     // join URL template for calls both sides can join
-	ElementURL           string `json:"element_url"`          // Element Web address used for "join in Element" links
-	CutoverMode          bool   `json:"cutover_mode"`         // Freeze accounts and rooms: no new ones are created
-	SyncUserProfiles     bool   `json:"sync_user_profiles"`   // Sync display names and avatars
+	// Matrix Authentication Service: when the homeserver delegates sign-in to
+	// MAS, mirror accounts are also created there and linked to the person's
+	// identity at the shared OpenID Connect provider.
+	MASURL                string `json:"mas_url"`
+	MASAdminClientID      string `json:"mas_admin_client_id"`
+	MASAdminClientSecret  string `json:"mas_admin_client_secret"`
+	MASUpstreamProviderID string `json:"mas_upstream_provider_id"`
+	CallsMode             string `json:"calls_mode"`         // off, presence (default) or element_call
+	ElementCallURL        string `json:"element_call_url"`   // join URL template for calls both sides can join
+	ElementURL            string `json:"element_url"`        // Element Web address used for "join in Element" links
+	CutoverMode           bool   `json:"cutover_mode"`       // Freeze accounts and rooms: no new ones are created
+	SyncUserProfiles      bool   `json:"sync_user_profiles"` // Sync display names and avatars
 
 	// accountModePinned is set when EnableMirrorMode was overridden because
 	// accounts already exist in the other mode.
 	accountModePinned bool
+}
+
+// masConfigured reports whether the bridge can reach the MAS admin API.
+func (c *configuration) masConfigured() bool {
+	return c.MASURL != "" && c.MASAdminClientID != "" && c.MASAdminClientSecret != ""
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -116,6 +128,7 @@ func (p *Plugin) OnConfigurationChange() error {
 		"sync_user_profiles", configuration.SyncUserProfiles,
 		"mirror_mode_password_set", configuration.MirrorModePassword != "",
 		"admin_token_set", configuration.MatrixAdminToken != "",
+		"mas_configured", configuration.masConfigured(),
 		"matrix_server_domain", configuration.MatrixServerDomain,
 	)
 

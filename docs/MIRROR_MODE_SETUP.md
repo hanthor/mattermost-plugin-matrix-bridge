@@ -346,7 +346,7 @@ Or use System Console → Plugins → Management → Restart
 
 A mirrored account is created for each Mattermost user the first time the bridge needs it, as `@<username>:<server>`. There is nothing to log in with until the person claims it. Two routes, in order of preference:
 
-**Shared login (recommended).** Configure your homeserver to sign people in with Mattermost as the identity provider, mapping the sign-in name to the same localpart. With Matrix Authentication Service this is an upstream OAuth 2.0 provider pointing at Mattermost's OAuth endpoints (`/oauth/authorize`, `/oauth/access_token`, user info from `/api/v4/users/me`), with the claim template for the localpart set to `{{ user.username }}`. The first time someone logs in, the account is theirs, and the bridge notices: the first message that arrives from the account without the bridge having sent it claims it.
+**Shared login (recommended).** Put [Matrix Authentication Service with an OpenID Connect provider](MAS_SETUP.md) in front of Synapse, using the same provider Mattermost signs in with. The plugin creates each person's account in MAS and links it to their identity at the provider, so signing in to Element with the company login lands on the account the bridge already made. The first message that arrives from the account without the bridge having sent it claims it. The full setup is in [MAS_SETUP.md](MAS_SETUP.md).
 
 **Admin token fallback.** Set **Matrix Admin Access Token** to a Synapse admin token. `/matrix claim` then sets a one-time password for the person's account, shown once, to be changed at first login. This needs no identity provider but gives the plugin the power to reset any password on the homeserver, so use a dedicated admin account.
 

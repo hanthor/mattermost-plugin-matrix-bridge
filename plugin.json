@@ -92,6 +92,39 @@
                 "secret": true
             },
             {
+                "key": "mas_url",
+                "display_name": "Matrix Authentication Service URL",
+                "type": "text",
+                "help_text": "Optional. When your homeserver delegates sign-in to Matrix Authentication Service (MAS), the address the bridge reaches MAS at, for example https://mas.example.com. Mirrored accounts are then also created in MAS so people can sign in with your identity provider. See docs/MIRROR_MODE_SETUP.md.",
+                "placeholder": "https://mas.example.com",
+                "default": ""
+            },
+            {
+                "key": "mas_admin_client_id",
+                "display_name": "MAS Admin Client ID",
+                "type": "text",
+                "help_text": "The client ID of a MAS client that is listed under policy.data.admin_clients and may use the client credentials grant.",
+                "placeholder": "",
+                "default": ""
+            },
+            {
+                "key": "mas_admin_client_secret",
+                "display_name": "MAS Admin Client Secret",
+                "type": "text",
+                "help_text": "The secret of that MAS client.",
+                "placeholder": "",
+                "default": "",
+                "secret": true
+            },
+            {
+                "key": "mas_upstream_provider_id",
+                "display_name": "MAS Identity Provider ID",
+                "type": "text",
+                "help_text": "Optional. The ID of the upstream OpenID Connect provider in MAS that Mattermost also signs people in with. When set, a mirrored account is linked to the person's identity there, so signing in lands on it without matching names.",
+                "placeholder": "",
+                "default": ""
+            },
+            {
                 "key": "calls_mode",
                 "display_name": "Calls",
                 "type": "dropdown",
