@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,9 @@ type fakeSynapse struct {
 	inhibited map[string]bool
 	joins     []string
 	leaves    []string
-	server    *httptest.Server
+	// sent records the messages sent to rooms, in order.
+	sent   []fakeSent
+	server *httptest.Server
 }
 
 func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
@@ -67,6 +70,14 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 			_ = json.Unmarshal(body, &req)
 			f.passwords[strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v2/users/")], _ = req["password"].(string)
 			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/send/m.room.message/"):
+			var content map[string]any
+			_ = json.Unmarshal(body, &content)
+			f.sent = append(f.sent, fakeSent{
+				Room: roomFromPath(r.URL.Path), UserID: r.URL.Query().Get("user_id"), TS: r.URL.Query().Get("ts"),
+				Body: fmt.Sprint(content["body"]), Content: content,
+			})
+			_ = json.NewEncoder(w).Encode(map[string]string{"event_id": fmt.Sprintf("$ev%d", len(f.sent))})
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
 			_, _ = w.Write([]byte(`{}`))
@@ -79,6 +90,17 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 	}))
 	t.Cleanup(f.server.Close)
 	return f
+}
+
+type fakeSent struct {
+	Room, UserID, TS, Body string
+	Content                map[string]any
+}
+
+func (f *fakeSynapse) messages() []fakeSent {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]fakeSent(nil), f.sent...)
 }
 
 func roomFromPath(path string) string {

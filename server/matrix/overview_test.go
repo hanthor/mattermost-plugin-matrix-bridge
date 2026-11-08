@@ -53,3 +53,24 @@ func TestGetRoomOverviewFailsWhenMembersCannotBeListed(t *testing.T) {
 	_, err := c.GetRoomOverview("!room:hs")
 	assert.Error(t, err)
 }
+
+func TestMessagesCanCarryAnOriginalTimestamp(t *testing.T) {
+	var got struct{ ts, userID string }
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.ts = r.URL.Query().Get("ts")
+		got.userID = r.URL.Query().Get("user_id")
+		_, _ = w.Write([]byte(`{"event_id":"$e1"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClientWithLoggerAndRateLimit(srv.URL, "as_token", "remote", NewTestLogger(t), TestRateLimitConfig())
+	_, err := c.SendMessage(MessageRequest{RoomID: "!r:hs", GhostUserID: "@ada:hs", Message: "from last year", Timestamp: 1700000000123})
+	require.NoError(t, err)
+	assert.Equal(t, "1700000000123", got.ts)
+	assert.Equal(t, "@ada:hs", got.userID)
+
+	got.ts = "unset"
+	_, err = c.SendMessage(MessageRequest{RoomID: "!r:hs", GhostUserID: "@ada:hs", Message: "now"})
+	require.NoError(t, err)
+	assert.Empty(t, got.ts, "no timestamp parameter unless one is asked for")
+}

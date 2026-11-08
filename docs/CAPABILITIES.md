@@ -68,6 +68,13 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Automatic linking through shared SSO (OIDC / Matrix Authentication Service) | Mattermost → Matrix | ❌ | Match accounts by verified email from a shared identity provider so linking is zero-touch. |
 | Bridge panel in Mattermost (channel status, your Matrix account, claim, link, call) | Mattermost → Matrix | ✅ | An icon in the Mattermost app bar opens a side panel backed by the plugin's /api/v1 routes; everything in it is also available as a slash command. |
 
+## Mattermost clients
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Matrix activity reaches connected Mattermost clients in real time | Matrix → Mattermost | ✅ | Posts, edits, deletes, reactions, typing, header, membership and profile changes arrive as websocket events, with unread counts. |
+| A mention from Matrix notifies the Mattermost user | Matrix → Mattermost | ✅ | The post event lists the mentioned person and the mention count rises. |
+
 ## Calls
 
 | Capability | Direction | Status | Notes |
@@ -85,7 +92,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Real @username accounts instead of ghosts | Mattermost → Matrix | ✅ | Created without credentials; the first account pins the mode so it cannot be switched under existing accounts. |
 | Name collisions with existing accounts | Mattermost → Matrix | ✅ | A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status. |
 | Claiming an account | Matrix → Mattermost | ✅ | /matrix claim with an admin token, or the first message from the person's own client after shared login. Their messages then post as them and the bridge keeps sending through the appservice. |
-| Shared login with Mattermost as the identity provider | Matrix → Mattermost | 🟡 | Documented for Matrix Authentication Service; nothing in the plugin sets it up. |
+| Shared login with MAS and an OpenID Connect provider | Matrix → Mattermost | ✅ | The bridge creates each mirror account in MAS and links it to the person's OpenID Connect subject, so the company login lands on the account it made. Verified against real Synapse, MAS and Dex (docs/MAS_SETUP.md); the plugin driving a Mattermost signed in with OpenID Connect is not covered end to end. |
 | Ghosts to mirror accounts migration | Mattermost → Matrix | ✅ | /matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver. |
 | Cut-over mode | Mattermost → Matrix | ✅ | Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing. |
 
@@ -115,11 +122,12 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
 | Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
 | Channel header shows the linked room | Mattermost → Matrix | ❌ | Webapp channel header button and RHS. |
-| Message history backfill | Mattermost → Matrix | ❌ | /matrix backfill only creates ghosts, spaces and rooms. |
+| Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. |
+| Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 
 ## Totals
 
-- ✅ supported: 33
+- ✅ supported: 37
 - 🟡 partial: 4
-- ❌ gap: 29
+- ❌ gap: 28
 - — n/a: 0

@@ -106,6 +106,9 @@ var All = []Capability{
 
 	{ID: "ui.panel", Area: "Users", Name: "Bridge panel in Mattermost (channel status, your Matrix account, claim, link, call)", Direction: MattermostToMatrix, Status: Supported, Notes: "An icon in the Mattermost app bar opens a side panel backed by the plugin's /api/v1 routes; everything in it is also available as a slash command."},
 
+	{ID: "client.realtime", Area: "Mattermost clients", Name: "Matrix activity reaches connected Mattermost clients in real time", Direction: MatrixToMattermost, Status: Supported, Notes: "Posts, edits, deletes, reactions, typing, header, membership and profile changes arrive as websocket events, with unread counts."},
+	{ID: "client.mentions", Area: "Mattermost clients", Name: "A mention from Matrix notifies the Mattermost user", Direction: MatrixToMattermost, Status: Supported, Notes: "The post event lists the mentioned person and the mention count rises."},
+
 	// Calls
 	{ID: "calls.presence", Area: "Calls", Name: "Call announced in the room (who started, who is in, join link, ended)", Direction: MattermostToMatrix, Status: Supported, Notes: "A Mattermost Calls post becomes a notice with a join link and a com.mattermost.bridge.call state event; the notice is edited when the call ends."},
 	{ID: "calls.presence.in", Area: "Calls", Name: "Call shown as a card in the channel (participants, duration, join button)", Direction: MatrixToMattermost, Status: Supported, Notes: "m.rtc.member and org.matrix.msc3401.call.member state become a custom_matrix_call post that is updated as people join and leave."},
@@ -117,7 +120,7 @@ var All = []Capability{
 	{ID: "mirror.accounts", Area: "Mirror mode", Name: "Real @username accounts instead of ghosts", Direction: MattermostToMatrix, Status: Supported, Notes: "Created without credentials; the first account pins the mode so it cannot be switched under existing accounts."},
 	{ID: "mirror.collisions", Area: "Mirror mode", Name: "Name collisions with existing accounts", Direction: MattermostToMatrix, Status: Supported, Notes: "A name taken by an account the bridge did not create gets a suffixed one (@name_mm) and is reported by /matrix status."},
 	{ID: "mirror.claim", Area: "Mirror mode", Name: "Claiming an account", Direction: MatrixToMattermost, Status: Supported, Notes: "/matrix claim with an admin token, or the first message from the person's own client after shared login. Their messages then post as them and the bridge keeps sending through the appservice."},
-	{ID: "mirror.sso_provider", Area: "Mirror mode", Name: "Shared login with Mattermost as the identity provider", Direction: MatrixToMattermost, Status: Partial, Notes: "Documented for Matrix Authentication Service; nothing in the plugin sets it up."},
+	{ID: "mirror.sso_provider", Area: "Mirror mode", Name: "Shared login with MAS and an OpenID Connect provider", Direction: MatrixToMattermost, Status: Supported, Notes: "The bridge creates each mirror account in MAS and links it to the person's OpenID Connect subject, so the company login lands on the account it made. Verified against real Synapse, MAS and Dex (docs/MAS_SETUP.md); the plugin driving a Mattermost signed in with OpenID Connect is not covered end to end."},
 	{ID: "mirror.migrate", Area: "Mirror mode", Name: "Ghosts to mirror accounts migration", Direction: MattermostToMatrix, Status: Supported, Notes: "/matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver."},
 	{ID: "mirror.cutover", Area: "Mirror mode", Name: "Cut-over mode", Direction: MattermostToMatrix, Status: Supported, Notes: "Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing."},
 
@@ -141,7 +144,8 @@ var All = []Capability{
 	{ID: "integration.widget", Area: "Integration", Name: "Matrix widget showing the Mattermost channel", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Plugin can serve a widget page; the bot sets im.vector.modular.widgets."},
 	{ID: "integration.bot_commands.in", Area: "Integration", Name: "Bridge bot commands in Matrix (!mattermost …)", Direction: MatrixToMattermost, Status: Partial, Notes: "help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet."},
 	{ID: "integration.channel_header", Area: "Integration", Name: "Channel header shows the linked room", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Webapp channel header button and RHS."},
-	{ID: "integration.backfill", Area: "Integration", Name: "Message history backfill", Direction: MattermostToMatrix, Status: Unsupported, Notes: "/matrix backfill only creates ghosts, spaces and rooms."},
+	{ID: "integration.backfill", Area: "Integration", Name: "Structure backfill (users, teams, channels)", Direction: MattermostToMatrix, Status: Supported, Notes: "/matrix backfill creates ghosts, spaces and rooms."},
+	{ID: "history.import", Area: "Integration", Name: "Message history import with original timestamps", Direction: MattermostToMatrix, Status: Partial, Notes: "/matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time."},
 }
 
 // ByID returns the capability with the given ID or panics; an unknown ID is

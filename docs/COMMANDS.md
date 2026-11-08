@@ -14,6 +14,7 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix list`](#matrix-list) | List all mappings | `/matrix list` |
 | [`/matrix map_user`](#matrix-map_user) | Map user to Matrix ID | `/matrix map_user @alice @alice:matrix.org` |
 | [`/matrix backfill`](#matrix-backfill) | Backfill existing data | `/matrix backfill all` |
+| [`/matrix history`](#matrix-history) | Import a channel's past messages | `/matrix history confirm` |
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix migrate`](#matrix-migrate) | Re-run KV migrations | `/matrix migrate` |
 | [`/matrix call`](#calls-matrix-call) | Start a call both sides can join | `/matrix call Weekly sync` |
@@ -532,6 +533,26 @@ bridge adds a widget to the room, announces the call there, and posts a card in
 the channel with the same join address. Only one call runs per room at a time;
 asking again returns the running one. The URL may contain `{room_id}`,
 `{room_name}`, `{display_name}` and `{user_id}`.
+
+## `/matrix history`
+
+Administrators only. Brings the messages a channel already has into its
+bridged room, for moving a community to Matrix. `/matrix history` on its own is
+a preview: how many messages would be imported and over what dates. Nothing is
+sent. `/matrix history confirm` starts the import in the background, and
+`/matrix history confirm limit=500` imports only the oldest 500.
+
+Messages go in oldest first, sent by their authors (their ghost or mirror
+account), carrying the time they were written, with threads kept. Run it again
+at any time: it skips what is already in the room, so it can finish an import
+that stopped (three failures in a row stop a run) or add messages written since.
+While it runs, `/matrix history` shows progress; afterwards it shows what the
+last run did.
+
+Not carried across yet: attachments (the preview counts them), reactions,
+earlier versions of edited messages and direct messages. People who use their
+own Matrix token for the bridge (double puppeting) show the import time rather
+than the original one, because only the bridge itself may set a message's time.
 
 ## Mirror mode: `/matrix claim`
 

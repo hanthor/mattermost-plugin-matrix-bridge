@@ -125,3 +125,15 @@ func TestReplaceEmojiShortcodes(t *testing.T) {
 		}
 	}
 }
+
+func TestMatrixEmojiMapsToTheSameMattermostNameEveryTime(t *testing.T) {
+	b := &MatrixToMattermostBridge{}
+	for i := 0; i < 200; i++ {
+		if got := b.convertMatrixEmojiToMattermost("👍"); got != "+1" {
+			t.Fatalf("run %d: 👍 became %q; the choice among its names must not depend on map order", i, got)
+		}
+	}
+	if got := b.convertMatrixEmojiToMattermost("👎"); got != "-1" {
+		t.Fatalf("👎 became %q", got)
+	}
+}

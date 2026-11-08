@@ -12,6 +12,7 @@
 | [BATCH_OPERATIONS.md](BATCH_OPERATIONS.md) | Event queue and batching design | Developers |
 | [CALLS_AND_MIRROR_MODE.md](CALLS_AND_MIRROR_MODE.md) | Design: how calls are bridged, and the scenarios mirror mode must handle for a migration | Admins, developers |
 | [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md) | Experimental mirror mode on a dedicated homeserver | Admins |
+| [MAS_SETUP.md](MAS_SETUP.md) | Shared login: Matrix Authentication Service with an OpenID Connect provider | Admins |
 | [../LOCAL_DEVELOPMENT.md](../LOCAL_DEVELOPMENT.md) | Docker Compose stack with Mattermost, Synapse and Element | Developers |
 | [WALKTHROUGH.md](WALKTHROUGH.md) | Screenshot tour of a bridged channel, generated from the current code | Everyone |
 | [../e2e/README.md](../e2e/README.md) | Complement end-to-end suite and how to run it | Developers |

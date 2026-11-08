@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -258,6 +259,9 @@ type MessageRequest struct {
 	Files          []FileAttachment `json:"files"`             // Optional: File attachments
 	ReplyToEventID string           `json:"reply_to_event_id"` // Optional: Event ID to reply to (for files)
 	Mentions       map[string]any   `json:"mentions"`          // Optional: Matrix mentions data (m.mentions field)
+	// Timestamp is the time in milliseconds the message should carry instead
+	// of now, for importing history. Only the application service honours it.
+	Timestamp int64 `json:"timestamp,omitempty"`
 }
 
 // SendEventResponse represents the response from Matrix when sending events.
@@ -1950,7 +1954,7 @@ func (c *Client) sendTextMessage(req MessageRequest, rootEventID string) (*SendE
 		content["mattermost_remote_id"] = c.remoteID
 	}
 
-	return c.sendEventAsUser(req.RoomID, "m.room.message", content, req.GhostUserID)
+	return c.sendEventAsUserAt(req.RoomID, "m.room.message", content, req.GhostUserID, req.Timestamp)
 }
 
 // sendFileMessage sends a file message with optional relation to root event
@@ -1999,11 +2003,18 @@ func (c *Client) sendFileMessage(req MessageRequest, file FileAttachment, rootEv
 		content["mattermost_remote_id"] = c.remoteID
 	}
 
-	return c.sendEventAsUser(req.RoomID, "m.room.message", content, req.GhostUserID)
+	return c.sendEventAsUserAt(req.RoomID, "m.room.message", content, req.GhostUserID, req.Timestamp)
 }
 
 // sendEventAsUser sends an event as a specific user (using application service impersonation)
 func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID string) (*SendEventResponse, error) {
+	return c.sendEventAsUserAt(roomID, eventType, content, userID, 0)
+}
+
+// sendEventAsUserAt is sendEventAsUser with the event's timestamp set to
+// timestampMs (milliseconds since the epoch) when it is not zero. Synapse
+// accepts this "timestamp massaging" from application services only.
+func (c *Client) sendEventAsUserAt(roomID, eventType string, content any, userID string, timestampMs int64) (*SendEventResponse, error) {
 	txnID := uuid.New().String()
 	endpoint, err := BuildSecureURL("/_matrix/client/v3/rooms/", roomID, "send", eventType, txnID)
 	if err != nil {
@@ -2023,6 +2034,11 @@ func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID s
 
 	req.Header.Set("Content-Type", "application/json")
 	c.authorize(req, userID)
+	if timestampMs > 0 {
+		q := req.URL.Query()
+		q.Set("ts", strconv.FormatInt(timestampMs, 10))
+		req.URL.RawQuery = q.Encode()
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

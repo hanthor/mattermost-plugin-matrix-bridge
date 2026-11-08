@@ -471,7 +471,7 @@ func (b *MattermostToMatrixBridge) syncPostToMatrixWithResolvedRoom(post *model.
 		b.logger.LogDebug("Successfully updated post in Matrix", "post_id", post.Id, "matrix_event_id", existingEventID)
 	} else {
 		// This is a new post - create new Matrix message
-		err := b.createPostInMatrix(post, matrixRoomID, user, propertyKey)
+		err := b.createPostInMatrix(post, matrixRoomID, user, propertyKey, 0)
 		if err != nil {
 			return errors.Wrap(err, "failed to create post in Matrix")
 		}
@@ -523,7 +523,8 @@ func (b *MattermostToMatrixBridge) SyncPostToMatrix(post *model.Post, channelID 
 }
 
 // createPostInMatrix creates a new post in Matrix and stores the event ID
-func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRoomID string, user *model.User, propertyKey string) error {
+// timestampMs, when not zero, is the time the Matrix event should carry (history import).
+func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRoomID string, user *model.User, propertyKey string, timestampMs int64) error {
 	// Skip creating ghost users for Matrix-originated users to prevent loops
 	if user.IsRemote() {
 		b.logger.LogDebug("Skipping Matrix sync for remote user", "user_id", user.Id, "username", user.Username)
@@ -614,6 +615,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		PostID:        post.Id,
 		Files:         fileAttachments,
 		Mentions:      finalMentions,
+		Timestamp:     timestampMs,
 	}
 
 	sendResponse, err := sender.SendMessage(messageRequest)

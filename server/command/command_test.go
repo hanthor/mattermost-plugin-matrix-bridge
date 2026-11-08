@@ -60,6 +60,14 @@ func (m *mockPlugin) StartCall(_, _, _ string) (string, error) {
 	return "", nil
 }
 
+func (m *mockPlugin) PlanChannelHistory(_ string, _ int) (HistoryReport, error) {
+	return HistoryReport{}, nil
+}
+
+func (m *mockPlugin) StartChannelHistory(_ string, _ int) error { return nil }
+
+func (m *mockPlugin) ChannelHistoryStatus(_ string) HistoryReport { return HistoryReport{} }
+
 func (m *mockPlugin) MirrorStatus() MirrorStatus {
 	return MirrorStatus{Mode: "ghost"}
 }
