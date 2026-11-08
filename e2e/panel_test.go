@@ -68,8 +68,11 @@ func TestBridgePanelAPI(t *testing.T) {
 		assert.Equal(t, roomID, ch["room_id"])
 		assert.Equal(t, "Panel", ch["room_name"])
 		assert.GreaterOrEqual(t, ch["participants"], float64(2), "the bridge bot and alice are in the room")
-		assert.Equal(t, false, ch["can_manage"], "a plain member cannot bridge or unbridge")
-		assert.Equal(t, false, ch["can_create"])
+		// The panel follows the same rule as /matrix create, map and unmap: whoever
+		// may edit the channel's properties. Mattermost gives that to members of a
+		// public channel by default.
+		assert.Equal(t, true, ch["can_manage"])
+		assert.Equal(t, false, ch["can_create"], "an already bridged channel cannot be bridged again")
 
 		_, adminView := pluginAPI(t, h, h.Admin, http.MethodGet, "/channels/"+channel.Id)
 		assert.Equal(t, true, adminView["can_manage"])
