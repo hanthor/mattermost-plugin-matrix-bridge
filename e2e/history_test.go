@@ -28,6 +28,7 @@ func TestHistoryImport(t *testing.T) {
 
 	// The channel has history before it is bridged: drop the automatic room,
 	// write the past, then bridge.
+	h.WaitForChannelRoom(channel)
 	resp, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix unmap")
 	require.NoError(t, err)
 	require.NotContains(t, resp.Text, "❌", resp.Text)
