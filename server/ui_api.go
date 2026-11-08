@@ -258,6 +258,12 @@ func (p *Plugin) handleUIBridge(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Cut-over mode is on: no new rooms are bridged."})
 		return
 	}
+	if p.mattermostToMatrixBridge != nil {
+		if existing, err := p.mattermostToMatrixBridge.GetMatrixRoomID(channelID); err == nil && existing != "" {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "This channel is already bridged to Matrix."})
+			return
+		}
+	}
 	resp, err := p.API.ExecuteSlashCommand(&model.CommandArgs{
 		UserId:    userID,
 		ChannelId: channelID,

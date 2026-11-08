@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 )
 
 func uiRequest(t *testing.T, p *Plugin, method, path, userID string) *httptest.ResponseRecorder {
@@ -173,4 +175,18 @@ func TestUIBridgeRefusesDirectMessagesCutoverAndOutsiders(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+hidden+"/bridge", "mm-ada").Code)
 	p.configuration.CutoverMode = true
 	assert.Equal(t, http.StatusConflict, uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+open+"/bridge", "mm-ada").Code)
+}
+
+func TestUIBridgeRefusesAChannelThatIsAlreadyBridged(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	channelID := model.NewId()
+	require.NoError(t, p.kvstore.Set(kvstore.BuildChannelMappingKey(channelID), []byte("!room:example.com")))
+	api.On("HasPermissionToChannel", "mm-ada", channelID, model.PermissionReadChannel).Return(true)
+	api.On("GetChannel", channelID).Return(&model.Channel{Id: channelID, Type: model.ChannelTypeOpen}, nil)
+
+	rec := uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+channelID+"/bridge", "mm-ada")
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assert.Contains(t, rec.Body.String(), "already bridged")
+	api.AssertNotCalled(t, "ExecuteSlashCommand", mock.Anything)
 }

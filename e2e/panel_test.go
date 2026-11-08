@@ -106,7 +106,7 @@ func TestBridgePanelAPI(t *testing.T) {
 		assert.Equal(t, false, after["can_create"])
 
 		status, _ = pluginAPI(t, h, h.Admin, http.MethodPost, "/channels/"+scratch.Id+"/bridge")
-		assert.Equal(t, http.StatusBadRequest, status, "bridging twice is refused, as /matrix create does")
+		assert.Equal(t, http.StatusConflict, status, "bridging twice is refused")
 	})
 
 	t.Run("linking gives a code the bridge bot understands", func(t *testing.T) {
