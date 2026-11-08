@@ -252,6 +252,16 @@ async function dismissMattermostTips(page) {
     }
 }
 
+/** Opens the bridge's side panel from the channel header. */
+async function openBridgePanel(session) {
+    // Mattermost shows a plugin's header action as an icon in the app bar on the right.
+    const button = session.page.locator(`[id="app-bar-icon-${scenario.pluginID}"] [role="button"]`).first();
+    await button.waitFor({timeout: 60_000});
+    await button.click();
+    await session.page.getByText('Your Matrix account', {exact: true}).first().waitFor({timeout: 60_000});
+    await sleep(1500);
+}
+
 // ---------- Element ----------
 
 async function elementSession(person) {
@@ -583,6 +593,17 @@ await step('feature: calls', async () => {
     await shot(alice.page, 'feature-element-call-join', 'The same call in Element: an announcement with the join link, and a widget in the room.');
 });
 
+await step('feature: bridge panel', async () => {
+    await ada.openChannel(channelName);
+    await openBridgePanel(ada);
+    await ada.page.getByText('Bridged to Matrix').first().waitFor({timeout: 60_000});
+    await shot(ada.page, 'feature-mm-panel', 'The bridge panel, opened from the Matrix icon in the app bar: the room this channel is bridged to, who is in it, a button to start a call, and how you appear in Matrix.');
+    await ada.page.getByRole('button', {name: 'Link an existing Matrix account'}).click();
+    await ada.page.getByText('!mattermost link').first().waitFor({timeout: 30_000});
+    await sleep(500);
+    await shot(ada.page, 'feature-mm-panel-link', 'Linking an account from the panel shows the code to send to the bridge bot, the same as `/matrix link`.');
+});
+
 await step('operations: status and list', async () => {
     await ada.openChannel(channelName);
     await ada.slash('/matrix status');
@@ -651,6 +672,13 @@ if (mirror) {
     await step('mirror: claim an account', async () => {
         carol = await mattermostSession(scenario.carol.username, scenario.carol.password);
         await carol.openChannel(channelName);
+        await openBridgePanel(carol);
+        await carol.page.getByRole('button', {name: 'Claim my Matrix account'}).waitFor({timeout: 60_000});
+        await shot(carol.page, 'mirror-mm-panel', 'The bridge panel shows Carol her Matrix account and a button to claim it.');
+        await carol.page.getByRole('button', {name: 'Claim my Matrix account'}).click();
+        await carol.page.getByText('One-time password').first().waitFor({timeout: 60_000});
+        await sleep(500);
+        await shot(carol.page, 'mirror-mm-panel-claimed', 'Claiming from the panel hands over the account and shows the one-time password once.');
         await carol.slash('/matrix claim');
         await shot(carol.page, 'mirror-mm-claim', '`/matrix claim` hands Carol her Matrix account, with a one-time password to sign in.');
 

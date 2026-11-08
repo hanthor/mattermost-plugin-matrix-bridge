@@ -1,5 +1,5 @@
 {
-  "generatedAtUTC": "2026-11-08T02:54:07Z",
+  "generatedAtUTC": "2026-11-08T15:06:13Z",
   "steps": [
     {
       "file": "mirror-mm-plugin-settings.png",
@@ -12,6 +12,14 @@
     {
       "file": "mirror-element-members.png",
       "caption": "The member list shows each Mattermost person as @username on the homeserver, not an @_mattermost_ ghost."
+    },
+    {
+      "file": "mirror-mm-panel.png",
+      "caption": "The bridge panel shows Carol her Matrix account and a button to claim it."
+    },
+    {
+      "file": "mirror-mm-panel-claimed.png",
+      "caption": "Claiming from the panel hands over the account and shows the one-time password once."
     },
     {
       "file": "mirror-mm-claim.png",

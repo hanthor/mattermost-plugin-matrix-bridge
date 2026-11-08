@@ -104,6 +104,8 @@ var All = []Capability{
 	{ID: "users.puppeting", Area: "Users", Name: "Double puppeting (use my own Matrix account)", Direction: MattermostToMatrix, Status: Supported, Notes: "\"!mattermost login <access_token>\" lets the bridge send as the linked Matrix account."},
 	{ID: "identity.sso", Area: "Users", Name: "Automatic linking through shared SSO (OIDC / Matrix Authentication Service)", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Match accounts by verified email from a shared identity provider so linking is zero-touch."},
 
+	{ID: "ui.panel", Area: "Users", Name: "Bridge panel in Mattermost (channel status, your Matrix account, claim, link, call)", Direction: MattermostToMatrix, Status: Supported, Notes: "An icon in the Mattermost app bar opens a side panel backed by the plugin's /api/v1 routes; everything in it is also available as a slash command."},
+
 	// Calls
 	{ID: "calls.presence", Area: "Calls", Name: "Call announced in the room (who started, who is in, join link, ended)", Direction: MattermostToMatrix, Status: Supported, Notes: "A Mattermost Calls post becomes a notice with a join link and a com.mattermost.bridge.call state event; the notice is edited when the call ends."},
 	{ID: "calls.presence.in", Area: "Calls", Name: "Call shown as a card in the channel (participants, duration, join button)", Direction: MatrixToMattermost, Status: Supported, Notes: "m.rtc.member and org.matrix.msc3401.call.member state become a custom_matrix_call post that is updated as people join and leave."},
