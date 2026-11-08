@@ -655,7 +655,10 @@ if (mirror) {
         await shot(carol.page, 'mirror-mm-claim', '`/matrix claim` hands Carol her Matrix account, with a one-time password to sign in.');
 
         const carolToken = await mmLogin(scenario.carol.username, scenario.carol.password);
-        const again = await mmApi('POST', '/commands/execute', {channel_id: channelID, command: '/matrix claim'}, carolToken);
+        // Claiming again in another channel gives a password to sign in with without showing a second reply here.
+        const team = await mmApi('GET', `/teams/name/${scenario.teamName}`);
+        const townSquare = await mmApi('GET', `/teams/${team.id}/channels/name/town-square`);
+        const again = await mmApi('POST', '/commands/execute', {channel_id: townSquare.id, command: '/matrix claim'}, carolToken);
         const password = /One-time password[^`]*`([^`]+)`/.exec(again.text || '');
         if (!password) {
             throw new Error(`no one-time password in: ${again.text}`);
