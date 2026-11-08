@@ -68,6 +68,13 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Automatic linking through shared SSO (OIDC / Matrix Authentication Service) | Mattermost → Matrix | ❌ | Match accounts by verified email from a shared identity provider so linking is zero-touch. |
 | Bridge panel in Mattermost (channel status, your Matrix account, claim, link, call) | Mattermost → Matrix | ✅ | An icon in the Mattermost app bar opens a side panel backed by the plugin's /api/v1 routes; everything in it is also available as a slash command. |
 
+## Mattermost clients
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Matrix activity reaches connected Mattermost clients in real time | Matrix → Mattermost | ✅ | Posts, edits, deletes, reactions, typing, header, membership and profile changes arrive as websocket events, with unread counts. |
+| A mention from Matrix notifies the Mattermost user | Matrix → Mattermost | ✅ | The post event lists the mentioned person and the mention count rises. |
+
 ## Calls
 
 | Capability | Direction | Status | Notes |
@@ -120,7 +127,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 35
+- ✅ supported: 37
 - 🟡 partial: 4
 - ❌ gap: 28
 - — n/a: 0

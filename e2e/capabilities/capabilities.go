@@ -106,6 +106,9 @@ var All = []Capability{
 
 	{ID: "ui.panel", Area: "Users", Name: "Bridge panel in Mattermost (channel status, your Matrix account, claim, link, call)", Direction: MattermostToMatrix, Status: Supported, Notes: "An icon in the Mattermost app bar opens a side panel backed by the plugin's /api/v1 routes; everything in it is also available as a slash command."},
 
+	{ID: "client.realtime", Area: "Mattermost clients", Name: "Matrix activity reaches connected Mattermost clients in real time", Direction: MatrixToMattermost, Status: Supported, Notes: "Posts, edits, deletes, reactions, typing, header, membership and profile changes arrive as websocket events, with unread counts."},
+	{ID: "client.mentions", Area: "Mattermost clients", Name: "A mention from Matrix notifies the Mattermost user", Direction: MatrixToMattermost, Status: Supported, Notes: "The post event lists the mentioned person and the mention count rises."},
+
 	// Calls
 	{ID: "calls.presence", Area: "Calls", Name: "Call announced in the room (who started, who is in, join link, ended)", Direction: MattermostToMatrix, Status: Supported, Notes: "A Mattermost Calls post becomes a notice with a join link and a com.mattermost.bridge.call state event; the notice is edited when the call ends."},
 	{ID: "calls.presence.in", Area: "Calls", Name: "Call shown as a card in the channel (participants, duration, join button)", Direction: MatrixToMattermost, Status: Supported, Notes: "m.rtc.member and org.matrix.msc3401.call.member state become a custom_matrix_call post that is updated as people join and leave."},

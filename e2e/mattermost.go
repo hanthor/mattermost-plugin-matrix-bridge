@@ -39,6 +39,18 @@ type MattermostServer struct {
 	URL string
 	// InternalURL is the base URL reachable from other containers.
 	InternalURL string
+
+	pg testcontainers.Container
+}
+
+// ExecSQL runs a statement against Mattermost's database, for set-up the API
+// does not allow (such as backdating posts).
+func (m *MattermostServer) ExecSQL(t *testing.T, statement string) {
+	t.Helper()
+	code, out, err := m.pg.Exec(context.Background(), []string{"psql", "-U", "mmuser", "-d", "mattermost", "-v", "ON_ERROR_STOP=1", "-c", statement})
+	require.NoError(t, err, "run SQL")
+	data, _ := io.ReadAll(out)
+	require.Zero(t, code, "SQL failed: %s", data)
 }
 
 // BridgeConfig is the plugin configuration applied after installation.
@@ -135,6 +147,7 @@ func StartMattermost(t *testing.T, ctx context.Context, opts MattermostOptions) 
 	return &MattermostServer{
 		URL:         fmt.Sprintf("http://%s:%s", host, port.Port()),
 		InternalURL: fmt.Sprintf("http://%s:8065", opts.Alias),
+		pg:          pg,
 	}
 }
 

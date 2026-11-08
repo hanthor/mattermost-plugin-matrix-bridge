@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -33,12 +34,16 @@ func TestHistoryImport(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, resp.Text, "❌", resp.Text)
 
+	// The API stamps posts with the current time, so write them and then
+	// backdate them in the database, as an imported history would be.
 	yearAgo := time.Now().AddDate(-1, 0, 0).UnixMilli()
-	first, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "A message from last year", CreateAt: yearAgo})
+	first, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "A message from last year"})
 	require.NoError(t, err)
-	reply, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "And a reply in its thread", RootId: first.Id, CreateAt: yearAgo + 60_000})
+	reply, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "And a reply in its thread", RootId: first.Id})
 	require.NoError(t, err)
-	assert.Less(t, first.CreateAt, time.Now().AddDate(0, -6, 0).UnixMilli(), "the post really is old (the server kept create_at)")
+	h.Mattermost.ExecSQL(t, fmt.Sprintf("UPDATE posts SET createat = %d WHERE id = '%s'", yearAgo, first.Id))
+	h.Mattermost.ExecSQL(t, fmt.Sprintf("UPDATE posts SET createat = %d WHERE id = '%s'", yearAgo+60_000, reply.Id))
+	first.CreateAt, reply.CreateAt = yearAgo, yearAgo+60_000
 
 	roomID := h.CreateMappedRoom(alice, channel.Id, "History")
 
