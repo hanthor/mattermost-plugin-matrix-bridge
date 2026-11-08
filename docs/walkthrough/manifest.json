@@ -1,5 +1,5 @@
 {
-  "generatedAtUTC": "2026-11-07T20:32:57Z",
+  "generatedAtUTC": "2026-11-08T02:52:04Z",
   "steps": [
     {
       "file": "setup-mm-plugin-management.png",
@@ -120,6 +120,22 @@
     {
       "file": "feature-element-double-puppet.png",
       "caption": "Carol's Mattermost message in Element, sent by her linked Matrix account rather than a ghost."
+    },
+    {
+      "file": "feature-element-call-notice.png",
+      "caption": "Carol starts a Mattermost call; Element shows who started it, with a link to join. Audio and video stay in Mattermost."
+    },
+    {
+      "file": "feature-mm-call-card.png",
+      "caption": "A call started from Matrix shows in the channel as a card with a join button."
+    },
+    {
+      "file": "feature-mm-call-start.png",
+      "caption": "`/matrix call` starts a call both sides can join through Element Call."
+    },
+    {
+      "file": "feature-element-call-join.png",
+      "caption": "The same call in Element: an announcement with the join link, and a widget in the room."
     },
     {
       "file": "ops-mm-matrix-status.png",
