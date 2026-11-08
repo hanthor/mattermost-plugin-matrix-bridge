@@ -29,6 +29,17 @@ const defaultElementImage = "vectorim/element-web:latest"
 // The run fails if any tutorial step failed, so the committed screenshots
 // always reflect a bridge that did everything the tutorial claims.
 func TestWalkthrough(t *testing.T) {
+	runWalkthrough(t, "ghosts")
+}
+
+// TestWalkthroughMirror is the same for mirror mode, the way to migrate from
+// Mattermost to Matrix: people have real accounts, which they can claim.
+// Its screenshots go to docs/walkthrough/mirror.
+func TestWalkthroughMirror(t *testing.T) {
+	runWalkthrough(t, "mirror")
+}
+
+func runWalkthrough(t *testing.T, mode string) {
 	if os.Getenv("E2E_WALKTHROUGH") == "" {
 		t.Skip("set E2E_WALKTHROUGH=1 to generate the walkthrough screenshots")
 	}
@@ -36,7 +47,12 @@ func TestWalkthrough(t *testing.T) {
 		t.Fatalf("node is required for the walkthrough: %v", err)
 	}
 
-	h := NewHarness(t)
+	mirror := mode == "mirror"
+	h := NewHarnessWithOptions(t, HarnessOptions{
+		MirrorMode:     mirror,
+		CallsMode:      "element_call",
+		ElementCallURL: "https://call.example.com/room?roomId={room_id}&displayName={display_name}",
+	})
 	ctx := context.Background()
 
 	// Personas. Matrix: Alice and Bob. Mattermost: Ada (admin), Carol, Dave.
@@ -51,8 +67,13 @@ func TestWalkthrough(t *testing.T) {
 
 	outDir, err := filepath.Abs(envOr("WALKTHROUGH_OUT_DIR", filepath.Join("..", "docs", "walkthrough")))
 	require.NoError(t, err)
+	if mirror {
+		outDir = filepath.Join(outDir, "mirror")
+	}
 	require.NoError(t, os.MkdirAll(outDir, 0o755))
-	writeRedactedRegistration(t, filepath.Join(outDir, "registration.yaml"), h.Registration)
+	if !mirror {
+		writeRedactedRegistration(t, filepath.Join(outDir, "registration.yaml"), h.Registration)
+	}
 
 	scenario := map[string]any{
 		"mattermostURL": h.Mattermost.URL,
@@ -76,6 +97,7 @@ func TestWalkthrough(t *testing.T) {
 		"bridgeBotUser":  h.BridgeBotUserID(),
 		"ghostPrefix":    "@_mattermost_",
 		"outDir":         outDir,
+		"mode":           mode,
 		"pluginID":       PluginID,
 		"generatedAtUTC": time.Now().UTC().Format(time.RFC3339),
 	}
@@ -114,7 +136,11 @@ func TestWalkthrough(t *testing.T) {
 		}
 	}
 	require.Empty(t, failures, "walkthrough steps failed")
-	require.Greater(t, shots, 20, "expected the walkthrough to produce screenshots in %s", outDir)
+	minimum := 20
+	if mirror {
+		minimum = 6
+	}
+	require.Greater(t, shots, minimum, "expected the walkthrough to produce screenshots in %s", outDir)
 	t.Logf("walkthrough produced %d screenshots in %s", shots, outDir)
 }
 

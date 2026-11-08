@@ -22,4 +22,4 @@ capabilities:
 .PHONY: walkthrough
 walkthrough: dist
 	cd e2e/walkthrough && npm install --no-audit --no-fund
-	cd e2e && E2E_WALKTHROUGH=1 COMPLEMENT_BASE_IMAGE=$(COMPLEMENT_BASE_IMAGE) $(GO) test -count=1 -v -timeout 60m -run '^TestWalkthrough$$' .
+	cd e2e && E2E_WALKTHROUGH=1 COMPLEMENT_BASE_IMAGE=$(COMPLEMENT_BASE_IMAGE) $(GO) test -count=1 -v -timeout 60m -run '^TestWalkthrough(Mirror)?$$' .

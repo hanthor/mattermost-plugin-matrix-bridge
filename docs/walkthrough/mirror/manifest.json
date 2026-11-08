@@ -1,0 +1,33 @@
+{
+  "generatedAtUTC": "2026-11-08T02:54:07Z",
+  "steps": [
+    {
+      "file": "mirror-mm-plugin-settings.png",
+      "caption": "Mirror mode is one setting, plus an optional Matrix admin token so people can claim their account."
+    },
+    {
+      "file": "mirror-element-message.png",
+      "caption": "In Element the message comes from @admin — a normal account with her name and portrait."
+    },
+    {
+      "file": "mirror-element-members.png",
+      "caption": "The member list shows each Mattermost person as @username on the homeserver, not an @_mattermost_ ghost."
+    },
+    {
+      "file": "mirror-mm-claim.png",
+      "caption": "`/matrix claim` hands Carol her Matrix account, with a one-time password to sign in."
+    },
+    {
+      "file": "mirror-element-own-client.png",
+      "caption": "Carol signs in to Element with her claimed account and writes in the room."
+    },
+    {
+      "file": "mirror-mm-own-post.png",
+      "caption": "In Mattermost the message is her own post, not a remote lookalike. Nothing is duplicated."
+    },
+    {
+      "file": "mirror-mm-matrix-status.png",
+      "caption": "`/matrix status` reports mirror mode, how many accounts exist and how many are claimed."
+    }
+  ]
+}
