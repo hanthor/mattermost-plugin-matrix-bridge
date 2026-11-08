@@ -23,3 +23,9 @@ capabilities:
 walkthrough: dist
 	cd e2e/walkthrough && npm install --no-audit --no-fund
 	cd e2e && E2E_WALKTHROUGH=1 COMPLEMENT_BASE_IMAGE=$(COMPLEMENT_BASE_IMAGE) $(GO) test -count=1 -v -timeout 60m -run '^TestWalkthrough(Mirror)?$$' .
+
+## Browser-level tests of what the Mattermost web client shows while Matrix users act (needs Docker, Node.js and Playwright's Chromium).
+.PHONY: ui-tests
+ui-tests: dist
+	cd e2e/walkthrough && npm install --no-audit --no-fund
+	cd e2e && E2E_UI=1 COMPLEMENT_BASE_IMAGE=$(COMPLEMENT_BASE_IMAGE) $(GO) test -count=1 -v -timeout 40m -run '^TestMattermostUI$$' .

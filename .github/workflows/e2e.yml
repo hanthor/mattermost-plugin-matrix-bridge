@@ -52,3 +52,48 @@ jobs:
       - name: Upload Mattermost and homeserver logs on failure
         if: failure()
         run: docker ps -a --format '{{.Names}}' | xargs -r -I{} sh -c 'echo "=== {} ==="; docker logs {} 2>&1 | tail -n 300'
+
+  mattermost-ui:
+    name: Mattermost web client
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse:develop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            e2e/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Pull images
+        run: |
+          docker pull "$COMPLEMENT_BASE_IMAGE"
+          docker pull mattermost/mattermost-enterprise-edition:12.1.0
+          docker pull postgres:16-alpine
+
+      - name: Install Playwright browsers
+        working-directory: e2e/walkthrough
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run the browser-level Mattermost tests
+        run: make ui-tests
+
+      - name: Upload failure diagnostics
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ui-debug
+          path: docs/walkthrough-debug/ui/
+          if-no-files-found: ignore
