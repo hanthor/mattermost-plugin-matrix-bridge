@@ -4,6 +4,7 @@ package command
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -116,6 +117,25 @@ type GhostMigrationReport struct {
 	Switched bool
 }
 
+// HistoryReport describes importing a channel's past messages into its room.
+type HistoryReport struct {
+	// Pending is how many messages are still to be imported.
+	Pending int
+	// Imported, Skipped and Failed count what a run did so far.
+	Imported int
+	Skipped  int
+	Failed   int
+	// Files counts attachments that were not carried across.
+	Files int
+	// Running is set while an import is in progress.
+	Running bool
+	// Truncated is set when the channel has more history than was examined.
+	Truncated bool
+	Oldest    int64 // time of the oldest pending message, ms
+	Newest    int64 // time of the newest pending message, ms
+	Error     string
+}
+
 // PluginAccessor defines the interface for plugin functionality needed by command handlers
 type PluginAccessor interface {
 	// Matrix client access
@@ -164,6 +184,14 @@ type PluginAccessor interface {
 	// ClaimMirrorAccount hands a mirrored account to its person. When the
 	// bridge can set a password it returns a one-time password to show once.
 	ClaimMirrorAccount(mattermostUserID string) (matrixUserID, oneTimePassword string, err error)
+
+	// History import (see docs/COMMANDS.md). PlanChannelHistory only counts;
+	// StartChannelHistory imports in the background, oldest first, as the
+	// authors and with the original times; ChannelHistoryStatus reports the
+	// last or current run.
+	PlanChannelHistory(channelID string, limit int) (HistoryReport, error)
+	StartChannelHistory(channelID string, limit int) error
+	ChannelHistoryStatus(channelID string) HistoryReport
 
 	// Identity linking (one person on both networks)
 	CreateIdentityLinkCode(mattermostUserID string) (string, error)
@@ -311,7 +339,7 @@ const (
 	matrixCommandTrigger = "matrix"
 
 	// Main command usage
-	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|claim|call|migrate] [room_name|room_alias|room_id]"
+	matrixCommandUsage = "Usage: /matrix [test|create|join|map|unmap|list|status|link|unlink|claim|call|history|migrate] [room_name|room_alias|room_id]"
 	linkCommandDesc    = "Link your Matrix account so you are one identity on both networks"
 	unlinkCommandDesc  = "Remove the link to your Matrix account"
 	claimCommandDesc   = "Mirror mode: take over your mirrored Matrix account"
@@ -441,6 +469,9 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	historyCmd := model.NewAutocompleteData("history", "[confirm] [limit=N]", "Import this channel's past messages into its Matrix room")
+	historyCmd.AddTextArgument("confirm to start; omit to preview", "[confirm] [limit=N]", "")
+	matrixData.AddCommand(historyCmd)
 	matrixData.AddCommand(model.NewAutocompleteData("link", "", linkCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("unlink", "", unlinkCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("claim", "", claimCommandDesc))
@@ -1261,6 +1292,8 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeUnlinkCommand(args)
 	case "migrate":
 		return c.executeMigrateCommand(args)
+	case "history":
+		return c.executeHistoryCommand(args)
 	default:
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
@@ -1290,7 +1323,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics":
+	case "map_user", "backfill", "migrate", "metrics", "history":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
@@ -1706,6 +1739,75 @@ func (c *Handler) executeMigrateCommand(args *model.CommandArgs) *model.CommandR
 			userMappingsAdded, channelMappingsAdded, roomMappingsAdded,
 			dmMappingsAdded, reverseDMMappingsAdded),
 	}
+}
+
+// executeHistoryCommand previews or starts importing the channel's past
+// messages. Without "confirm" it only reports what would be imported.
+func (c *Handler) executeHistoryCommand(args *model.CommandArgs) *model.CommandResponse {
+	reply := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+	confirm := false
+	limit := 0
+	for _, f := range strings.Fields(args.Command)[2:] {
+		switch {
+		case f == "confirm":
+			confirm = true
+		case strings.HasPrefix(f, "limit="):
+			n, err := strconv.Atoi(strings.TrimPrefix(f, "limit="))
+			if err != nil || n <= 0 {
+				return reply("❌ `limit=` needs a positive number, for example `/matrix history confirm limit=500`.")
+			}
+			limit = n
+		default:
+			return reply("Usage: `/matrix history [confirm] [limit=N]`. Without `confirm` it only shows what would be imported.")
+		}
+	}
+
+	status := c.plugin.ChannelHistoryStatus(args.ChannelId)
+	if status.Running {
+		return reply(fmt.Sprintf("🔄 **History import is running** for this channel: %d imported, %d skipped, %d failed so far. Run `/matrix history` again later.", status.Imported, status.Skipped, status.Failed))
+	}
+
+	plan, err := c.plugin.PlanChannelHistory(args.ChannelId, limit)
+	if err != nil {
+		return reply("❌ " + err.Error())
+	}
+	if !confirm {
+		return reply(historyPreview(plan, status))
+	}
+	if plan.Pending == 0 {
+		return reply("ℹ️ Nothing to import: every message in this channel is already in the room.")
+	}
+	if err := c.plugin.StartChannelHistory(args.ChannelId, limit); err != nil {
+		return reply("❌ " + err.Error())
+	}
+	return reply(fmt.Sprintf("🔄 **History import started**: %d messages, oldest first, as their authors and with their original times. It runs in the background and can be repeated if it stops. Run `/matrix history` to see progress.", plan.Pending))
+}
+
+func historyPreview(plan, last HistoryReport) string {
+	var sb strings.Builder
+	sb.WriteString("📜 **History import preview**\n\n")
+	if plan.Pending == 0 {
+		sb.WriteString("Every message in this channel is already in its Matrix room.")
+	} else {
+		sb.WriteString(fmt.Sprintf("%d messages would be imported, oldest first (%s to %s), as their authors and with their original times.",
+			plan.Pending, time.UnixMilli(plan.Oldest).UTC().Format("2006-01-02"), time.UnixMilli(plan.Newest).UTC().Format("2006-01-02")))
+		if plan.Files > 0 {
+			sb.WriteString(fmt.Sprintf("\n\n%d attachments are not carried across yet.", plan.Files))
+		}
+		if plan.Truncated {
+			sb.WriteString("\n\nThis channel has more history than one run examines; run it again after it finishes.")
+		}
+		sb.WriteString("\n\nRun `/matrix history confirm` to start. Add `limit=N` to import only the oldest N.")
+	}
+	if last.Imported+last.Failed > 0 {
+		sb.WriteString(fmt.Sprintf("\n\nLast run: %d imported, %d skipped, %d failed.", last.Imported, last.Skipped, last.Failed))
+		if last.Error != "" {
+			sb.WriteString(" Stopped: " + last.Error)
+		}
+	}
+	return sb.String()
 }
 
 // titleCase upper-cases the first letter of every space-separated word.

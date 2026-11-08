@@ -115,11 +115,12 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
 | Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
 | Channel header shows the linked room | Mattermost → Matrix | ❌ | Webapp channel header button and RHS. |
-| Message history backfill | Mattermost → Matrix | ❌ | /matrix backfill only creates ghosts, spaces and rooms. |
+| Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. |
+| Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 
 ## Totals
 
-- ✅ supported: 33
-- 🟡 partial: 4
-- ❌ gap: 29
+- ✅ supported: 34
+- 🟡 partial: 5
+- ❌ gap: 28
 - — n/a: 0

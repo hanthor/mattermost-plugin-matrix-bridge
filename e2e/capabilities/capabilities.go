@@ -141,7 +141,8 @@ var All = []Capability{
 	{ID: "integration.widget", Area: "Integration", Name: "Matrix widget showing the Mattermost channel", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Plugin can serve a widget page; the bot sets im.vector.modular.widgets."},
 	{ID: "integration.bot_commands.in", Area: "Integration", Name: "Bridge bot commands in Matrix (!mattermost …)", Direction: MatrixToMattermost, Status: Partial, Notes: "help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet."},
 	{ID: "integration.channel_header", Area: "Integration", Name: "Channel header shows the linked room", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Webapp channel header button and RHS."},
-	{ID: "integration.backfill", Area: "Integration", Name: "Message history backfill", Direction: MattermostToMatrix, Status: Unsupported, Notes: "/matrix backfill only creates ghosts, spaces and rooms."},
+	{ID: "integration.backfill", Area: "Integration", Name: "Structure backfill (users, teams, channels)", Direction: MattermostToMatrix, Status: Supported, Notes: "/matrix backfill creates ghosts, spaces and rooms."},
+	{ID: "history.import", Area: "Integration", Name: "Message history import with original timestamps", Direction: MattermostToMatrix, Status: Partial, Notes: "/matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time."},
 }
 
 // ByID returns the capability with the given ID or panics; an unknown ID is
