@@ -242,8 +242,8 @@ Mattermost as a card and in the room as an announcement and a widget:
 | --- | --- |
 | ![The bridge panel](walkthrough/feature-mm-panel.png) | ![Link code in the panel](walkthrough/feature-mm-panel-link.png) |
 
-Everyone can open the **Matrix bridge** panel from the channel header
-(the button with the Matrix brackets). It shows what the current channel is
+Everyone can open the **Matrix bridge** panel from its icon (the Matrix
+brackets) in the app bar on the right of Mattermost. It shows what the current channel is
 bridged to (the room, how many people are in it, a link to open it), a button
 to start a call when calls are enabled, and how the signed-in person appears
 in Matrix, with buttons to claim a mirror account or to link and unlink an

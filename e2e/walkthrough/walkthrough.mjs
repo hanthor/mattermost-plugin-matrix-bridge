@@ -254,7 +254,8 @@ async function dismissMattermostTips(page) {
 
 /** Opens the bridge's side panel from the channel header. */
 async function openBridgePanel(session) {
-    const button = session.page.locator('button:has(svg path[d="M7 3H4v18h3M17 3h3v18h-3"])').first();
+    // Mattermost shows a plugin's header action as an icon in the app bar on the right.
+    const button = session.page.locator(`[id="app-bar-icon-${scenario.pluginID}"] [role="button"]`).first();
     await button.waitFor({timeout: 60_000});
     await button.click();
     await session.page.getByText('Your Matrix account', {exact: true}).first().waitFor({timeout: 60_000});
@@ -596,7 +597,7 @@ await step('feature: bridge panel', async () => {
     await ada.openChannel(channelName);
     await openBridgePanel(ada);
     await ada.page.getByText('Bridged to Matrix').first().waitFor({timeout: 60_000});
-    await shot(ada.page, 'feature-mm-panel', 'The bridge panel, opened from the channel header: the room this channel is bridged to, who is in it, a button to start a call, and how you appear in Matrix.');
+    await shot(ada.page, 'feature-mm-panel', 'The bridge panel, opened from the Matrix icon in the app bar: the room this channel is bridged to, who is in it, a button to start a call, and how you appear in Matrix.');
     await ada.page.getByRole('button', {name: 'Link an existing Matrix account'}).click();
     await ada.page.getByText('!mattermost link').first().waitFor({timeout: 30_000});
     await sleep(500);
