@@ -23,6 +23,7 @@ the images change.
   - [Matrix user side](#matrix-user-side)
 - [Part 2: features, side by side](#part-2-features-side-by-side)
 - [Part 3: day-to-day operations](#part-3-day-to-day-operations)
+- [Part 4: migrating from Mattermost to Matrix with mirror mode](#part-4-migrating-from-mattermost-to-matrix-with-mirror-mode)
 - [How the screenshots are made](#how-the-screenshots-are-made)
 
 ## Part 1: setup
@@ -215,6 +216,26 @@ messages from her own Matrix account instead of a ghost:
 This is the stepping stone for moving a community from Mattermost to Matrix
 without anyone changing identity.
 
+### Calls
+
+| Mattermost | Element |
+| --- | --- |
+| ![Call card in Mattermost](walkthrough/feature-mm-call-card.png) | ![Call announced in Element](walkthrough/feature-element-call-notice.png) |
+
+Audio and video are not relayed between the networks, so a call is shown on
+the other side and joined where it runs. When someone starts a Mattermost
+call, the room gets an announcement from them with a join link, and an edit
+when the call ends. A call started from Matrix (Element Call) shows up in the
+channel as a card with a join button, and the card records how long it lasted.
+
+For one call that both sides can join, run `/matrix call [title]`. The bridge
+builds the address from the **Element Call URL** setting and puts it in
+Mattermost as a card and in the room as an announcement and a widget:
+
+| Mattermost | Element |
+| --- | --- |
+| ![/matrix call](walkthrough/feature-mm-call-start.png) | ![Joining from Element](walkthrough/feature-element-call-join.png) |
+
 ## Part 3: day-to-day operations
 
 | `/matrix status` | `/matrix list` |
@@ -227,6 +248,46 @@ without anyone changing identity.
 history across. See [COMMANDS.md](COMMANDS.md) for the full reference and who
 may run what.
 
+## Part 4: migrating from Mattermost to Matrix with mirror mode
+
+This part is generated from a second deployment with **Enable Mirror Mode**
+turned on. In the default mode the bridge shows every Mattermost person in
+Matrix as a ghost (`@_mattermost_<id>`). In mirror mode they get real
+accounts named after their Mattermost username, so the room looks the way it
+will once everyone has moved. See [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md)
+for the full setup and [CALLS_AND_MIRROR_MODE.md](CALLS_AND_MIRROR_MODE.md)
+for the design.
+
+![Mirror mode in the plugin settings](walkthrough/mirror/mirror-mm-plugin-settings.png)
+
+| Mattermost post | The same post in Element |
+| --- | --- |
+| ![A Mattermost post](walkthrough/mirror/mirror-element-message.png) | ![Mirrored members](walkthrough/mirror/mirror-element-members.png) |
+
+The accounts are created without a password, so nobody can sign in as
+someone else. A person **claims** theirs when they are ready:
+
+![/matrix claim](walkthrough/mirror/mirror-mm-claim.png)
+
+`/matrix claim` marks the account as the person's own and, when the Matrix
+admin token is set, gives them a one-time password. They sign in to any
+Matrix client with it:
+
+| Element, signed in as Carol | Mattermost |
+| --- | --- |
+| ![Carol in Element](walkthrough/mirror/mirror-element-own-client.png) | ![Her own post](walkthrough/mirror/mirror-mm-own-post.png) |
+
+From then on her messages typed in Matrix are posted as her real Mattermost
+account, and the bridge keeps sending her Mattermost messages from the same
+Matrix account. Nothing is duplicated. `/matrix status` shows the state:
+
+![/matrix status in mirror mode](walkthrough/mirror/mirror-mm-matrix-status.png)
+
+When everyone has claimed their account, `cutover_mode` freezes the bridge
+for the switch, and `/matrix migrate ghosts-to-mirror` moves an existing
+ghost-mode deployment onto mirror accounts (see
+[COMMANDS.md](COMMANDS.md)).
+
 ## How the screenshots are made
 
 | Piece | Role |
@@ -235,6 +296,9 @@ may run what.
 | [`e2e/walkthrough/walkthrough.mjs`](../e2e/walkthrough/walkthrough.mjs) | Creates the demo people (names and the stock portraits in `e2e/walkthrough/avatars/`), then drives Mattermost with [`@mattermost/playwright-lib`](https://www.npmjs.com/package/@mattermost/playwright-lib), Mattermost's own Playwright page objects (API login, `ChannelsPage`, `SystemConsolePage`), and captures a screenshot per step. Actions that are not what a picture is about go through the REST APIs so the images stay stable across UI releases. Writes `manifest.json` with the captions. |
 | [`e2e/walkthrough/element.mjs`](../e2e/walkthrough/element.mjs) | Element helpers mirrored from [element-web's Playwright suite](https://github.com/element-hq/element-web/tree/develop/apps/web/playwright): credential injection, toast handling, composer, member list and timeline selectors. |
 | [`.github/workflows/walkthrough.yml`](../.github/workflows/walkthrough.yml) | Runs the test in CI, uploads the images (and, on failure, per-step debug screenshots) as artifacts, and on `master` opens a pull request with the refreshed images. |
+
+`TestWalkthroughMirror` runs the same script against a mirror mode
+deployment and writes to `docs/walkthrough/mirror/`.
 
 Set `WALKTHROUGH_OUT_DIR` to write the images somewhere else and
 `E2E_ELEMENT_IMAGE` to pin a specific Element Web release.

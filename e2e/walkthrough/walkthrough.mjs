@@ -274,6 +274,7 @@ async function elementSession(person) {
 
 // ---------- The tutorial ----------
 
+const mirror = scenario.mode === 'mirror';
 const channelName = 'bridge-demo';
 let ada;
 let carol;
@@ -287,6 +288,7 @@ await step('people', async () => {
     await setUpPeople();
 });
 
+if (!mirror) {
 // ===== Part 1: setup on the Mattermost side =====
 
 await step('setup: mattermost login', async () => {
@@ -552,6 +554,35 @@ await step('feature: identity link and double puppeting', async () => {
     await shot(alice.page, 'feature-element-double-puppet', 'Carol\'s Mattermost message in Element, sent by her linked Matrix account rather than a ghost.');
 });
 
+await step('feature: calls', async () => {
+    // Mattermost → Matrix: the post the Calls plugin makes when a call starts.
+    const carolToken = await mmLogin(scenario.carol.username, scenario.carol.password);
+    await mmApi('POST', '/posts', {
+        channel_id: channelID, type: 'custom_calls', message: '',
+        props: {start_at: Date.now(), end_at: 0, participants: [people.carol.id]},
+    }, carolToken);
+    await alice.app.viewRoomById(roomID);
+    await alice.app.waitForMessage('started a call in Mattermost');
+    await shot(alice.page, 'feature-element-call-notice', 'Carol starts a Mattermost call; Element shows who started it, with a link to join. Audio and video stay in Mattermost.');
+
+    // Matrix → Mattermost: a call member event from Element Call becomes a card.
+    const member = `_${scenario.alice.userID}_DEMODEVICE`;
+    await matrixApi('PUT', `/_matrix/client/v3/rooms/${encodeURIComponent(roomID)}/state/m.rtc.member/${encodeURIComponent(member)}`, {
+        application: {type: 'm.call'}, member: {claimed_user_id: scenario.alice.userID},
+    });
+    await ada.page.getByText('Call in progress').first().waitFor({timeout: 60_000});
+    await sleep(1000);
+    await shot(ada.page, 'feature-mm-call-card', 'A call started from Matrix shows in the channel as a card with a join button.');
+    await matrixApi('PUT', `/_matrix/client/v3/rooms/${encodeURIComponent(roomID)}/state/m.rtc.member/${encodeURIComponent(member)}`, {});
+
+    // One call both sides can join.
+    await ada.slash('/matrix call Weekly sync');
+    await shot(ada.page, 'feature-mm-call-start', '`/matrix call` starts a call both sides can join through Element Call.');
+    await alice.app.viewRoomById(roomID);
+    await alice.app.waitForMessage('started a call: Weekly sync');
+    await shot(alice.page, 'feature-element-call-join', 'The same call in Element: an announcement with the join link, and a widget in the room.');
+});
+
 await step('operations: status and list', async () => {
     await ada.openChannel(channelName);
     await ada.slash('/matrix status');
@@ -559,6 +590,99 @@ await step('operations: status and list', async () => {
     await ada.slash('/matrix list');
     await shot(ada.page, 'ops-mm-matrix-list', '`/matrix list` shows every bridged channel in the team.');
 });
+
+}
+
+// ===== Mirror mode: the way to migrate from Mattermost to Matrix =====
+
+if (mirror) {
+    let carolElement;
+
+    await step('mirror: login', async () => {
+        ada = await mattermostSession(scenario.adminUsername, scenario.adminPassword);
+        alice = await elementSession(scenario.alice);
+    });
+
+    await step('mirror: settings', async () => {
+        await ada.page.goto(`/admin_console/plugins/plugin_${scenario.pluginID}`);
+        await ada.systemConsole.sidebar.toBeVisible();
+        const label = ada.page.getByText('Enable Mirror Mode (Experimental)', {exact: true}).first();
+        await label.waitFor({timeout: 60_000});
+        await label.scrollIntoViewIfNeeded();
+        await dismissMattermostTips(ada.page);
+        await sleep(1000);
+        await shot(ada.page, 'mirror-mm-plugin-settings', 'Mirror mode is one setting, plus an optional Matrix admin token so people can claim their account.');
+    });
+
+    await step('mirror: people have real accounts', async () => {
+        const team = await mmApi('GET', `/teams/name/${scenario.teamName}`);
+        const channel = await mmApi('POST', '/channels', {
+            team_id: team.id, name: channelName, display_name: 'Bridge Demo', type: 'O', purpose: 'Where Mattermost meets Matrix',
+        });
+        channelID = channel.id;
+        const deadline = Date.now() + 60_000;
+        while (!roomID) {
+            const list = await mmApi('POST', '/commands/execute', {channel_id: channelID, command: '/matrix list'});
+            const match = /Bridge Demo → `(![^`]+)`/.exec(list.text || '');
+            if (match) {
+                roomID = match[1];
+                break;
+            }
+            if (Date.now() > deadline) {
+                throw new Error(`no room was created for the new channel: ${list.text}`);
+            }
+            await sleep(1000);
+        }
+        await mmApi('POST', `/channels/${channelID}/members`, {user_id: people.carol.id});
+        await mmApi('POST', `/channels/${channelID}/members`, {user_id: people.dave.id});
+        await ada.openChannel(channelName);
+        await ada.post('Hello from Mattermost! In mirror mode everyone here has a real Matrix account, not a ghost.', 'real Matrix account');
+
+        await alice.page.goto(`${scenario.elementURL}/#/room/${roomID}`);
+        await alice.app.viewRoomById(roomID);
+        await alice.app.waitForMessage('real Matrix account');
+        await shot(alice.page, 'mirror-element-message', 'In Element the message comes from @' + scenario.adminUsername + ' — a normal account with her name and portrait.');
+        await alice.app.openMemberList();
+        await sleep(1500);
+        await shot(alice.page, 'mirror-element-members', 'The member list shows each Mattermost person as @username on the homeserver, not an @_mattermost_ ghost.');
+        await alice.app.closeRightPanel();
+    });
+
+    await step('mirror: claim an account', async () => {
+        carol = await mattermostSession(scenario.carol.username, scenario.carol.password);
+        await carol.openChannel(channelName);
+        await carol.slash('/matrix claim');
+        await shot(carol.page, 'mirror-mm-claim', '`/matrix claim` hands Carol her Matrix account, with a one-time password to sign in.');
+
+        const carolToken = await mmLogin(scenario.carol.username, scenario.carol.password);
+        const again = await mmApi('POST', '/commands/execute', {channel_id: channelID, command: '/matrix claim'}, carolToken);
+        const password = /One-time password[^`]*`([^`]+)`/.exec(again.text || '');
+        if (!password) {
+            throw new Error(`no one-time password in: ${again.text}`);
+        }
+        const loginRes = await fetch(`${scenario.homeserverURL}/_matrix/client/v3/login`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: 'm.login.password', identifier: {type: 'm.id.user', user: scenario.carol.username}, password: password[1]}),
+        });
+        if (!loginRes.ok) {
+            throw new Error(`matrix login as carol: ${loginRes.status} ${await loginRes.text()}`);
+        }
+        const login = await loginRes.json();
+        carolElement = await elementSession({userID: login.user_id, token: login.access_token, deviceID: login.device_id});
+        await carolElement.app.viewRoomById(roomID);
+        await carolElement.app.sendMessage('Typed in Element by Carol, signed in to her own account.');
+        await carol.waitForText('signed in to her own account');
+        await shot(carolElement.page, 'mirror-element-own-client', 'Carol signs in to Element with her claimed account and writes in the room.');
+        await shot(carol.page, 'mirror-mm-own-post', 'In Mattermost the message is her own post, not a remote lookalike. Nothing is duplicated.');
+    });
+
+    await step('mirror: status', async () => {
+        await ada.openChannel(channelName);
+        await ada.slash('/matrix status');
+        await shot(ada.page, 'mirror-mm-matrix-status', '`/matrix status` reports mirror mode, how many accounts exist and how many are claimed.');
+    });
+}
 
 await browser.close();
 writeFileSync(join(scenario.outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
