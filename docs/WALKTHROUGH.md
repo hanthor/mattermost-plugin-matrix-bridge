@@ -236,6 +236,21 @@ Mattermost as a card and in the room as an announcement and a widget:
 | --- | --- |
 | ![/matrix call](walkthrough/feature-mm-call-start.png) | ![Joining from Element](walkthrough/feature-element-call-join.png) |
 
+### The bridge panel in Mattermost
+
+| The panel | Linking an account |
+| --- | --- |
+| ![The bridge panel](walkthrough/feature-mm-panel.png) | ![Link code in the panel](walkthrough/feature-mm-panel-link.png) |
+
+Everyone can open the **Matrix bridge** panel from the channel header
+(the button with the Matrix brackets). It shows what the current channel is
+bridged to (the room, how many people are in it, a link to open it), a button
+to start a call when calls are enabled, and how the signed-in person appears
+in Matrix, with buttons to claim a mirror account or to link and unlink an
+existing Matrix account. Everything in it is also available as a slash
+command; the panel is for people who would rather not type them. For a channel
+that is not bridged yet, it tells channel admins which command bridges it.
+
 ## Part 3: day-to-day operations
 
 | `/matrix status` | `/matrix list` |
@@ -265,7 +280,12 @@ for the design.
 | ![A Mattermost post](walkthrough/mirror/mirror-element-message.png) | ![Mirrored members](walkthrough/mirror/mirror-element-members.png) |
 
 The accounts are created without a password, so nobody can sign in as
-someone else. A person **claims** theirs when they are ready:
+someone else. A person **claims** theirs when they are ready, from the
+bridge panel or with `/matrix claim`:
+
+| The panel | After claiming |
+| --- | --- |
+| ![Claim button in the panel](walkthrough/mirror/mirror-mm-panel.png) | ![One-time password in the panel](walkthrough/mirror/mirror-mm-panel-claimed.png) |
 
 ![/matrix claim](walkthrough/mirror/mirror-mm-claim.png)
 

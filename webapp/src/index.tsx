@@ -1,15 +1,32 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
+import React from 'react';
 import type {Store, Action} from 'redux';
 
 import type {GlobalState} from '@mattermost/types/store';
 
 import HomeserverConfig from '@/components/admin_console_settings/homeserver_config';
 import RegistrationDownload from '@/components/admin_console_settings/registration_download';
+import BridgePanel from '@/components/bridge_panel';
 import MatrixCallCard from '@/components/matrix_call_card';
 import manifest from '@/manifest';
 import type {PluginRegistry} from '@/types/mattermost-webapp';
+
+const MatrixIcon = () => (
+    <svg
+        width='18'
+        height='18'
+        viewBox='0 0 24 24'
+        fill='none'
+        stroke='currentColor'
+        strokeWidth='2'
+        aria-hidden='true'
+    >
+        <path d='M7 3H4v18h3M17 3h3v18h-3'/>
+        <path d='M10 8v8M14 8v8'/>
+    </svg>
+);
 
 export default class Plugin {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
@@ -20,6 +37,15 @@ export default class Plugin {
 
         // Calls started in Matrix rooms are shown as a card with a join button
         registry.registerPostTypeComponent('custom_matrix_call', MatrixCallCard);
+
+        // A panel with the channel's bridge status and the person's Matrix account
+        const {toggleRHSPlugin} = registry.registerRightHandSidebarComponent(BridgePanel, 'Matrix bridge');
+        registry.registerChannelHeaderButtonAction(
+            <MatrixIcon/>,
+            () => store.dispatch(toggleRHSPlugin as never),
+            'Matrix bridge',
+            'Matrix bridge',
+        );
     }
 }
 

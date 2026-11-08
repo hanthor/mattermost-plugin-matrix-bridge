@@ -66,6 +66,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Self-service account linking | Matrix → Mattermost | ✅ | /matrix link issues a code; "!mattermost link <code>" to the bridge bot binds the accounts. Linked Matrix users post as their real Mattermost account. |
 | Double puppeting (use my own Matrix account) | Mattermost → Matrix | ✅ | "!mattermost login <access_token>" lets the bridge send as the linked Matrix account. |
 | Automatic linking through shared SSO (OIDC / Matrix Authentication Service) | Mattermost → Matrix | ❌ | Match accounts by verified email from a shared identity provider so linking is zero-touch. |
+| Bridge panel in Mattermost (channel status, your Matrix account, claim, link, call) | Mattermost → Matrix | ✅ | A channel-header button opens a side panel backed by the plugin's /api/v1 routes; everything in it is also available as a slash command. |
 
 ## Calls
 
@@ -118,7 +119,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 32
+- ✅ supported: 33
 - 🟡 partial: 4
 - ❌ gap: 29
 - — n/a: 0
