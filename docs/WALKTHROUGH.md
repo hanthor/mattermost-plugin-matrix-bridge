@@ -249,7 +249,12 @@ to start a call when calls are enabled, and how the signed-in person appears
 in Matrix, with buttons to claim a mirror account or to link and unlink an
 existing Matrix account. Everything in it is also available as a slash
 command; the panel is for people who would rather not type them. For a channel
-that is not bridged yet, it tells channel admins which command bridges it.
+that is not bridged yet, it offers a button that creates the room (it runs
+`/matrix create` as you, so the same permissions apply):
+
+| Not bridged yet | A moment later |
+| --- | --- |
+| ![Unbridged channel in the panel](walkthrough/feature-mm-panel-unbridged.png) | ![The channel is bridged](walkthrough/feature-mm-panel-bridged.png) |
 
 ## Part 3: day-to-day operations
 

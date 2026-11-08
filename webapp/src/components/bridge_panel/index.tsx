@@ -91,6 +91,10 @@ const BridgePanel = () => {
                 setLinkCode(null);
                 await loadMe();
             })}
+            onBridge={() => run(async () => {
+                await api.bridge(channelId);
+                setChannel(await api.channel(channelId));
+            })}
             onStartCall={() => run(async () => {
                 const res = await api.startCall(channelId, '');
                 setCallURL(res.join_url);

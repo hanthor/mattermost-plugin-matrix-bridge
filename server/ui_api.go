@@ -26,6 +26,7 @@ func (p *Plugin) registerUIRoutes(router *mux.Router) {
 	ui.HandleFunc("/me/link", p.handleUIUnlink).Methods(http.MethodDelete)
 	ui.HandleFunc("/channels/{channelId}", p.handleUIChannel).Methods(http.MethodGet)
 	ui.HandleFunc("/channels/{channelId}/call", p.handleUICall).Methods(http.MethodPost)
+	ui.HandleFunc("/channels/{channelId}/bridge", p.handleUIBridge).Methods(http.MethodPost)
 }
 
 type ctxKey string
@@ -232,4 +233,49 @@ func contextWithUser(r *http.Request, userID string) context.Context {
 func userFromContext(r *http.Request) string {
 	id, _ := r.Context().Value(userIDKey).(string)
 	return id
+}
+
+// handleUIBridge bridges the channel with a new Matrix room. It runs
+// /matrix create as the person asking, so the command's own permission checks
+// and room setup apply and the panel can never do more than the command.
+func (p *Plugin) handleUIBridge(w http.ResponseWriter, r *http.Request) {
+	userID := userFromContext(r)
+	channelID := mux.Vars(r)["channelId"]
+	if !model.IsValidId(channelID) || !p.API.HasPermissionToChannel(userID, channelID, model.PermissionReadChannel) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "no access to this channel"})
+		return
+	}
+	channel, appErr := p.API.GetChannel(channelID)
+	if appErr != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "channel not found"})
+		return
+	}
+	if channel.IsGroupOrDirect() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "direct messages are bridged when the first message is sent"})
+		return
+	}
+	if p.MirrorStatus().Cutover {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Cut-over mode is on: no new rooms are bridged."})
+		return
+	}
+	resp, err := p.API.ExecuteSlashCommand(&model.CommandArgs{
+		UserId:    userID,
+		ChannelId: channelID,
+		TeamId:    channel.TeamId,
+		Command:   "/matrix create",
+	})
+	if err != nil {
+		p.logger.LogError("Failed to run /matrix create for the panel", "error", err, "channel_id", channelID)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not bridge the channel"})
+		return
+	}
+	text := ""
+	if resp != nil {
+		text = resp.Text
+	}
+	if strings.Contains(text, "❌") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": text})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": text})
 }

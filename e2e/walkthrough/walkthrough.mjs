@@ -604,6 +604,22 @@ await step('feature: bridge panel', async () => {
     await shot(ada.page, 'feature-mm-panel-link', 'Linking an account from the panel shows the code to send to the bridge bot, the same as `/matrix link`.');
 });
 
+await step('feature: bridge a channel from the panel', async () => {
+    // A channel that is not bridged yet: unmap a scratch channel (new ones get a room automatically).
+    const team = await mmApi('GET', `/teams/name/${scenario.teamName}`);
+    const scratch = await mmApi('POST', '/channels', {team_id: team.id, name: 'scratch-demo', display_name: 'Scratch', type: 'O', purpose: 'Not bridged yet'});
+    await sleep(3000);
+    await mmApi('POST', '/commands/execute', {channel_id: scratch.id, command: '/matrix unmap'});
+    await ada.openChannel('scratch-demo');
+    await openBridgePanel(ada);
+    await ada.page.getByRole('button', {name: 'Bridge this channel'}).waitFor({timeout: 60_000});
+    await shot(ada.page, 'feature-mm-panel-unbridged', 'For a channel that is not bridged, the panel offers a button that creates its Matrix room.');
+    await ada.page.getByRole('button', {name: 'Bridge this channel'}).click();
+    await ada.page.getByText('Bridged to Matrix').first().waitFor({timeout: 90_000});
+    await sleep(1000);
+    await shot(ada.page, 'feature-mm-panel-bridged', 'A moment later the channel is bridged, with its room and members.');
+});
+
 await step('operations: status and list', async () => {
     await ada.openChannel(channelName);
     await ada.slash('/matrix status');

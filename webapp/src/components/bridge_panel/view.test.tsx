@@ -53,6 +53,7 @@ const props = (over: Partial<Props> = {}): Props => ({
     onStartLink: jest.fn(),
     onUnlink: jest.fn(),
     onStartCall: jest.fn(),
+    onBridge: jest.fn(),
     ...over,
 });
 
@@ -106,9 +107,16 @@ describe('BridgePanelView', () => {
         expect(find('a', 'join')?.getAttribute('href')).toBe('https://call.example.com/x');
     });
 
-    test('tells admins how to bridge an unbridged channel, and everyone else who can', () => {
+    test('lets someone who may bridge an unbridged channel do it with a button', () => {
+        const onBridge = jest.fn();
+        render(props({channel: channel({mapped: false, can_create: true}), onBridge}));
+        click('Bridge this channel');
+        expect(onBridge).toHaveBeenCalled();
+        expect(text()).toContain('/matrix map');
+    });
+
+    test('tells everyone else who can bridge an unbridged channel', () => {
         render(props({channel: channel({mapped: false, can_create: true})}));
-        expect(text()).toContain('/matrix create');
         render(props({channel: channel({mapped: false, can_create: false})}));
         expect(text()).toContain('A channel admin can bridge this channel.');
         render(props({channel: channel({mapped: false, cutover: true})}));
@@ -125,6 +133,8 @@ describe('BridgePanelView', () => {
 
         render(props({me: me({mode: 'mirror', claimed: true}), claim: {matrix_user_id: '@ada:example.com', one_time_password: 'S3cretPassw0rd'}}));
         expect(text()).toContain('S3cretPassw0rd');
+        expect(text().split('is now yours').length - 1).toBe(1);
+        expect(text()).not.toContain('Your Matrix account is yours');
         expect(find('button', 'Claim my Matrix account')).toBeUndefined();
     });
 

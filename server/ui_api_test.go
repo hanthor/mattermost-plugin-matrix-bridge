@@ -130,3 +130,47 @@ func TestUIChannelReportsAnUnmappedChannelAndWhoCanBridgeIt(t *testing.T) {
 	assert.True(t, ch.CanCreate)
 	assert.False(t, ch.CanCall)
 }
+
+func TestUIBridgeRunsMatrixCreateAsThePerson(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	channelID := model.NewId()
+	api.On("HasPermissionToChannel", "mm-ada", channelID, model.PermissionReadChannel).Return(true)
+	api.On("GetChannel", channelID).Return(&model.Channel{Id: channelID, TeamId: "team1", Type: model.ChannelTypeOpen}, nil)
+	api.On("ExecuteSlashCommand", mock.MatchedBy(func(a *model.CommandArgs) bool {
+		return a.UserId == "mm-ada" && a.ChannelId == channelID && a.TeamId == "team1" && a.Command == "/matrix create"
+	})).Return(&model.CommandResponse{Text: "✅ **Matrix Room Created**"}, nil).Once()
+
+	rec := uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+channelID+"/bridge", "mm-ada")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "Matrix Room Created")
+}
+
+func TestUIBridgeReportsTheCommandsRefusal(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	channelID := model.NewId()
+	api.On("HasPermissionToChannel", "mm-ada", channelID, model.PermissionReadChannel).Return(true)
+	api.On("GetChannel", channelID).Return(&model.Channel{Id: channelID, Type: model.ChannelTypeOpen}, nil)
+	api.On("ExecuteSlashCommand", mock.Anything).Return(&model.CommandResponse{Text: "❌ You need permission to manage this channel to run `/matrix create`."}, nil)
+
+	rec := uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+channelID+"/bridge", "mm-ada")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "permission")
+}
+
+func TestUIBridgeRefusesDirectMessagesCutoverAndOutsiders(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	dm, open, hidden := model.NewId(), model.NewId(), model.NewId()
+	api.On("HasPermissionToChannel", "mm-ada", dm, model.PermissionReadChannel).Return(true)
+	api.On("HasPermissionToChannel", "mm-ada", open, model.PermissionReadChannel).Return(true)
+	api.On("HasPermissionToChannel", "mm-ada", hidden, model.PermissionReadChannel).Return(false)
+	api.On("GetChannel", dm).Return(&model.Channel{Id: dm, Type: model.ChannelTypeDirect}, nil)
+	api.On("GetChannel", open).Return(&model.Channel{Id: open, Type: model.ChannelTypeOpen}, nil)
+
+	assert.Equal(t, http.StatusBadRequest, uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+dm+"/bridge", "mm-ada").Code)
+	assert.Equal(t, http.StatusForbidden, uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+hidden+"/bridge", "mm-ada").Code)
+	p.configuration.CutoverMode = true
+	assert.Equal(t, http.StatusConflict, uiRequest(t, p, http.MethodPost, "/api/v1/channels/"+open+"/bridge", "mm-ada").Code)
+}

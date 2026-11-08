@@ -86,6 +86,28 @@ func TestBridgePanelAPI(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, status)
 	})
 
+	t.Run("an unbridged channel can be bridged from the panel", func(t *testing.T) {
+		scratch := h.CreateChannel("panel-scratch", "Panel scratch")
+		resp, _, err := h.Admin.ExecuteCommand(ctx, scratch.Id, "/matrix unmap")
+		require.NoError(t, err)
+		require.NotContains(t, resp.Text, "❌", resp.Text)
+
+		_, before := pluginAPI(t, h, h.Admin, http.MethodGet, "/channels/"+scratch.Id)
+		assert.Equal(t, false, before["mapped"])
+		assert.Equal(t, true, before["can_create"])
+
+		status, out := pluginAPI(t, h, h.Admin, http.MethodPost, "/channels/"+scratch.Id+"/bridge")
+		require.Equal(t, http.StatusOK, status, out)
+
+		_, after := pluginAPI(t, h, h.Admin, http.MethodGet, "/channels/"+scratch.Id)
+		assert.Equal(t, true, after["mapped"])
+		assert.NotEmpty(t, after["room_id"])
+		assert.Equal(t, false, after["can_create"])
+
+		status, _ = pluginAPI(t, h, h.Admin, http.MethodPost, "/channels/"+scratch.Id+"/bridge")
+		assert.Equal(t, http.StatusBadRequest, status, "bridging twice is refused, as /matrix create does")
+	})
+
 	t.Run("linking gives a code the bridge bot understands", func(t *testing.T) {
 		status, link := pluginAPI(t, h, carolClient, http.MethodPost, "/me/link")
 		require.Equal(t, http.StatusOK, status, link)
