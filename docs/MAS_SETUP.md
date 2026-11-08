@@ -177,10 +177,33 @@ by the person.
 
 ## What is tested
 
-The plugin's side (account creation, the MAS requests, retry, claiming) is
-covered by unit tests against a fake MAS. A CI test against a real MAS, Synapse
-and OpenID Connect provider is tracked in
-[#43](https://github.com/hanthor/mattermost-plugin-matrix-bridge/issues/43);
-until it passes, treat the MAS ↔ Synapse parts of this guide (appservice
-accounts behind MAS in particular) as unverified in this repository and test
-them on a staging server first.
+[`e2e/mas_test.go`](../e2e/mas_test.go) runs the whole thing against real
+software: Synapse delegating to MAS, MAS with an upstream OpenID Connect
+provider ([Dex](https://dexidp.io/)), and the appservice registered the way
+mirror mode registers the bridge (it owns the whole user namespace). It checks
+that:
+
+- the bridge can register `@ada` through its appservice while MAS delegates
+  sign-in (with `inhibit_login`),
+- MAS accepts that account when told about it with `skip_homeserver_check`, and
+  the account can be linked to the person's subject at the provider,
+- signing in to Matrix through the provider then lands on **that** account, the
+  token MAS issues is accepted by Synapse, and the person's own client and the
+  bridge (through the appservice) both post as it,
+- **without** the bridge telling MAS, the first sign-in fails with *Localpart
+  "bob" is not available on this homeserver*, which is why the plugin does it,
+- a subject that already belongs to someone else cannot be linked to another
+  account.
+
+The plugin's side (account creation, the MAS requests, retry, claiming) has
+unit tests against a fake MAS. What is **not** covered by an automated test: the
+plugin driving a real Mattermost signed in with OpenID Connect (the test uses
+the subject the provider releases, as Mattermost records it, rather than a
+Mattermost login), and identity providers other than Dex. Dex's local password
+connector releases the person's name as `name` and leaves `preferred_username`
+empty, so the test imports the localpart from `name`; most providers release
+`preferred_username`, which is what the example above uses.
+
+The test stack uses `discovery_mode: insecure` because Dex runs over plain
+http. MAS requires an `https` issuer otherwise, and production providers
+should be `https`.

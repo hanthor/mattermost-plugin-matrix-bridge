@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -59,7 +60,7 @@ func newFakeMAS(t *testing.T) (*fakeMAS, *httptest.Server) {
 			f.users[name] = "01" + name
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"data":{"type":"user","id":"01` + name + `"}}`))
-		case r.Method == http.MethodGet && len(r.URL.Path) > len("/api/admin/v1/users/by-username/"):
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/admin/v1/users/by-username/"):
 			name := r.URL.Path[len("/api/admin/v1/users/by-username/"):]
 			if id, ok := f.users[name]; ok {
 				_, _ = w.Write([]byte(`{"data":{"type":"user","id":"` + id + `"}}`))
@@ -69,9 +70,25 @@ func newFakeMAS(t *testing.T) (*fakeMAS, *httptest.Server) {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/admin/v1/upstream-oauth-links":
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)
+			for _, l := range f.links {
+				if l["subject"] == req["subject"] && l["provider_id"] == req["provider_id"] {
+					w.WriteHeader(http.StatusConflict)
+					_, _ = w.Write([]byte(`{"errors":[{"title":"already linked to a user"}]}`))
+					return
+				}
+			}
 			f.links = append(f.links, req)
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"data":{"type":"upstream-oauth-link","id":"01link"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/admin/v1/upstream-oauth-links":
+			q := r.URL.Query()
+			var data []map[string]any
+			for _, l := range f.links {
+				if l["user_id"] == q.Get("filter[user]") && l["subject"] == q.Get("filter[subject]") && l["provider_id"] == q.Get("filter[provider]") {
+					data = append(data, map[string]any{"attributes": l})
+				}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -108,6 +125,17 @@ func TestLinkUpstreamSendsTheProviderSubject(t *testing.T) {
 	assert.Equal(t, "01PROVIDER", f.links[0]["provider_id"])
 	assert.Equal(t, "oidc-sub-123", f.links[0]["subject"])
 	assert.Equal(t, "ada@example.com", f.links[0]["human_account_name"])
+}
+
+func TestLinkingTheSameSubjectToTheSameUserAgainIsFineButAnotherUsersIsNot(t *testing.T) {
+	_, srv := newFakeMAS(t)
+	c := New(srv.URL, "client-id", "client-secret")
+	require.NoError(t, c.LinkUpstream(context.Background(), "01ada", "01PROVIDER", "sub-1", ""))
+	require.NoError(t, c.LinkUpstream(context.Background(), "01ada", "01PROVIDER", "sub-1", ""), "already linked to this user")
+
+	err := c.LinkUpstream(context.Background(), "01mallory", "01PROVIDER", "sub-1", "")
+	require.Error(t, err, "a subject that belongs to someone else must not be reported as linked")
+	assert.Contains(t, err.Error(), "409")
 }
 
 func TestBadCredentialsAreReported(t *testing.T) {

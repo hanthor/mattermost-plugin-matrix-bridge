@@ -39,6 +39,9 @@ jobs:
           docker pull "$COMPLEMENT_BASE_IMAGE"
           docker pull mattermost/mattermost-enterprise-edition:12.1.0
           docker pull postgres:16-alpine
+          docker pull ghcr.io/dexidp/dex:v2.41.1
+          docker pull ghcr.io/element-hq/matrix-authentication-service:latest
+          docker pull ghcr.io/element-hq/synapse:latest
 
       - name: Build plugin bundle
         run: make dist

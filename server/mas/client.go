@@ -173,7 +173,8 @@ func (c *Client) EnsureUser(ctx context.Context, localpart, displayName string) 
 // LinkUpstream links the MAS user to a person at an upstream OpenID Connect
 // provider, identified by the provider's subject for them. Signing in through
 // that provider as that person then lands on this account. Linking the same
-// subject again is not an error.
+// subject to the same user again is not an error; a subject that belongs to
+// another user is.
 func (c *Client) LinkUpstream(ctx context.Context, userID, providerID, subject, accountName string) error {
 	payload := map[string]any{"user_id": userID, "provider_id": providerID, "subject": subject}
 	if accountName != "" {
@@ -185,6 +186,25 @@ func (c *Client) LinkUpstream(ctx context.Context, userID, providerID, subject, 
 	}
 	if status == http.StatusOK || status == http.StatusCreated {
 		return nil
+	}
+	if status == http.StatusConflict {
+		// The subject is already linked: fine when it is linked to this user,
+		// a real conflict when it belongs to someone else.
+		q := url.Values{"filter[user]": {userID}, "filter[provider]": {providerID}, "filter[subject]": {subject}}
+		listStatus, listBody, err := c.do(ctx, http.MethodGet, "/api/admin/v1/upstream-oauth-links?"+q.Encode(), nil)
+		if err != nil {
+			return err
+		}
+		var list struct {
+			Data []struct {
+				Attributes struct {
+					UserID string `json:"user_id"`
+				} `json:"attributes"`
+			} `json:"data"`
+		}
+		if listStatus == http.StatusOK && json.Unmarshal(listBody, &list) == nil && len(list.Data) > 0 {
+			return nil
+		}
 	}
 	return fmt.Errorf("MAS could not link the account to the identity provider: %d %s", status, truncate(body))
 }
