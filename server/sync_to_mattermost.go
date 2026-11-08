@@ -914,6 +914,35 @@ func (b *MatrixToMattermostBridge) convertMatrixToMattermost(content string) str
 	return content
 }
 
+// stripEmojiVariation removes the variation selectors that decorate some emoji.
+func stripEmojiVariation(s string) string {
+	s = strings.ReplaceAll(s, "\uFE0F", "")    // variation selector-16
+	return strings.ReplaceAll(s, "\uFE0E", "") // variation selector-15
+}
+
+// emojiNameForUnicode returns the Mattermost emoji name for a Unicode emoji.
+// With stripped set, variation selectors are ignored on both sides.
+func emojiNameForUnicode(emoji string, stripped bool) (string, bool) {
+	best := ""
+	for name, index := range emojiNameToIndex {
+		hex, ok := emojiIndexToUnicode[index]
+		if !ok {
+			continue
+		}
+		candidate := hexToUnicode(hex)
+		if stripped {
+			candidate = stripEmojiVariation(candidate)
+		}
+		if candidate != emoji {
+			continue
+		}
+		if best == "" || len(name) < len(best) || (len(name) == len(best) && name < best) {
+			best = name
+		}
+	}
+	return best, best != ""
+}
+
 // convertMatrixEmojiToMattermost converts Matrix emoji format to Mattermost
 func (b *MatrixToMattermostBridge) convertMatrixEmojiToMattermost(matrixEmoji string) string {
 	// Matrix reactions can be Unicode emoji or custom emoji
@@ -927,34 +956,18 @@ func (b *MatrixToMattermostBridge) convertMatrixEmojiToMattermost(matrixEmoji st
 		// Fall through to Unicode handling if name doesn't exist
 	}
 
-	// For Unicode emoji, try to find the corresponding Mattermost name
-	// Search through our emoji mappings to find a match
-	for emojiName, index := range emojiNameToIndex {
-		if unicodeHex, exists := emojiIndexToUnicode[index]; exists {
-			unicode := hexToUnicode(unicodeHex)
-			if unicode == matrixEmoji {
-				return emojiName
-			}
-		}
+	// For Unicode emoji, find the Mattermost name. An emoji can have several
+	// names (+1 and thumbsup), so pick one deterministically: the shortest,
+	// then the first alphabetically. Iterating the map directly gave a
+	// different name on every run.
+	if name, ok := emojiNameForUnicode(matrixEmoji, false); ok {
+		return name
 	}
 
 	// Try to find similar matches (without variation selectors)
-	stripVariation := func(s string) string {
-		// Remove common variation selectors
-		s = strings.ReplaceAll(s, "\uFE0F", "") // variation selector-16
-		s = strings.ReplaceAll(s, "\uFE0E", "") // variation selector-15
-		return s
-	}
-
-	strippedMatrix := stripVariation(matrixEmoji)
-	if strippedMatrix != matrixEmoji {
-		for emojiName, index := range emojiNameToIndex {
-			if unicodeHex, exists := emojiIndexToUnicode[index]; exists {
-				unicode := stripVariation(hexToUnicode(unicodeHex))
-				if unicode == strippedMatrix {
-					return emojiName
-				}
-			}
+	if stripped := stripEmojiVariation(matrixEmoji); stripped != matrixEmoji {
+		if name, ok := emojiNameForUnicode(stripped, true); ok {
+			return name
 		}
 	}
 
