@@ -22,6 +22,7 @@ covers setup on both sides step by step.
 | ![Reactions from both networks on one post, in Mattermost](docs/walkthrough/feature-mm-reactions.png) | ![The same post and reactions in Element](docs/walkthrough/feature-element-reactions.png) |
 | ![Alice's Matrix message in Mattermost](docs/walkthrough/feature-mm-message-from-matrix.png) | ![Carol's Mattermost message sent from her own Matrix account](docs/walkthrough/feature-element-double-puppet.png) |
 | ![A call started from Matrix, shown as a card in Mattermost](docs/walkthrough/feature-mm-call-card.png) | ![A Mattermost call announced in Element](docs/walkthrough/feature-element-call-notice.png) |
+| ![The Matrix bridge panel in Mattermost](docs/walkthrough/feature-mm-panel.png) | ![Claiming a Matrix account from the panel](docs/walkthrough/mirror/mirror-mm-panel-claimed.png) |
 | ![Mirror mode: Carol claims her Matrix account](docs/walkthrough/mirror/mirror-mm-claim.png) | ![Mirror mode: mirrored people are real Matrix accounts](docs/walkthrough/mirror/mirror-element-members.png) |
 
 Setting it up takes a plugin upload, one settings page and one file on the

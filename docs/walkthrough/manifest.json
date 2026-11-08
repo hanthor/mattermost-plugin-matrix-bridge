@@ -1,5 +1,5 @@
 {
-  "generatedAtUTC": "2026-11-08T02:52:04Z",
+  "generatedAtUTC": "2026-11-08T15:04:07Z",
   "steps": [
     {
       "file": "setup-mm-plugin-management.png",
@@ -136,6 +136,14 @@
     {
       "file": "feature-element-call-join.png",
       "caption": "The same call in Element: an announcement with the join link, and a widget in the room."
+    },
+    {
+      "file": "feature-mm-panel.png",
+      "caption": "The bridge panel, opened from the Matrix icon in the app bar: the room this channel is bridged to, who is in it, a button to start a call, and how you appear in Matrix."
+    },
+    {
+      "file": "feature-mm-panel-link.png",
+      "caption": "Linking an account from the panel shows the code to send to the bridge bot, the same as `/matrix link`."
     },
     {
       "file": "ops-mm-matrix-status.png",
