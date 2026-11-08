@@ -1,5 +1,5 @@
 {
-  "generatedAtUTC": "2026-11-08T15:04:07Z",
+  "generatedAtUTC": "2026-11-08T17:58:10Z",
   "steps": [
     {
       "file": "setup-mm-plugin-management.png",
@@ -144,6 +144,14 @@
     {
       "file": "feature-mm-panel-link.png",
       "caption": "Linking an account from the panel shows the code to send to the bridge bot, the same as `/matrix link`."
+    },
+    {
+      "file": "feature-mm-panel-unbridged.png",
+      "caption": "For a channel that is not bridged, the panel offers a button that creates its Matrix room."
+    },
+    {
+      "file": "feature-mm-panel-bridged.png",
+      "caption": "A moment later the channel is bridged, with its room and members."
     },
     {
       "file": "ops-mm-matrix-status.png",
