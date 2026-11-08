@@ -17,6 +17,7 @@ export type Props = {
     onStartLink: () => void;
     onUnlink: () => void;
     onStartCall: () => void;
+    onBridge: () => void;
 };
 
 const sectionStyle: React.CSSProperties = {padding: '16px 20px', borderBottom: '1px solid rgba(var(--center-channel-color-rgb), 0.12)'};
@@ -30,7 +31,7 @@ const secondaryButtonStyle: React.CSSProperties = {
 };
 const codeStyle: React.CSSProperties = {fontFamily: 'monospace', background: 'rgba(var(--center-channel-color-rgb), 0.08)', borderRadius: 4, padding: '2px 6px', wordBreak: 'break-all'};
 
-export function ChannelSection({channel, callURL, busy, onStartCall}: Pick<Props, 'channel' | 'callURL' | 'busy' | 'onStartCall'>) {
+export function ChannelSection({channel, callURL, busy, onStartCall, onBridge}: Pick<Props, 'channel' | 'callURL' | 'busy' | 'onStartCall' | 'onBridge'>) {
     if (!channel) {
         return null;
     }
@@ -88,9 +89,20 @@ export function ChannelSection({channel, callURL, busy, onStartCall}: Pick<Props
                     <div style={{fontWeight: 600}}>{channel.direct ? 'Not bridged' : 'Not bridged to Matrix'}</div>
                     {channel.cutover && <p style={mutedStyle}>{'Cut-over mode is on: no new rooms are bridged.'}</p>}
                     {channel.can_create && (
-                        <p style={mutedStyle}>
-                            {'Run '}<code>{'/matrix create'}</code>{' to bridge this channel with a new Matrix room, or '}<code>{'/matrix map'}</code>{' to use an existing room.'}
-                        </p>
+                        <>
+                            <p style={mutedStyle}>{'Bridging creates a Matrix room for this channel and adds its members.'}</p>
+                            <button
+                                type='button'
+                                style={buttonStyle}
+                                disabled={busy}
+                                onClick={onBridge}
+                            >
+                                {'Bridge this channel'}
+                            </button>
+                            <p style={mutedStyle}>
+                                {'To use an existing room instead, run '}<code>{'/matrix map'}</code>{'.'}
+                            </p>
+                        </>
                     )}
                     {!channel.can_create && !channel.cutover && !channel.direct && (
                         <p style={mutedStyle}>{'A channel admin can bridge this channel.'}</p>
@@ -118,7 +130,7 @@ export function AccountSection({me, claim, linkCode, busy, onClaim, onStartLink,
         >
             <h3 style={headingStyle}>{'Your Matrix account'}</h3>
             {me.matrix_user_id && <div style={{fontWeight: 600}}><span style={codeStyle}>{me.matrix_user_id}</span></div>}
-            <p style={mutedStyle}>{state}</p>
+            {!claim && <p style={mutedStyle}>{state}</p>}
 
             {me.can_claim && !claim && (
                 <button

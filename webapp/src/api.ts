@@ -69,5 +69,6 @@ export const api = {
     claim: () => request<Claim>('POST', '/me/claim'),
     startLink: () => request<LinkCode>('POST', '/me/link'),
     unlink: () => request<{ok: boolean}>('DELETE', '/me/link'),
+    bridge: (channelId: string) => request<{message: string}>('POST', `/channels/${channelId}/bridge`),
     startCall: (channelId: string, title: string) => request<{join_url: string}>('POST', `/channels/${channelId}/call`, {title}),
 };

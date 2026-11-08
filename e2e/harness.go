@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -350,6 +351,26 @@ func (h *Harness) GrantBridgePower(owner *client.CSAPI, roomID string, level int
 	users[h.BridgeBotUserID()] = level
 	levels["users"] = users
 	owner.MustDo(h.t, "PUT", []string{"_matrix", "client", "v3", "rooms", roomID, "state", "m.room.power_levels"}, client.WithJSONBody(h.t, levels))
+}
+
+// WaitForChannelRoom waits until the bridge has created and mapped the room
+// for a new channel (it does so in the background) and returns the room ID.
+func (h *Harness) WaitForChannelRoom(channel *model.Channel) string {
+	h.t.Helper()
+	var roomID string
+	WaitFor(h.t, bridgeTimeout, "a room for channel "+channel.DisplayName, func() bool {
+		resp, _, err := h.Admin.ExecuteCommand(context.Background(), channel.Id, "/matrix list")
+		if err != nil {
+			return false
+		}
+		m := regexp.MustCompile(regexp.QuoteMeta(channel.DisplayName) + " → `(![^`]+)`").FindStringSubmatch(resp.Text)
+		if m == nil {
+			return false
+		}
+		roomID = m[1]
+		return true
+	})
+	return roomID
 }
 
 // WaitFor polls cond until it returns true or the timeout elapses.
