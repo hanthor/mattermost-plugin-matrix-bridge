@@ -138,7 +138,7 @@ func (s *Store) Persist() error {
 	req := &captureReq{}
 	s.capture.Store(req)
 	// Flush takes the store lock and calls the save hook, which serves req.
-	if err := s.MemoryStore.Flush(context.Background()); err != nil {
+	if err := s.Flush(context.Background()); err != nil {
 		s.dirty.Store(true)
 		return err
 	}

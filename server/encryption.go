@@ -236,7 +236,9 @@ func (p *Plugin) uploadAttachment(roomIdentifier string, data []byte, name, mime
 		return "", nil, errors.New("the room is end-to-end encrypted and encryption is off")
 	}
 	file := attachment.NewEncryptedFile()
-	mxc, err := p.matrixClient.UploadMedia(file.Encrypt(data), "encrypted-file", "application/octet-stream")
+	// The caller's copy of the file is not used afterwards, so encrypt in place.
+	file.EncryptInPlace(data)
+	mxc, err := p.matrixClient.UploadMedia(data, "encrypted-file", "application/octet-stream")
 	if err != nil {
 		return "", nil, err
 	}
@@ -265,5 +267,8 @@ func decryptAttachment(file map[string]any, data []byte) ([]byte, error) {
 	if err := info.PrepareForDecryption(); err != nil {
 		return nil, err
 	}
-	return info.Decrypt(data)
+	if err := info.DecryptInPlace(data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
