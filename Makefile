@@ -1,3 +1,7 @@
+# The encryption support (mautrix-go) needs its pure-Go Olm implementation so
+# the plugin still builds with CGO_ENABLED=0 on every platform.
+export GOFLAGS := $(GOFLAGS) -tags=goolm
+
 GO ?= $(shell command -v go 2> /dev/null)
 NPM ?= $(shell command -v npm 2> /dev/null)
 CURL ?= $(shell command -v curl 2> /dev/null)

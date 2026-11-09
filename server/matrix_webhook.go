@@ -14,6 +14,7 @@ import (
 	"github.com/mattermost/logr/v2"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 	"github.com/pkg/errors"
+	"maunium.net/go/mautrix/id"
 )
 
 // MatrixEvent represents a Matrix event received via Application Service webhook
@@ -155,6 +156,10 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 		go p.cleanupOldTransactions()
 	}
 
+	// Room keys and key counts arrive here too when encryption is on; they
+	// must be in place before the encrypted events are handled.
+	p.handleEncryptionExtras(body)
+
 	p.logger.LogDebug("Processing Matrix transaction", "txn_id", txnID, "event_count", len(transaction.Events))
 
 	// Process each event in the transaction asynchronously via the queue
@@ -210,6 +215,20 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 	if event.Type == "m.room.encryption" {
 		p.noteEncryption(event)
 		return nil
+	}
+	if event.Type == "m.room.encrypted" {
+		// What the bridge sent itself comes back encrypted; nothing to read.
+		if p.matrixClient != nil && p.matrixClient.SentByBridge(event.EventID) {
+			return nil
+		}
+		decrypted, ok := p.decryptMatrixEvent(event)
+		if !ok {
+			return nil
+		}
+		event = decrypted
+	}
+	if event.Type == "m.room.member" {
+		p.noteMember(event)
 	}
 
 	// An event the bridge sent comes back through the transaction; never
@@ -465,12 +484,12 @@ func (p *Plugin) noteEncryption(event MatrixEvent) {
 	if p.matrixClient != nil {
 		p.matrixClient.NoteRoomEncrypted(event.RoomID)
 	}
+	if mgr := p.cryptoManager(); mgr != nil {
+		mgr.NoteEncryption(id.RoomID(event.RoomID))
+	}
 	channelID, _ := p.getChannelIDFromMatrixRoom(event.RoomID)
 	if channelID != "" && !p.EncryptionSupported() {
 		p.logger.LogWarn("A bridged Matrix room turned on end-to-end encryption; the bridge cannot read or send into it, so syncing stops for this room",
 			"room_id", event.RoomID, "channel_id", channelID)
 	}
 }
-
-// EncryptionSupported implements command.PluginAccessor.
-func (p *Plugin) EncryptionSupported() bool { return false }

@@ -250,6 +250,10 @@ type FileAttachment struct {
 	MxcURI   string `json:"mxc_uri"`
 	MimeType string `json:"mimetype"`
 	Size     int64  `json:"size"`
+	// File is set instead of MxcURI semantics when the room is encrypted: the
+	// encrypted file description (url, key, iv, hashes) that goes in the
+	// message's "file" field.
+	File map[string]any `json:"file,omitempty"`
 }
 
 // MessageRequest represents a request to send a message as a ghost user with all optional parameters.
@@ -1980,7 +1984,11 @@ func (c *Client) sendFileMessage(req MessageRequest, file FileAttachment, rootEv
 
 	// File content
 	content["body"] = file.Filename
-	content["url"] = file.MxcURI
+	if file.File != nil {
+		content["file"] = file.File
+	} else {
+		content["url"] = file.MxcURI
+	}
 	content["info"] = map[string]any{
 		"size":     file.Size,
 		"mimetype": file.MimeType,

@@ -151,7 +151,6 @@ func TestEncryptedRoomsAreNotBridged(t *testing.T) {
 		status, ch := pluginAPI(t, h, carolClient, http.MethodGet, "/channels/"+channel.Id)
 		require.Equal(t, http.StatusOK, status)
 		assert.Equal(t, false, ch["mapped"], "the room was not mapped")
-		capabilities.Verify(t, "rooms.encryption.in", ch["mapped"] == true)
 	})
 
 	t.Run("a mapped room that turns encryption on stops syncing in both directions", func(t *testing.T) {

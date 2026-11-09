@@ -219,7 +219,12 @@ func (b *MatrixToMattermostBridge) syncMatrixFileToMattermost(event MatrixEvent,
 		return nil
 	}
 
+	// Files in encrypted rooms carry their location and key in "file".
+	encryptedFile, _ := event.Content["file"].(map[string]any)
 	url, exists := event.Content["url"].(string)
+	if encryptedFile != nil {
+		url, exists = encryptedFile["url"].(string)
+	}
 	if !exists {
 		b.logger.LogWarn("Matrix file message missing url field", "event_id", event.EventID)
 		return nil
@@ -235,6 +240,12 @@ func (b *MatrixToMattermostBridge) syncMatrixFileToMattermost(event MatrixEvent,
 	fileData, err := b.downloadMatrixFile(url)
 	if err != nil {
 		return errors.Wrap(err, "failed to download Matrix file")
+	}
+	if encryptedFile != nil {
+		fileData, err = decryptAttachment(encryptedFile, fileData)
+		if err != nil {
+			return errors.Wrap(err, "failed to decrypt Matrix file")
+		}
 	}
 
 	// Upload file to Mattermost

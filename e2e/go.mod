@@ -6,10 +6,18 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/matrix-org/complement v0.0.0-20261106224057-9a18f5ceb2f4
 	github.com/mattermost/mattermost/server/public v0.6.0
+	github.com/rs/zerolog v1.35.1
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
 	github.com/tidwall/gjson v1.20.0
 	gopkg.in/yaml.v3 v3.0.1
+	maunium.net/go/mautrix v0.32.0
+)
+
+require (
+	filippo.io/edwards25519 v1.2.0 // indirect
+	github.com/petermattis/goid v0.0.0-20260918085751-abfca077860b // indirect
+	go.mau.fi/util v0.11.0 // indirect
 )
 
 require (
@@ -98,10 +106,10 @@ require (
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
+	golang.org/x/crypto v0.58.0
+	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.61.0
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261104224025-d1e00e9f33ab // indirect

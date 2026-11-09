@@ -107,6 +107,8 @@ type PendingFile struct {
 	MimeType   string
 	Size       int64
 	UploadedAt int64
+	// File describes the encrypted upload when the room is encrypted.
+	File map[string]any
 }
 
 // PendingFileTracker tracks files uploaded to Matrix that are awaiting their posts
