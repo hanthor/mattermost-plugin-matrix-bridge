@@ -175,3 +175,28 @@ func (c *Client) SetUserPasswordAsAdmin(adminToken, userID, password string) err
 	}
 	return nil
 }
+
+// DeactivateUserAsAdmin deactivates a homeserver account through the Synapse
+// admin API. The account keeps its history; it can no longer be used.
+func (c *Client) DeactivateUserAsAdmin(adminToken, userID string) error {
+	if adminToken == "" {
+		return errors.New("no admin token configured")
+	}
+	endpoint := c.serverURL + "/_synapse/admin/v1/deactivate/" + url.PathEscape(userID)
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader([]byte(`{"erase":false}`)))
+	if err != nil {
+		return errors.Wrap(err, "failed to create request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to send request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("admin API returned %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}

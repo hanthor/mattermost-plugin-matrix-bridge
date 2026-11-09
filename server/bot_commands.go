@@ -129,9 +129,13 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		if owner != sender {
 			return fmt.Sprintf("❌ That access token belongs to %s, not to you.", owner)
 		}
-		if _, err := store.SetToken(sender, token); err != nil {
+		link, err := store.SetToken(sender, token)
+		if err != nil {
 			return "❌ " + err.Error()
 		}
+		// From now on the person sends as this account, so a mirror account
+		// they were using is retired.
+		p.retireMirrorAccount(link.MattermostUserID, link.MatrixUserID)
 		return "✅ Double puppeting enabled: your Mattermost messages will now appear from this Matrix account."
 
 	case "logout":
@@ -143,6 +147,7 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		if err := store.save(link); err != nil {
 			return "❌ " + err.Error()
 		}
+		_ = p.kvstore.Delete(mirrorRetiredKeyPrefix + link.MattermostUserID)
 		return "✅ Token removed; your Mattermost messages will appear from a ghost user again."
 
 	case "unlink":
@@ -153,6 +158,7 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		if err := store.Unlink(link.MattermostUserID); err != nil {
 			return "❌ " + err.Error()
 		}
+		_ = p.kvstore.Delete(mirrorRetiredKeyPrefix + link.MattermostUserID)
 		return "✅ Unlinked."
 
 	default:
