@@ -18,6 +18,9 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  GOFLAGS: -tags=goolm
+
 jobs:
   screenshots:
     name: Generate walkthrough screenshots

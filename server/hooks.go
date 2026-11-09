@@ -253,7 +253,7 @@ func (p *Plugin) OnSharedChannelsAttachmentSyncMsg(fi *model.FileInfo, post *mod
 	}
 
 	// Upload file to Matrix but don't post it yet - just store the mxc:// URI
-	mxcURI, err := p.matrixClient.UploadMedia(fileData, fi.Name, fi.MimeType)
+	mxcURI, encFile, err := p.uploadAttachment(matrixRoomIdentifier, fileData, fi.Name, fi.MimeType)
 	if err != nil {
 		return errors.Wrap(err, "failed to upload file to Matrix")
 	}
@@ -265,6 +265,7 @@ func (p *Plugin) OnSharedChannelsAttachmentSyncMsg(fi *model.FileInfo, post *mod
 		MxcURI:   mxcURI,
 		MimeType: fi.MimeType,
 		Size:     fi.Size,
+		File:     encFile,
 	}
 	p.pendingFiles.AddFile(post.Id, pendingFile)
 

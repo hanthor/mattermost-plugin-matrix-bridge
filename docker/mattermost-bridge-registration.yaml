@@ -38,3 +38,7 @@ namespaces:
 # name understood by older homeservers).
 receive_ephemeral: true
 de.sorunome.msc2409.push_ephemeral: true
+# End-to-end encryption: the homeserver passes room keys and device changes to the
+# bridge (MSC3202) and lets the bridge bot create its own device (MSC4190).
+org.matrix.msc3202: true
+io.element.msc4190: true

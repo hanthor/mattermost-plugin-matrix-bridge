@@ -87,17 +87,18 @@ func (h *Harness) SetBridgeSetting(key string, value any) {
 // bridgeBlueprint describes a single homeserver with the bridge registered as
 // an application service. Complement generates fresh tokens on every deploy;
 // the harness reads them back from the container.
-func bridgeBlueprint() b.Blueprint {
+func bridgeBlueprint(encryption bool) b.Blueprint {
 	return b.MustValidate(b.Blueprint{
 		Name: "mattermost_bridge",
 		Homeservers: []b.Homeserver{{
 			Name: HSName,
 			ApplicationServices: []b.ApplicationService{{
-				ID:              appServiceID,
-				URL:             fmt.Sprintf("http://%s:8065/plugins/%s", MattermostAlias, PluginID),
-				SenderLocalpart: bridgeBotLocalpart,
-				RateLimited:     false,
-				SendEphemeral:   true,
+				ID:               appServiceID,
+				URL:              fmt.Sprintf("http://%s:8065/plugins/%s", MattermostAlias, PluginID),
+				SenderLocalpart:  bridgeBotLocalpart,
+				RateLimited:      false,
+				SendEphemeral:    true,
+				EnableEncryption: encryption,
 			}},
 		}},
 	})
@@ -120,6 +121,9 @@ type HarnessOptions struct {
 	// default, presence).
 	CallsMode      string
 	ElementCallURL string
+	// Encryption bridges end-to-end encrypted rooms; the homeserver is
+	// deployed with the registration flag that delivers room keys.
+	Encryption bool
 }
 
 // NewHarnessWithOptions is NewHarness with options.
@@ -127,7 +131,7 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 	t.Helper()
 	ctx := context.Background()
 
-	deployment := complement.OldDeploy(t, bridgeBlueprint())
+	deployment := complement.OldDeploy(t, bridgeBlueprint(opts.Encryption))
 	t.Cleanup(func() { deployment.Destroy(t) })
 
 	asToken, hsToken, registration := readAppServiceTokens(t, deployment.ContainerID(t, HSName))
@@ -157,6 +161,7 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 		MirrorMode:         opts.MirrorMode,
 		CallsMode:          opts.CallsMode,
 		ElementCallURL:     opts.ElementCallURL,
+		Encryption:         opts.Encryption,
 	}
 	if opts.MirrorMode {
 		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})
@@ -329,10 +334,18 @@ func (h *Harness) JoinedMembers(roomID string) string {
 // channel to it and waits until the bridge bot has joined.
 func (h *Harness) CreateMappedRoom(owner *client.CSAPI, channelID, roomName string) string {
 	h.t.Helper()
-	roomID := owner.MustCreateRoom(h.t, map[string]interface{}{
-		"preset": "public_chat",
-		"name":   roomName,
-	})
+	return h.CreateMappedRoomWith(owner, channelID, map[string]interface{}{"name": roomName})
+}
+
+// CreateMappedRoomWith is CreateMappedRoom with extra createRoom fields, such
+// as initial_state.
+func (h *Harness) CreateMappedRoomWith(owner *client.CSAPI, channelID string, fields map[string]interface{}) string {
+	h.t.Helper()
+	req := map[string]interface{}{"preset": "public_chat"}
+	for k, v := range fields {
+		req[k] = v
+	}
+	roomID := owner.MustCreateRoom(h.t, req)
 	h.MapChannelToRoom(channelID, roomID)
 	joined := TryFor(bridgeTimeout, func() bool {
 		res := owner.Do(h.t, "GET", []string{"_matrix", "client", "v3", "rooms", roomID, "state", "m.room.member", h.BridgeBotUserID()})

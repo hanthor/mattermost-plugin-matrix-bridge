@@ -66,6 +66,8 @@ type BridgeConfig struct {
 	// CallsMode and ElementCallURL configure call bridging.
 	CallsMode      string
 	ElementCallURL string
+	// Encryption turns on bridging of end-to-end encrypted rooms.
+	Encryption bool
 }
 
 // StartMattermost starts Postgres and Mattermost on the given network.
@@ -211,6 +213,7 @@ func (cfg BridgeConfig) settings() map[string]any {
 		"matrix_as_token":      cfg.ASToken,
 		"matrix_hs_token":      cfg.HSToken,
 		"enable_sync":          true,
+		"enable_encryption":    cfg.Encryption,
 		"rate_limiting_mode":   "disabled",
 		"enable_mirror_mode":   cfg.MirrorMode,
 		"matrix_admin_token":   cfg.AdminToken,

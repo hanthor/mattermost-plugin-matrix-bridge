@@ -111,6 +111,10 @@ namespaces:
 # Deliver typing and presence (spec v1.13 name and the MSC2409 name used by older homeservers).
 receive_ephemeral: true
 de.sorunome.msc2409.push_ephemeral: true
+# End-to-end encryption: the homeserver passes room keys and device changes to the
+# bridge (MSC3202) and lets the bridge bot create its own device (MSC4190).
+org.matrix.msc3202: true
+io.element.msc4190: true
 `;
 
         // Create and download the file

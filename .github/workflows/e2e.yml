@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOFLAGS: -tags=goolm
+
 jobs:
   complement:
     name: Complement end-to-end

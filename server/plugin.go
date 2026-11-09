@@ -32,6 +32,9 @@ type Plugin struct {
 	// kvstore is the client used to read/write KV records for this plugin.
 	kvstore kvstore.KVStore
 
+	// encryption is the bridge bot's end-to-end encryption device.
+	encryption encryptionState
+
 	// client is the Mattermost server API client.
 	client *pluginapi.Client
 
@@ -155,6 +158,7 @@ func (p *Plugin) OnActivate() error {
 
 	// Initialize bridge components after getting remote ID
 	p.initBridges()
+	p.startEncryption()
 
 	p.commandClient = command.NewCommandHandler(p)
 
@@ -175,6 +179,7 @@ func (p *Plugin) OnActivate() error {
 
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
+	p.stopEncryption()
 	if p.reactionBatcher != nil {
 		p.reactionBatcher.FlushAll()
 	}
@@ -203,6 +208,9 @@ func (p *Plugin) initMatrixClient() {
 	rateLimitMode := matrix.ParseRateLimitingMode(config.RateLimitingMode)
 	rateLimitConfig := matrix.GetRateLimitConfigByMode(rateLimitMode)
 	p.matrixClient = matrix.NewClientWithRateLimit(config.MatrixServerURL, config.MatrixASToken, p.remoteID, p.API, rateLimitConfig)
+	if mgr := p.cryptoManager(); mgr != nil {
+		p.matrixClient.SetRoomCrypto(mgr)
+	}
 	if config.MatrixServerDomain != "" {
 		// The homeserver's server_name may differ from the hostname in the URL.
 		p.matrixClient.SetServerDomain(config.MatrixServerDomain)
@@ -629,7 +637,8 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 			p.logger.LogWarn("Failed to read attachment", "error", appErr, "file_id", fileID, "post_id", post.Id)
 			continue
 		}
-		mxcURI, err := p.matrixClient.UploadMedia(data, fi.Name, fi.MimeType)
+		roomIdentifier, _ := p.mattermostToMatrixBridge.GetMatrixRoomID(post.ChannelId)
+		mxcURI, encFile, err := p.uploadAttachment(roomIdentifier, data, fi.Name, fi.MimeType)
 		if err != nil {
 			p.logger.LogWarn("Failed to upload attachment to Matrix", "error", err, "file_id", fileID, "post_id", post.Id)
 			continue
@@ -640,6 +649,7 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 			MxcURI:   mxcURI,
 			MimeType: fi.MimeType,
 			Size:     fi.Size,
+			File:     encFile,
 		})
 	}
 }
