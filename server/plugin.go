@@ -578,8 +578,15 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 	// Check if this channel is mapped to a Matrix room
 	mappingKey := kvstore.BuildChannelMappingKey(post.ChannelId)
 	roomIDBytes, err := p.kvstore.Get(mappingKey)
-	if err != nil || roomIDBytes == nil {
-		// No mapping - channel not synced
+	if err != nil || len(roomIDBytes) == 0 {
+		// No mapping: only a direct conversation everyone agreed to bridge
+		// gets a room made for it.
+		if !p.shouldBridgeUnmappedPost(post.ChannelId) {
+			return
+		}
+		if err := p.mattermostToMatrixBridge.SyncPostToMatrix(post, post.ChannelId); err != nil {
+			p.logger.LogError("Failed to sync direct message to Matrix", "error", err, "post_id", post.Id)
+		}
 		return
 	}
 

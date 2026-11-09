@@ -41,6 +41,14 @@ func TestHistoryImport(t *testing.T) {
 	require.NoError(t, err)
 	reply, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "And a reply in its thread", RootId: first.Id})
 	require.NoError(t, err)
+	upload, _, err := carolClient.UploadFile(ctx, []byte("last year's attachment"), channel.Id, "old-notes.txt")
+	require.NoError(t, err)
+	withFile, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "See the attached notes", FileIds: []string{upload.FileInfos[0].Id}})
+	require.NoError(t, err)
+	_, _, err = h.Admin.SaveReaction(ctx, &model.Reaction{UserId: h.AdminUser.Id, PostId: first.Id, EmojiName: "+1"})
+	require.NoError(t, err)
+	h.Mattermost.ExecSQL(t, fmt.Sprintf("UPDATE posts SET createat = %d WHERE id = '%s'", yearAgo+120_000, withFile.Id))
+	h.Mattermost.ExecSQL(t, fmt.Sprintf("UPDATE reactions SET createat = %d WHERE postid = '%s'", yearAgo+30_000, first.Id))
 	h.Mattermost.ExecSQL(t, fmt.Sprintf("UPDATE posts SET createat = %d WHERE id = '%s'", yearAgo, first.Id))
 	h.Mattermost.ExecSQL(t, fmt.Sprintf("UPDATE posts SET createat = %d WHERE id = '%s'", yearAgo+60_000, reply.Id))
 	first.CreateAt, reply.CreateAt = yearAgo, yearAgo+60_000
@@ -50,7 +58,7 @@ func TestHistoryImport(t *testing.T) {
 	t.Run("a preview says what would be imported and sends nothing", func(t *testing.T) {
 		resp, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix history")
 		require.NoError(t, err)
-		assert.Contains(t, resp.Text, "2 messages would be imported", resp.Text)
+		assert.Contains(t, resp.Text, "3 messages would be imported", resp.Text)
 		assert.Equal(t, 0, CountMatrixMessages(t, alice, roomID, "A message from last year"))
 	})
 
@@ -76,6 +84,23 @@ func TestHistoryImport(t *testing.T) {
 		assert.Equal(t, "m.thread", threaded.Get("content.m\\.relates_to.rel_type").Str)
 		assert.Equal(t, root.Get("event_id").Str, threaded.Get("content.m\\.relates_to.event_id").Str)
 		capabilities.Verify(t, "history.import", root.Get("origin_server_ts").Int() == first.CreateAt)
+	})
+
+	t.Run("attachments and reactions come with their messages", func(t *testing.T) {
+		file := WaitForMatrixEvent(t, alice, roomID, func(ev gjson.Result) bool {
+			return ev.Get("content.msgtype").Str == "m.file" && ev.Get("content.body").Str == "old-notes.txt"
+		})
+		data, _ := alice.DownloadContentAuthenticated(t, file.Get("content.url").Str)
+		assert.Equal(t, "last year's attachment", string(data))
+		assert.Equal(t, yearAgo+120_000, file.Get("origin_server_ts").Int())
+
+		root := WaitForMatrixMessage(t, alice, roomID, "A message from last year")
+		reaction := WaitForMatrixEvent(t, alice, roomID, func(ev gjson.Result) bool {
+			return ev.Get("type").Str == "m.reaction" && ev.Get("content.m\\.relates_to.event_id").Str == root.Get("event_id").Str
+		})
+		assert.Equal(t, "👍", reaction.Get("content.m\\.relates_to.key").Str)
+		assert.Equal(t, yearAgo+30_000, reaction.Get("origin_server_ts").Int(), "the reaction keeps its time too")
+		capabilities.Verify(t, "history.import.files", string(data) == "last year's attachment")
 	})
 
 	t.Run("running it again changes nothing", func(t *testing.T) {

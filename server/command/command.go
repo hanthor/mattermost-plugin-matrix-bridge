@@ -125,8 +125,10 @@ type HistoryReport struct {
 	Imported int
 	Skipped  int
 	Failed   int
-	// Files counts attachments that were not carried across.
+	// Files counts the attachments that come with the pending messages.
 	Files int
+	// Reactions counts the reactions imported so far.
+	Reactions int
 	// Running is set while an import is in progress.
 	Running bool
 	// Truncated is set when the channel has more history than was examined.
@@ -196,6 +198,14 @@ type PluginAccessor interface {
 	PlanChannelHistory(channelID string, limit int) (HistoryReport, error)
 	StartChannelHistory(channelID string, limit int) error
 	ChannelHistoryStatus(channelID string) HistoryReport
+
+	// MigrateTeam runs a cut-over step for the bridged channels of a team:
+	// report, readonly, writable or archive (see docs/COMMANDS.md). The
+	// returned text is shown to the administrator.
+	MigrateTeam(userID, teamID, action string, confirm bool) (string, error)
+
+	// DirectMessages handles /matrix dm: action is on, off or status.
+	DirectMessages(userID, action string) (string, error)
 
 	// Identity linking (one person on both networks)
 	CreateIdentityLinkCode(mattermostUserID string) (string, error)
@@ -473,6 +483,22 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	dmCmd := model.NewAutocompleteData("dm", "[on|off|status]", "Allow your direct messages to be bridged to Matrix (only if everyone in the conversation agrees)")
+	dmCmd.AddStaticListArgument("action", false, []model.AutocompleteListItem{
+		{Item: "on", HelpText: "Agree to bridge your direct and group messages"},
+		{Item: "off", HelpText: "Stop bridging them"},
+		{Item: "status", HelpText: "Show your setting"},
+	})
+	matrixData.AddCommand(dmCmd)
+	teamCmd := model.NewAutocompleteData("migrate-team", "report|readonly|writable|archive [confirm]", "Cut a team over to Matrix: report, make channels read-only, archive")
+	teamCmd.AddStaticListArgument("action", true, []model.AutocompleteListItem{
+		{Item: "report", HelpText: "Compare members and messages per channel"},
+		{Item: "readonly", HelpText: "Make bridged channels read-only with a pinned link to the room"},
+		{Item: "writable", HelpText: "Undo readonly"},
+		{Item: "archive", HelpText: "Archive the read-only channels"},
+	})
+	teamCmd.AddStaticListArgument("confirm", false, []model.AutocompleteListItem{{Item: "confirm", HelpText: "Apply the change"}})
+	matrixData.AddCommand(teamCmd)
 	historyCmd := model.NewAutocompleteData("history", "[confirm] [limit=N]", "Import this channel's past messages into its Matrix room")
 	historyCmd.AddTextArgument("confirm to start; omit to preview", "[confirm] [limit=N]", "")
 	matrixData.AddCommand(historyCmd)
@@ -1327,6 +1353,19 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeMigrateCommand(args)
 	case "history":
 		return c.executeHistoryCommand(args)
+	case "migrate-team":
+		return c.executeMigrateTeamCommand(args)
+	case "dm":
+		fields := strings.Fields(args.Command)
+		action := ""
+		if len(fields) > 2 {
+			action = fields[2]
+		}
+		text, err := c.plugin.DirectMessages(args.UserId, action)
+		if err != nil {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+		}
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	default:
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
@@ -1356,7 +1395,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics", "history":
+	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
@@ -1827,7 +1866,7 @@ func historyPreview(plan, last HistoryReport) string {
 		sb.WriteString(fmt.Sprintf("%d messages would be imported, oldest first (%s to %s), as their authors and with their original times.",
 			plan.Pending, time.UnixMilli(plan.Oldest).UTC().Format("2006-01-02"), time.UnixMilli(plan.Newest).UTC().Format("2006-01-02")))
 		if plan.Files > 0 {
-			sb.WriteString(fmt.Sprintf("\n\n%d attachments are not carried across yet.", plan.Files))
+			sb.WriteString(fmt.Sprintf("\n\n%d attachments are uploaded with them (files above the size limit are skipped), and reactions are replayed with their original times.", plan.Files))
 		}
 		if plan.Truncated {
 			sb.WriteString("\n\nThis channel has more history than one run examines; run it again after it finishes.")
@@ -2027,4 +2066,22 @@ func (c *Handler) executeGhostMigration(confirm bool) *model.CommandResponse {
 		sb.WriteString("\n\n⚠️ Some users were not moved, so the mode was not switched yet. Run the command again after fixing the cause.")
 	}
 	return reply(sb.String())
+}
+
+// executeMigrateTeamCommand runs one cut-over step for the channels of the
+// current team. Changes only happen with "confirm".
+func (c *Handler) executeMigrateTeamCommand(args *model.CommandArgs) *model.CommandResponse {
+	reply := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+	fields := strings.Fields(args.Command)
+	if len(fields) < 3 {
+		return reply("Usage: `/matrix migrate-team report|readonly|writable|archive [confirm]`. Without `confirm` it only shows what would change.")
+	}
+	confirm := len(fields) > 3 && fields[3] == "confirm"
+	text, err := c.plugin.MigrateTeam(args.UserId, args.TeamId, fields[2], confirm)
+	if err != nil {
+		return reply("❌ " + err.Error())
+	}
+	return reply(text)
 }

@@ -501,6 +501,10 @@ func (b *MattermostToMatrixBridge) SyncPostToMatrix(post *model.Post, channelID 
 		}
 
 		if isDM {
+			// Private conversations are only bridged when everyone in them agreed.
+			if !b.directMessagesAllowed(userIDs) {
+				return nil
+			}
 			// Handle DM channel - get or create Matrix DM room
 			matrixRoomIdentifier, err = b.getOrCreateDMRoom(channelID, userIDs, post.UserId)
 			if err != nil {
@@ -850,6 +854,12 @@ func (b *MattermostToMatrixBridge) SyncReactionToMatrix(reaction *model.Reaction
 
 // addReactionToMatrix adds a new reaction to Matrix
 func (b *MattermostToMatrixBridge) addReactionToMatrix(reaction *model.Reaction, channelID string) error {
+	return b.addReactionToMatrixAt(reaction, channelID, 0)
+}
+
+// addReactionToMatrixAt is addReactionToMatrix with the reaction's time set to
+// timestampMs when it is not zero (history import).
+func (b *MattermostToMatrixBridge) addReactionToMatrixAt(reaction *model.Reaction, channelID string, timestampMs int64) error {
 	// Get Matrix room identifier
 	matrixRoomIdentifier, err := b.GetMatrixRoomID(channelID)
 	if err != nil {
@@ -918,7 +928,7 @@ func (b *MattermostToMatrixBridge) addReactionToMatrix(reaction *model.Reaction,
 	emoji := b.convertEmojiForMatrix(reaction.EmojiName)
 
 	// Send reaction as ghost user
-	_, err = sender.SendReactionAsGhost(matrixRoomID, matrixEventID, emoji, ghostUserID)
+	_, err = sender.SendReactionAsGhostAt(matrixRoomID, matrixEventID, emoji, ghostUserID, timestampMs)
 	if err != nil {
 		// The same reaction already exists in the room (hooks can fire more than
 		// once for one reaction); the desired state is reached.
@@ -1444,8 +1454,18 @@ func (b *MattermostToMatrixBridge) getOrCreateDMRoom(channelID string, userIDs [
 		return "", errors.Wrap(err, "failed to create Matrix DM room")
 	}
 
+	// Everyone in the conversation is part of the room from the start.
+	for _, mxid := range matrixUserIDs {
+		if joinErr := b.matrixClient.InviteAndJoinGhostUser(matrixRoomID, mxid); joinErr != nil {
+			b.logger.LogDebug("Could not join a participant to the DM room", "matrix_user", mxid, "error", joinErr)
+		}
+	}
+
 	// Store the mapping using unified channel mapping
 	err = b.setChannelRoomMapping(channelID, matrixRoomID)
+	if err == nil {
+		b.markDirectChannelBridged(channelID)
+	}
 	if err != nil {
 		b.logger.LogError("Failed to store DM room mapping", "error", err, "channel_id", channelID, "matrix_room_id", matrixRoomID)
 		// Continue anyway - the room was created successfully

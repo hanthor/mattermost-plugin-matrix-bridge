@@ -29,6 +29,7 @@ func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Req
 		asRouter.HandleFunc("/ping", p.handleAppServicePing).Methods(http.MethodPost)
 	}
 
+	router.HandleFunc(ssoTokenPath, p.handleSSOToken).Methods(http.MethodPost)
 	p.registerUIRoutes(router)
 
 	router.ServeHTTP(w, r)

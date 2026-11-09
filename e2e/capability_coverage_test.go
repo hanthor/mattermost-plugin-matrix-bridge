@@ -103,8 +103,9 @@ func TestDirectMessages(t *testing.T) {
 				}
 			}
 		}
-		// Private conversations are not sent to Matrix unless that is built as an opt-in.
-		capabilities.Verify(t, "rooms.dm", bridged)
+		// Private conversations are not sent to Matrix unless the opt-in is on
+		// (see TestDirectMessagesOptIn).
+		assert.False(t, bridged)
 	})
 
 	t.Run("a direct message started in Matrix does not become a Mattermost direct channel", func(t *testing.T) {

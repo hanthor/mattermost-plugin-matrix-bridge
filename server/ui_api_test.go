@@ -190,3 +190,51 @@ func TestUIBridgeRefusesAChannelThatIsAlreadyBridged(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "already bridged")
 	api.AssertNotCalled(t, "ExecuteSlashCommand", mock.Anything)
 }
+
+func TestUIPostMatrixGivesTheEventAndALink(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	p.configuration.MatrixServerURL = "https://example.com"
+	postID, channelID := model.NewId(), model.NewId()
+	key := p.historyEventKey()
+	api.On("GetPost", postID).Return(&model.Post{Id: postID, ChannelId: channelID, Props: model.StringInterface{key: "$ev1"}}, nil)
+	api.On("HasPermissionToChannel", "mm-ada", channelID, model.PermissionReadChannel).Return(true)
+	require.NoError(t, p.kvstore.Set(kvstore.BuildChannelMappingKey(channelID), []byte("!room:example.com")))
+
+	rec := uiRequest(t, p, http.MethodGet, "/api/v1/posts/"+postID+"/matrix", "mm-ada")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var got uiPostMatrix
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.True(t, got.Bridged)
+	assert.Equal(t, "$ev1", got.EventID)
+	assert.Equal(t, "https://matrix.to/#/!room:example.com/$ev1", got.Permalink)
+
+	p.configuration.ElementURL = "https://chat.example.com/"
+	rec = uiRequest(t, p, http.MethodGet, "/api/v1/posts/"+postID+"/matrix", "mm-ada")
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.Equal(t, "https://chat.example.com/#/room/!room:example.com/$ev1", got.Permalink)
+}
+
+func TestUIPostMatrixIsEmptyForAPostThatWasNotSynced(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	postID, channelID := model.NewId(), model.NewId()
+	api.On("GetPost", postID).Return(&model.Post{Id: postID, ChannelId: channelID}, nil)
+	api.On("HasPermissionToChannel", "mm-ada", channelID, model.PermissionReadChannel).Return(true)
+
+	rec := uiRequest(t, p, http.MethodGet, "/api/v1/posts/"+postID+"/matrix", "mm-ada")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got uiPostMatrix
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.False(t, got.Bridged)
+}
+
+func TestUIPostMatrixNeedsAccessToTheChannel(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	postID, channelID := model.NewId(), model.NewId()
+	api.On("GetPost", postID).Return(&model.Post{Id: postID, ChannelId: channelID}, nil)
+	api.On("HasPermissionToChannel", "mm-eve", channelID, model.PermissionReadChannel).Return(false)
+
+	assert.Equal(t, http.StatusForbidden, uiRequest(t, p, http.MethodGet, "/api/v1/posts/"+postID+"/matrix", "mm-eve").Code)
+}

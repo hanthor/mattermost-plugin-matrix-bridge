@@ -5,6 +5,7 @@ export interface PluginRegistry {
     registerPostTypeComponent(typeName: string, component: React.ElementType);
     registerAdminConsoleCustomSetting(key: string, component: React.ElementType, options?: {showTitle?: boolean});
 
+    registerPostDropdownMenuAction(text: string | React.ReactElement, action?: (postId: string) => void, filter?: (postId: string) => boolean): string;
     registerChannelHeaderButtonAction(icon: React.ReactElement, action: () => void, dropdownText: string, tooltipText?: string): string;
     registerRightHandSidebarComponent(component: React.ElementType, title: string | React.ReactElement): {id: string; showRHSPlugin: unknown; hideRHSPlugin: unknown; toggleRHSPlugin: unknown};
 

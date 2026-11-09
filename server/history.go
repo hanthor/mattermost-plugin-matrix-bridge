@@ -198,6 +198,8 @@ func (p *Plugin) runHistoryImport(channelID, roomID string, plan *historyPlan) {
 			report.Skipped++
 			continue
 		}
+		// Attachments are uploaded first so the message carries them.
+		p.stageAttachmentsForPost(post)
 		if err := p.mattermostToMatrixBridge.createPostInMatrix(post, roomID, user, key, post.CreateAt); err != nil {
 			report.Failed++
 			consecutive++
@@ -210,6 +212,7 @@ func (p *Plugin) runHistoryImport(channelID, roomID string, plan *historyPlan) {
 		}
 		consecutive = 0
 		report.Imported++
+		report.Reactions += p.importReactions(post, channelID)
 		// Failures in between keep the cursor behind them: a rerun retries them.
 		if report.Failed == 0 {
 			_ = p.kvstore.Set(historyCursorKeyPrefix+channelID, []byte(strconv.FormatInt(post.CreateAt, 10)))
@@ -221,4 +224,23 @@ func (p *Plugin) runHistoryImport(channelID, roomID string, plan *historyPlan) {
 	report.Pending = 0
 	p.saveHistoryReport(channelID, report)
 	p.logger.LogInfo("History import finished", "channel_id", channelID, "imported", report.Imported, "skipped", report.Skipped, "failed", report.Failed, "at", time.Now().UTC().Format(time.RFC3339))
+}
+
+// importReactions replays a post's reactions into the room with their original
+// times. A reaction that cannot be sent is skipped; the message itself is in.
+func (p *Plugin) importReactions(post *model.Post, channelID string) int {
+	reactions, appErr := p.API.GetReactions(post.Id)
+	if appErr != nil || len(reactions) == 0 {
+		return 0
+	}
+	sort.SliceStable(reactions, func(i, j int) bool { return reactions[i].CreateAt < reactions[j].CreateAt })
+	sent := 0
+	for _, r := range reactions {
+		if err := p.mattermostToMatrixBridge.addReactionToMatrixAt(r, channelID, r.CreateAt); err != nil {
+			p.logger.LogDebug("Could not import a reaction", "error", err, "post_id", post.Id, "emoji", r.EmojiName)
+			continue
+		}
+		sent++
+	}
+	return sent
 }

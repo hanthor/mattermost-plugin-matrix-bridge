@@ -52,6 +52,13 @@
                 "default": false
             },
             {
+                "key": "enable_direct_messages",
+                "display_name": "Bridge Direct Messages",
+                "type": "bool",
+                "help_text": "Allow direct and group messages to be bridged to private Matrix rooms. Nothing is bridged unless every person in a conversation agrees with /matrix dm on; anyone can turn it off with /matrix dm off. Matrix server administrators can read the bridged rooms.",
+                "default": false
+            },
+            {
                 "key": "enable_encryption",
                 "display_name": "Bridge Encrypted Rooms",
                 "type": "bool",

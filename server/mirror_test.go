@@ -22,15 +22,18 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
-	mu          sync.Mutex
-	existing    map[string]bool // accounts that already exist (natives)
-	created     []string
-	passwords   map[string]string
-	inhibited   map[string]bool
-	joins       []string
-	leaves      []string
-	invites     []string
-	deactivated []string
+	mu           sync.Mutex
+	existing     map[string]bool // accounts that already exist (natives)
+	created      []string
+	passwords    map[string]string
+	inhibited    map[string]bool
+	joins        []string
+	leaves       []string
+	invites      []string
+	uploads      []string
+	createdRooms []map[string]any
+	reactions    []fakeSent
+	deactivated  []string
 	// sent records the messages sent to rooms, in order.
 	sent   []fakeSent
 	server *httptest.Server
@@ -80,9 +83,26 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 				Body: fmt.Sprint(content["body"]), Content: content,
 			})
 			_ = json.NewEncoder(w).Encode(map[string]string{"event_id": fmt.Sprintf("$ev%d", len(f.sent))})
+		case strings.HasPrefix(r.URL.Path, "/_matrix/media/") && strings.HasSuffix(r.URL.Path, "/upload"):
+			f.uploads = append(f.uploads, r.URL.Query().Get("filename"))
+			_, _ = w.Write([]byte(`{"content_uri":"mxc://example.com/uploaded"}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/send/m.reaction/"):
+			var content map[string]any
+			_ = json.Unmarshal(body, &content)
+			relates, _ := content["m.relates_to"].(map[string]any)
+			f.reactions = append(f.reactions, fakeSent{
+				Room: roomFromPath(r.URL.Path), UserID: r.URL.Query().Get("user_id"), TS: r.URL.Query().Get("ts"),
+				Body: fmt.Sprint(relates["key"]), Content: content,
+			})
+			_ = json.NewEncoder(w).Encode(map[string]string{"event_id": fmt.Sprintf("$re%d", len(f.reactions))})
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
 			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/_matrix/client/v3/createRoom":
+			var req map[string]any
+			_ = json.Unmarshal(body, &req)
+			f.createdRooms = append(f.createdRooms, req)
+			_, _ = w.Write([]byte(`{"room_id":"!dm:example.com"}`))
 		case strings.HasPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"):
 			f.deactivated = append(f.deactivated, strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"))
 			_, _ = w.Write([]byte(`{}`))

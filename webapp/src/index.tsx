@@ -11,6 +11,7 @@ import RegistrationDownload from '@/components/admin_console_settings/registrati
 import BridgePanel from '@/components/bridge_panel';
 import MatrixCallCard from '@/components/matrix_call_card';
 import manifest from '@/manifest';
+import {copyMatrixEventId, matrixEventId, openInMatrix} from '@/post_actions';
 import type {PluginRegistry} from '@/types/mattermost-webapp';
 
 const MatrixIcon = () => (
@@ -37,6 +38,16 @@ export default class Plugin {
 
         // Calls started in Matrix rooms are shown as a card with a join button
         registry.registerPostTypeComponent('custom_matrix_call', MatrixCallCard);
+
+        // Post menu: jump to the message in Matrix, or copy its event ID
+        const postOf = (postId: string) => (store.getState() as unknown as {entities: {posts: {posts: Record<string, {props?: Record<string, unknown>}>}}}).entities.posts.posts[postId];
+        const isInMatrix = (postId: string) => matrixEventId(postOf(postId)) !== '';
+        registry.registerPostDropdownMenuAction('Open in Matrix', (postId: string) => {
+            openInMatrix(postId).catch(() => undefined);
+        }, isInMatrix);
+        registry.registerPostDropdownMenuAction('Copy Matrix event ID', (postId: string) => {
+            copyMatrixEventId(postOf(postId)).catch(() => undefined);
+        }, isInMatrix);
 
         // A panel with the channel's bridge status and the person's Matrix account
         const {toggleRHSPlugin} = registry.registerRightHandSidebarComponent(BridgePanel, 'Matrix bridge');

@@ -340,6 +340,13 @@ func (c *Client) SetServerURL(serverURL string) {
 
 // SendReactionAsGhost sends a reaction to a message as a ghost user
 func (c *Client) SendReactionAsGhost(roomID, eventID, emoji, ghostUserID string) (*SendEventResponse, error) {
+	return c.SendReactionAsGhostAt(roomID, eventID, emoji, ghostUserID, 0)
+}
+
+// SendReactionAsGhostAt is SendReactionAsGhost with the event's time set to
+// timestampMs (milliseconds since the epoch) when it is not zero, for history
+// import.
+func (c *Client) SendReactionAsGhostAt(roomID, eventID, emoji, ghostUserID string, timestampMs int64) (*SendEventResponse, error) {
 	if c.asToken == "" {
 		return nil, errors.New("application service token not configured")
 	}
@@ -358,7 +365,7 @@ func (c *Client) SendReactionAsGhost(roomID, eventID, emoji, ghostUserID string)
 		},
 	}
 
-	return c.sendEventAsUser(roomID, "m.reaction", content, ghostUserID)
+	return c.sendEventAsUserAt(roomID, "m.reaction", content, ghostUserID, timestampMs)
 }
 
 // RedactEventAsGhost redacts (removes) an event as a ghost user
