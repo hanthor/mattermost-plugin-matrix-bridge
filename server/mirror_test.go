@@ -22,17 +22,18 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
-	mu          sync.Mutex
-	existing    map[string]bool // accounts that already exist (natives)
-	created     []string
-	passwords   map[string]string
-	inhibited   map[string]bool
-	joins       []string
-	leaves      []string
-	invites     []string
-	uploads     []string
-	reactions   []fakeSent
-	deactivated []string
+	mu           sync.Mutex
+	existing     map[string]bool // accounts that already exist (natives)
+	created      []string
+	passwords    map[string]string
+	inhibited    map[string]bool
+	joins        []string
+	leaves       []string
+	invites      []string
+	uploads      []string
+	createdRooms []map[string]any
+	reactions    []fakeSent
+	deactivated  []string
 	// sent records the messages sent to rooms, in order.
 	sent   []fakeSent
 	server *httptest.Server
@@ -97,6 +98,11 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
 			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/_matrix/client/v3/createRoom":
+			var req map[string]any
+			_ = json.Unmarshal(body, &req)
+			f.createdRooms = append(f.createdRooms, req)
+			_, _ = w.Write([]byte(`{"room_id":"!dm:example.com"}`))
 		case strings.HasPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"):
 			f.deactivated = append(f.deactivated, strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"))
 			_, _ = w.Write([]byte(`{}`))

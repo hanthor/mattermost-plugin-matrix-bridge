@@ -68,6 +68,8 @@ type BridgeConfig struct {
 	ElementCallURL string
 	// Encryption turns on bridging of end-to-end encrypted rooms.
 	Encryption bool
+	// DirectMessages allows opt-in bridging of direct and group messages.
+	DirectMessages bool
 }
 
 // StartMattermost starts Postgres and Mattermost on the given network.
@@ -208,18 +210,19 @@ func (m *MattermostServer) InstallBridge(t *testing.T, ctx context.Context, admi
 // settings is the plugin's configuration as Mattermost stores it.
 func (cfg BridgeConfig) settings() map[string]any {
 	return map[string]any{
-		"matrix_server_url":    cfg.MatrixServerURL,
-		"matrix_server_domain": cfg.MatrixServerDomain,
-		"matrix_as_token":      cfg.ASToken,
-		"matrix_hs_token":      cfg.HSToken,
-		"enable_sync":          true,
-		"enable_encryption":    cfg.Encryption,
-		"rate_limiting_mode":   "disabled",
-		"enable_mirror_mode":   cfg.MirrorMode,
-		"matrix_admin_token":   cfg.AdminToken,
-		"sync_user_profiles":   true,
-		"calls_mode":           cfg.CallsMode,
-		"element_call_url":     cfg.ElementCallURL,
+		"matrix_server_url":      cfg.MatrixServerURL,
+		"matrix_server_domain":   cfg.MatrixServerDomain,
+		"matrix_as_token":        cfg.ASToken,
+		"matrix_hs_token":        cfg.HSToken,
+		"enable_sync":            true,
+		"enable_encryption":      cfg.Encryption,
+		"enable_direct_messages": cfg.DirectMessages,
+		"rate_limiting_mode":     "disabled",
+		"enable_mirror_mode":     cfg.MirrorMode,
+		"matrix_admin_token":     cfg.AdminToken,
+		"sync_user_profiles":     true,
+		"calls_mode":             cfg.CallsMode,
+		"element_call_url":       cfg.ElementCallURL,
 	}
 }
 

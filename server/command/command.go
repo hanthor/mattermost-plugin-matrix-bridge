@@ -204,6 +204,9 @@ type PluginAccessor interface {
 	// returned text is shown to the administrator.
 	MigrateTeam(userID, teamID, action string, confirm bool) (string, error)
 
+	// DirectMessages handles /matrix dm: action is on, off or status.
+	DirectMessages(userID, action string) (string, error)
+
 	// Identity linking (one person on both networks)
 	CreateIdentityLinkCode(mattermostUserID string) (string, error)
 	GetIdentityLink(mattermostUserID string) (matrixUserID string, puppeted bool, ok bool)
@@ -480,6 +483,13 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	dmCmd := model.NewAutocompleteData("dm", "[on|off|status]", "Allow your direct messages to be bridged to Matrix (only if everyone in the conversation agrees)")
+	dmCmd.AddStaticListArgument("action", false, []model.AutocompleteListItem{
+		{Item: "on", HelpText: "Agree to bridge your direct and group messages"},
+		{Item: "off", HelpText: "Stop bridging them"},
+		{Item: "status", HelpText: "Show your setting"},
+	})
+	matrixData.AddCommand(dmCmd)
 	teamCmd := model.NewAutocompleteData("migrate-team", "report|readonly|writable|archive [confirm]", "Cut a team over to Matrix: report, make channels read-only, archive")
 	teamCmd.AddStaticListArgument("action", true, []model.AutocompleteListItem{
 		{Item: "report", HelpText: "Compare members and messages per channel"},
@@ -1345,6 +1355,17 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeHistoryCommand(args)
 	case "migrate-team":
 		return c.executeMigrateTeamCommand(args)
+	case "dm":
+		fields := strings.Fields(args.Command)
+		action := ""
+		if len(fields) > 2 {
+			action = fields[2]
+		}
+		text, err := c.plugin.DirectMessages(args.UserId, action)
+		if err != nil {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+		}
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	default:
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,

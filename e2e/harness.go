@@ -126,6 +126,8 @@ type HarnessOptions struct {
 	// Encryption bridges end-to-end encrypted rooms; the homeserver is
 	// deployed with the registration flag that delivers room keys.
 	Encryption bool
+	// DirectMessages allows opt-in bridging of direct and group messages.
+	DirectMessages bool
 }
 
 // NewHarnessWithOptions is NewHarness with options.
@@ -164,6 +166,7 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 		CallsMode:          opts.CallsMode,
 		ElementCallURL:     opts.ElementCallURL,
 		Encryption:         opts.Encryption,
+		DirectMessages:     opts.DirectMessages,
 	}
 	if opts.MirrorMode {
 		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})

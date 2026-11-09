@@ -26,7 +26,8 @@ type configuration struct {
 	MatrixASToken        string `json:"matrix_as_token"`
 	MatrixHSToken        string `json:"matrix_hs_token"`
 	EnableSync           bool   `json:"enable_sync"`
-	EnableEncryption     bool   `json:"enable_encryption"` // Bridge end-to-end encrypted Matrix rooms (bridge bot holds the keys)
+	EnableDirectMessages bool   `json:"enable_direct_messages"` // Bridge direct and group messages whose participants all agreed
+	EnableEncryption     bool   `json:"enable_encryption"`      // Bridge end-to-end encrypted Matrix rooms (bridge bot holds the keys)
 	MatrixUsernamePrefix string `json:"matrix_username_prefix"`
 	RateLimitingMode     string `json:"rate_limiting_mode"`
 	EnableMirrorMode     bool   `json:"enable_mirror_mode"`   // Hijack Matrix server to mirror Mattermost
