@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
+
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/e2e/capabilities"
 )
 
 // TestMattermostToMatrix covers everything that flows from Mattermost into a
@@ -37,6 +39,7 @@ func TestMattermostToMatrix(t *testing.T) {
 		assert.Equal(t, adminGhost, ev.Get("sender").Str, "message must be sent by the author's ghost")
 		assert.Equal(t, "m.text", ev.Get("content.msgtype").Str)
 		rootEventID = mustString(t, ev.Get("event_id"), "event_id")
+		capabilities.Verify(t, "messages.text", ev.Get("sender").Str == adminGhost && ev.Get("content.msgtype").Str == "m.text")
 	})
 
 	t.Run("markdown is converted to formatted HTML", func(t *testing.T) {
@@ -63,6 +66,7 @@ func TestMattermostToMatrix(t *testing.T) {
 		})
 		assert.Equal(t, "Hello from Mattermost (edited)", ev.Get("content.m\\.new_content.body").Str)
 		assert.Equal(t, adminGhost, ev.Get("sender").Str)
+		capabilities.Verify(t, "messages.edit", ev.Get("content.m\\.new_content.body").Str == "Hello from Mattermost (edited)")
 	})
 
 	t.Run("thread reply is sent as an m.thread relation", func(t *testing.T) {
@@ -73,6 +77,7 @@ func TestMattermostToMatrix(t *testing.T) {
 		ev := WaitForMatrixMessage(t, alice, roomID, "Reply in thread")
 		assert.Equal(t, "m.thread", ev.Get("content.m\\.relates_to.rel_type").Str)
 		assert.Equal(t, rootEventID, ev.Get("content.m\\.relates_to.event_id").Str)
+		capabilities.Verify(t, "messages.thread", ev.Get("content.m\\.relates_to.rel_type").Str == "m.thread" && ev.Get("content.m\\.relates_to.event_id").Str == rootEventID)
 	})
 
 	t.Run("mention produces m.mentions", func(t *testing.T) {
@@ -94,6 +99,7 @@ func TestMattermostToMatrix(t *testing.T) {
 			ids = append(ids, m.Str)
 		}
 		assert.Contains(t, ids, h.GhostUserID(bob.Id), "mentioned user's ghost must be listed in m.mentions")
+		capabilities.Verify(t, "messages.mentions", containsString(ids, h.GhostUserID(bob.Id)))
 	})
 
 	t.Run("reaction is added and removed", func(t *testing.T) {
@@ -126,6 +132,7 @@ func TestMattermostToMatrix(t *testing.T) {
 			}
 			return true
 		})
+		capabilities.Verify(t, "reactions.add_remove", true) // added as a 👍 annotation and redacted again, both waited for above
 	})
 
 	t.Run("file attachment is sent as a file event", func(t *testing.T) {
@@ -143,6 +150,7 @@ func TestMattermostToMatrix(t *testing.T) {
 		assert.True(t, strings.HasPrefix(mxc, "mxc://"), "file must point at the media repo: %s", mxc)
 		data, _ := alice.DownloadContentAuthenticated(t, mxc)
 		assert.Equal(t, "attachment body", string(data))
+		capabilities.Verify(t, "files.attachments", string(data) == "attachment body")
 	})
 
 	t.Run("deleted post is redacted", func(t *testing.T) {
@@ -157,6 +165,7 @@ func TestMattermostToMatrix(t *testing.T) {
 		WaitForMatrixEvent(t, alice, roomID, func(ev gjson.Result) bool {
 			return ev.Get("type").Str == "m.room.redaction" && ev.Get("redacts").Str == eventID
 		})
+		capabilities.Verify(t, "messages.delete", true)
 	})
 
 	t.Run("channel membership is mirrored to the room", func(t *testing.T) {
@@ -170,6 +179,7 @@ func TestMattermostToMatrix(t *testing.T) {
 		_, err = h.Admin.RemoveUserFromChannel(ctx, channel.Id, carol.Id)
 		require.NoError(t, err)
 		alice.MustSyncUntil(t, client.SyncReq{}, client.SyncLeftFrom(carolGhost, roomID))
+		capabilities.Verify(t, "membership.join_leave", true) // joined and left, both waited for above
 	})
 
 	t.Run("profile changes update the ghost display name", func(t *testing.T) {
@@ -196,6 +206,7 @@ func TestMattermostToMatrix(t *testing.T) {
 			body := client.ParseJSON(t, res)
 			return strings.Contains(gjson.GetBytes(body, "displayname").Str, "David")
 		})
+		capabilities.Verify(t, "users.profile", true)
 	})
 
 	t.Run("new channel gets a Matrix room automatically", func(t *testing.T) {
@@ -216,6 +227,7 @@ func TestMattermostToMatrix(t *testing.T) {
 		_, _, err := h.Admin.CreatePost(ctx, &model.Post{ChannelId: auto.Id, Message: "First post in auto room"})
 		require.NoError(t, err)
 		WaitForMatrixMessage(t, alice, autoRoomID, "First post in auto room")
+		capabilities.Verify(t, "rooms.create", autoRoomID != "")
 	})
 
 	t.Run("no Mattermost post is echoed back", func(t *testing.T) {
@@ -223,4 +235,13 @@ func TestMattermostToMatrix(t *testing.T) {
 		assert.Equal(t, 1, CountPostsWithMessage(t, h.Admin, channel.Id, "Reply in thread"), "bridged posts must not be echoed back into Mattermost")
 		assert.Equal(t, 1, CountMatrixMessages(t, alice, roomID, "Reply in thread"), "a Mattermost post must appear exactly once in Matrix")
 	})
+}
+
+func containsString(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }

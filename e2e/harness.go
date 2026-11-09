@@ -68,6 +68,20 @@ type Harness struct {
 	AdminUser *model.User
 	// Team is the team every test channel is created in.
 	Team *model.Team
+
+	settings map[string]any
+}
+
+// SetBridgeSetting changes one plugin setting while the plugin runs, as an
+// administrator would in the System Console. The whole settings map is sent so
+// secrets are not blanked.
+func (h *Harness) SetBridgeSetting(key string, value any) {
+	h.t.Helper()
+	h.settings[key] = value
+	patch := &model.Config{}
+	patch.PluginSettings.Plugins = map[string]map[string]any{PluginID: h.settings}
+	_, _, err := h.Admin.PatchConfig(context.Background(), patch)
+	require.NoError(h.t, err, "change plugin setting %s", key)
 }
 
 // bridgeBlueprint describes a single homeserver with the bridge registered as
@@ -148,6 +162,7 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})
 		cfg.AdminToken = admin.AccessToken
 	}
+	h.settings = cfg.settings()
 	mm.InstallBridge(t, ctx, h.Admin, cfg)
 	h.waitForBridgeCommands(ctx)
 

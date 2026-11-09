@@ -135,7 +135,7 @@ var All = []Capability{
 	{ID: "rooms.name_topic.in", Area: "Rooms", Name: "Room name/topic → channel name/header", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
 	{ID: "rooms.archive", Area: "Rooms", Name: "Archive ↔ tombstone/leave", Direction: MattermostToMatrix, Status: Unsupported, Notes: ""},
 	{ID: "rooms.archive.in", Area: "Rooms", Name: "Tombstone ↔ archive", Direction: MatrixToMattermost, Status: Unsupported, Notes: ""},
-	{ID: "rooms.dm", Area: "Rooms", Name: "Direct and group messages", Direction: MattermostToMatrix, Status: Supported, Notes: ""},
+	{ID: "rooms.dm", Area: "Rooms", Name: "Direct and group messages between Mattermost users", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Not bridged: only channels with a room mapping sync, and a new direct message has none, so no Matrix room is created. Bridging private conversations is a deliberate opt-in that is not built yet; it matters for migrating a community (see the issue on direct messages)."},
 	{ID: "rooms.dm.in", Area: "Rooms", Name: "Direct messages", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Mattermost refuses direct channels with remote users (\"Cannot create a direct channel with a remote user\"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users."},
 	{ID: "spaces.team", Area: "Rooms", Name: "Team ↔ space", Direction: MattermostToMatrix, Status: Partial, Notes: "Spaces are created and rooms added; team membership is not mirrored."},
 	{ID: "rooms.encryption.in", Area: "Rooms", Name: "End-to-end encrypted rooms", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Needs MSC3202 appservice encryption; not planned."},
@@ -143,7 +143,7 @@ var All = []Capability{
 	// Deep integration
 	{ID: "integration.widget", Area: "Integration", Name: "Matrix widget showing the Mattermost channel", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Plugin can serve a widget page; the bot sets im.vector.modular.widgets."},
 	{ID: "integration.bot_commands.in", Area: "Integration", Name: "Bridge bot commands in Matrix (!mattermost …)", Direction: MatrixToMattermost, Status: Partial, Notes: "help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet."},
-	{ID: "integration.channel_header", Area: "Integration", Name: "Channel header shows the linked room", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Webapp channel header button and RHS."},
+	{ID: "integration.channel_header", Area: "Integration", Name: "Channel shows the linked room in Mattermost", Direction: MattermostToMatrix, Status: Supported, Notes: "The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself."},
 	{ID: "integration.backfill", Area: "Integration", Name: "Structure backfill (users, teams, channels)", Direction: MattermostToMatrix, Status: Supported, Notes: "/matrix backfill creates ghosts, spaces and rooms."},
 	{ID: "history.import", Area: "Integration", Name: "Message history import with original timestamps", Direction: MattermostToMatrix, Status: Partial, Notes: "/matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time."},
 }
