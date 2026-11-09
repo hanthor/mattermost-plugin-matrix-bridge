@@ -179,6 +179,10 @@ type PluginAccessor interface {
 	// users can join, and returns its join address.
 	StartCall(mattermostUserID, channelID, title string) (string, error)
 
+	// EncryptionSupported reports whether the bridge can read and send into
+	// end-to-end encrypted rooms (it is set up for it and running).
+	EncryptionSupported() bool
+
 	// Mirror mode: account mode and claiming (see docs/CALLS_AND_MIRROR_MODE.md)
 	MirrorStatus() MirrorStatus
 	// ClaimMirrorAccount hands a mirrored account to its person. When the
@@ -577,6 +581,27 @@ func (c *Handler) executeMapUserCommand(args *model.CommandArgs, username, matri
 	}
 }
 
+// encryptedRoomRefusal explains why a room is not bridged.
+const encryptedRoomRefusal = "❌ That Matrix room is end-to-end encrypted. The bridge cannot read or send into encrypted rooms (it is not set up for it), so the room is not bridged. Use an unencrypted room, or see docs/ENCRYPTION.md."
+
+// roomIsEncrypted reports whether the room has end-to-end encryption that the
+// bridge cannot handle. When the homeserver cannot say, it does not block.
+func (c *Handler) roomIsEncrypted(matrixClient *matrix.Client, identifier string) bool {
+	if c.plugin.EncryptionSupported() {
+		return false
+	}
+	roomID := identifier
+	if strings.HasPrefix(identifier, "#") {
+		resolved, err := matrixClient.ResolveRoomAlias(identifier)
+		if err != nil {
+			return false
+		}
+		roomID = resolved
+	}
+	encrypted, err := matrixClient.IsRoomEncrypted(roomID)
+	return err == nil && encrypted
+}
+
 func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier string, createChannel bool) *model.CommandResponse {
 	// Get current Matrix client and fail fast if not configured
 	matrixClient, errResponse := c.getMatrixClientOrError()
@@ -604,6 +629,10 @@ func (c *Handler) executeJoinCommand(args *model.CommandArgs, roomIdentifier str
 	}
 
 	c.client.Log.Info("Successfully joined Matrix room as AS bot", "room_identifier", roomIdentifier)
+
+	if c.roomIsEncrypted(matrixClient, roomIdentifier) {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: encryptedRoomRefusal}
+	}
 
 	// Join the command issuer's ghost user for immediate messaging capability
 	user, appErr := c.client.User.Get(args.UserId)
@@ -753,6 +782,10 @@ func (c *Handler) executeMapCommand(args *model.CommandArgs, roomIdentifier stri
 				}
 			}
 		}
+	}
+
+	if c.roomIsEncrypted(matrixClient, roomIdentifier) {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: encryptedRoomRefusal}
 	}
 
 	// Save both directions of the mapping
@@ -1274,7 +1307,7 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 	case "status":
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         statusCommandResponse + c.accountModeStatus(),
+			Text:         statusCommandResponse + c.accountModeStatus() + c.channelEncryptionStatus(args.ChannelId),
 		}
 	case "claim":
 		return c.executeClaimCommand(args)
@@ -1882,6 +1915,34 @@ func (c *Handler) executeUnlinkCommand(args *model.CommandArgs) *model.CommandRe
 		ResponseType: model.CommandResponseTypeEphemeral,
 		Text:         "✅ Your Matrix account has been unlinked. Your messages will be bridged through a ghost user again.",
 	}
+}
+
+// channelEncryptionStatus tells whether this channel's room is encrypted and
+// what that means for the bridge.
+func (c *Handler) channelEncryptionStatus(channelID string) string {
+	matrixClient := c.plugin.GetMatrixClient()
+	if matrixClient == nil {
+		return ""
+	}
+	room, err := c.kvstore.Get(kvstore.BuildChannelMappingKey(channelID))
+	if err != nil || len(room) == 0 {
+		return ""
+	}
+	roomID := string(room)
+	if strings.HasPrefix(roomID, "#") {
+		resolved, err := matrixClient.ResolveRoomAlias(roomID)
+		if err != nil {
+			return ""
+		}
+		roomID = resolved
+	}
+	if encrypted, err := matrixClient.IsRoomEncrypted(roomID); err != nil || !encrypted {
+		return ""
+	}
+	if c.plugin.EncryptionSupported() {
+		return "\n- 🔒 This room is end-to-end encrypted; the bridge encrypts and decrypts its messages (see docs/ENCRYPTION.md)."
+	}
+	return "\n- 🔒 **This room is end-to-end encrypted, which the bridge cannot read or send into: messages are not synced either way.** See docs/ENCRYPTION.md."
 }
 
 // accountModeStatus reports how Mattermost users appear in Matrix.

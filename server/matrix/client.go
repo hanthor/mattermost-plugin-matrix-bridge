@@ -197,6 +197,10 @@ type Client struct {
 	inviteLimiter       *TokenBucket
 	registrationLimiter *TokenBucket
 	joinLimiter         *TokenBucket
+
+	// crypto is shared by every copy of the client (see AsPuppet): the optional
+	// encryptor for outgoing events and what is known about encrypted rooms.
+	crypto *clientCrypto
 }
 
 // waitForRateLimit applies rate limiting for the specified operation
@@ -287,6 +291,7 @@ func NewClientWithLoggerAndRateLimit(serverURL, asToken, remoteID string, logger
 	}
 
 	client := &Client{
+		crypto:    &clientCrypto{},
 		serverURL: serverURL,
 		asToken:   asToken,
 		remoteID:  remoteID,
@@ -2015,6 +2020,10 @@ func (c *Client) sendEventAsUser(roomID, eventType string, content any, userID s
 // timestampMs (milliseconds since the epoch) when it is not zero. Synapse
 // accepts this "timestamp massaging" from application services only.
 func (c *Client) sendEventAsUserAt(roomID, eventType string, content any, userID string, timestampMs int64) (*SendEventResponse, error) {
+	var err error
+	if eventType, content, err = c.prepareEvent(roomID, eventType, content); err != nil {
+		return nil, err
+	}
 	txnID := uuid.New().String()
 	endpoint, err := BuildSecureURL("/_matrix/client/v3/rooms/", roomID, "send", eventType, txnID)
 	if err != nil {

@@ -128,30 +128,65 @@ func TestDirectMessages(t *testing.T) {
 func TestEncryptedRoomsAreNotBridged(t *testing.T) {
 	h := NewHarness(t)
 	ctx := context.Background()
-
 	alice := h.NewMatrixUser("alice")
-	channel := h.CreateChannel("encrypted", "Encrypted")
-	room := alice.MustCreateRoom(t, map[string]any{
-		"preset": "public_chat", "name": "Encrypted",
-		"initial_state": []map[string]any{{"type": "m.room.encryption", "state_key": "", "content": map[string]any{"algorithm": "m.megolm.v1.aes-sha2"}}},
+	carol, carolClient := h.CreateMattermostUser("carol")
+
+	encryptionState := []map[string]any{{"type": "m.room.encryption", "state_key": "", "content": map[string]any{"algorithm": "m.megolm.v1.aes-sha2"}}}
+
+	t.Run("an encrypted room is not mapped", func(t *testing.T) {
+		channel := h.CreateChannel("encrypted", "Encrypted")
+		room := alice.MustCreateRoom(t, map[string]any{"preset": "public_chat", "name": "Encrypted", "initial_state": encryptionState})
+		h.WaitForChannelRoom(channel)
+		_, _, err := h.Admin.AddChannelMember(ctx, channel.Id, carol.Id)
+		require.NoError(t, err)
+		// The channel got a room of its own; point it at the encrypted one instead.
+		resp, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix unmap")
+		require.NoError(t, err)
+		require.NotContains(t, resp.Text, "❌", resp.Text)
+
+		resp, _, err = h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix map "+room)
+		require.NoError(t, err)
+		assert.Contains(t, resp.Text, "end-to-end encrypted", resp.Text)
+
+		status, ch := pluginAPI(t, h, carolClient, http.MethodGet, "/channels/"+channel.Id)
+		require.Equal(t, http.StatusOK, status)
+		assert.Equal(t, false, ch["mapped"], "the room was not mapped")
+		capabilities.Verify(t, "rooms.encryption.in", ch["mapped"] == true)
 	})
-	h.MapChannelToRoom(channel.Id, room)
-	WaitFor(t, bridgeTimeout, "the bridge bot to join", func() bool { return strings.Contains(h.JoinedMembers(room), "_mattermost_bridge") })
 
-	// The bridge cannot read ciphertext, so nothing may appear as a post.
-	alice.MustDo(t, http.MethodPut, []string{"_matrix", "client", "v3", "rooms", room, "send", "m.room.encrypted", "txn-enc-1"},
-		client.WithJSONBody(t, map[string]any{"algorithm": "m.megolm.v1.aes-sha2", "ciphertext": "AwgAEnAbc123opaque", "device_id": "D", "sender_key": "K", "session_id": "S"}))
-	time.Sleep(6 * time.Second)
+	t.Run("a mapped room that turns encryption on stops syncing in both directions", func(t *testing.T) {
+		channel := h.CreateChannel("turns-encrypted", "Turns encrypted")
+		room := h.CreateMappedRoom(alice, channel.Id, "Turns encrypted")
+		_, _, err := h.Admin.AddChannelMember(ctx, channel.Id, carol.Id)
+		require.NoError(t, err)
+		_, _, err = h.Admin.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "Sent while the room was plain"})
+		require.NoError(t, err)
+		WaitForMatrixMessage(t, alice, room, "Sent while the room was plain")
 
-	posts, _, err := h.Admin.GetPostsForChannel(ctx, channel.Id, 0, 50, "", false, false)
-	require.NoError(t, err)
-	leaked := false
-	for _, p := range posts.Posts {
-		if strings.Contains(p.Message, "opaque") || strings.Contains(p.Message, "AwgAEn") {
-			leaked = true
+		alice.MustDo(t, http.MethodPut, []string{"_matrix", "client", "v3", "rooms", room, "state", "m.room.encryption"},
+			client.WithJSONBody(t, map[string]any{"algorithm": "m.megolm.v1.aes-sha2"}))
+		WaitFor(t, bridgeTimeout, "the bridge to notice", func() bool {
+			resp, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix status")
+			return err == nil && strings.Contains(resp.Text, "end-to-end encrypted")
+		})
+		_, ch := pluginAPI(t, h, carolClient, http.MethodGet, "/channels/"+channel.Id)
+		assert.Equal(t, true, ch["encrypted"], "the panel says so")
+
+		// Mattermost to Matrix: nothing is sent in the clear.
+		_, _, err = h.Admin.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "Must not appear in the clear"})
+		require.NoError(t, err)
+		// Matrix to Mattermost: ciphertext cannot be read, so no post.
+		alice.MustDo(t, http.MethodPut, []string{"_matrix", "client", "v3", "rooms", room, "send", "m.room.encrypted", "txn-enc-1"},
+			client.WithJSONBody(t, map[string]any{"algorithm": "m.megolm.v1.aes-sha2", "ciphertext": "AwgAEnAbc123opaque", "device_id": "D", "sender_key": "K", "session_id": "S"}))
+		time.Sleep(6 * time.Second)
+
+		assert.Equal(t, 0, CountMatrixMessages(t, alice, room, "Must not appear in the clear"), "no plaintext in an encrypted room")
+		posts, _, err := h.Admin.GetPostsForChannel(ctx, channel.Id, 0, 50, "", false, false)
+		require.NoError(t, err)
+		for _, p := range posts.Posts {
+			assert.NotContains(t, p.Message, "opaque")
 		}
-	}
-	capabilities.Verify(t, "rooms.encryption.in", leaked)
+	})
 }
 
 func TestPresenceFromMatrix(t *testing.T) {

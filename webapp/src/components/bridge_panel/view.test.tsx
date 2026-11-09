@@ -98,6 +98,15 @@ describe('BridgePanelView', () => {
         expect(find('button', 'Start a call')).toBeUndefined();
     });
 
+    test('warns when the room is encrypted and the bridge cannot handle it', () => {
+        render(props({channel: channel({encrypted: true, encryption_works: false})}));
+        expect(text()).toContain('cannot read: messages are not synced in either direction');
+        render(props({channel: channel({encrypted: true, encryption_works: true})}));
+        expect(text()).toContain('the bridge encrypts and decrypts its messages');
+        render(props({channel: channel({encrypted: false})}));
+        expect(container.querySelector('[data-testid="bridge-encrypted"]')).toBeNull();
+    });
+
     test('offers a call when the room can have one, and shows its link after', () => {
         const onStartCall = jest.fn();
         render(props({channel: channel({can_call: true}), onStartCall}));

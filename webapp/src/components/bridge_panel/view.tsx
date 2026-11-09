@@ -48,6 +48,14 @@ export function ChannelSection({channel, callURL, busy, onStartCall, onBridge}: 
                         {channel.room_name ? `${channel.room_name} · ` : ''}
                         {`${channel.participants} ${channel.participants === 1 ? 'person' : 'people'} in the room`}
                     </p>
+                    {channel.encrypted && (
+                        <p
+                            style={mutedStyle}
+                            data-testid='bridge-encrypted'
+                        >
+                            {channel.encryption_works ? '🔒 The room is end-to-end encrypted; the bridge encrypts and decrypts its messages.' : '🔒 The room is end-to-end encrypted, which the bridge cannot read: messages are not synced in either direction.'}
+                        </p>
+                    )}
                     {channel.element_url && (
                         // eslint-disable-next-line @mattermost/use-external-link
                         <a
