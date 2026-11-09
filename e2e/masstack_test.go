@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
@@ -47,9 +48,21 @@ const (
 	hsToken       = "hs-token-for-synapse-0123456789"
 )
 
+// masStackOptions picks the sign-in provider behind MAS.
+type masStackOptions struct {
+	// Mattermost uses a real Mattermost (an OAuth 2.0 provider, not OpenID
+	// Connect) instead of Dex.
+	Mattermost bool
+}
+
 type masStack struct {
 	// In-network base URLs, as the containers and the OIDC redirects see them.
 	MASBase, DexBase, SynapseBase string
+	// MMBase, MMAdmin and MMApp are set when Mattermost is the provider.
+	MMBase  string
+	MMAdmin *model.Client4
+	MMApp   *model.OAuthApp
+	mm      *MattermostServer
 	// Hosts maps "name:port" to the host:port that reaches it from the test.
 	hosts map[string]string
 }
@@ -72,7 +85,9 @@ func (s *masStack) Client() *http.Client {
 	}
 }
 
-func startMASStack(t *testing.T) *masStack {
+func startMASStack(t *testing.T) *masStack { return startMASStackWith(t, masStackOptions{}) }
+
+func startMASStackWith(t *testing.T, opts masStackOptions) *masStack {
 	t.Helper()
 	ctx := context.Background()
 	stack := &masStack{
@@ -101,40 +116,45 @@ CREATE DATABASE mas ENCODING 'UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=templat
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { _ = pg.Terminate(context.Background()) })
 
-	// The OpenID Connect provider both Mattermost and MAS would trust.
-	hash, err := bcrypt.GenerateFromPassword([]byte(dexUserPass), 10)
-	require.NoError(t, err)
-	dexConfig, err := yaml.Marshal(map[string]any{
-		"issuer":           stack.DexBase,
-		"storage":          map[string]any{"type": "memory"},
-		"web":              map[string]any{"http": "0.0.0.0:5556"},
-		"oauth2":           map[string]any{"skipApprovalScreen": true},
-		"enablePasswordDB": true,
-		"staticClients": []map[string]any{
-			{"id": dexClientID, "secret": dexClientPass, "name": "MAS", "redirectURIs": []string{stack.MASBase + "/upstream/callback/" + masProviderID}},
-			{"id": "probe", "secret": "probe-secret", "name": "Probe", "redirectURIs": []string{"http://probe.invalid/callback"}},
-		},
-		"staticPasswords": []map[string]any{
-			{"email": "ada@example.com", "hash": string(hash), "username": "ada", "userID": "08a8684b-db88-4b73-90a9-3cd1661f5466"},
-			{"email": "bob@example.com", "hash": string(hash), "username": "bob", "userID": "18a8684b-db88-4b73-90a9-3cd1661f5467"},
-		},
-	})
-	require.NoError(t, err)
-	dex, err := testcontainers.Run(ctx, envOr("E2E_DEX_IMAGE", defaultDexImage),
-		testcontainers.WithCmd("dex", "serve", "/etc/dex/config.yaml"),
-		testcontainers.WithFiles(testcontainers.ContainerFile{Reader: bytes.NewReader(dexConfig), ContainerFilePath: "/etc/dex/config.yaml", FileMode: 0o644}),
-		testcontainers.WithExposedPorts("5556/tcp"),
-		network.WithNetwork([]string{"dex"}, nw),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/dex/.well-known/openid-configuration").WithPort("5556/tcp").WithStartupTimeout(2*time.Minute)),
-	)
-	require.NoError(t, err, "start dex")
-	t.Cleanup(func() {
-		if t.Failed() {
-			dumpDockerLogs(t, dex, "dex")
-		}
-		_ = dex.Terminate(context.Background())
-	})
-	stack.hosts["dex:5556"] = mappedAddr(t, dex, "5556/tcp")
+	if opts.Mattermost {
+		stack.startMattermostProvider(t, ctx, nw)
+	} else {
+		// The OpenID Connect provider both Mattermost and MAS would trust.
+		hash, err := bcrypt.GenerateFromPassword([]byte(dexUserPass), 10)
+		require.NoError(t, err)
+		dexConfig, err := yaml.Marshal(map[string]any{
+			"issuer":           stack.DexBase,
+			"storage":          map[string]any{"type": "memory"},
+			"web":              map[string]any{"http": "0.0.0.0:5556"},
+			"oauth2":           map[string]any{"skipApprovalScreen": true},
+			"enablePasswordDB": true,
+			"staticClients": []map[string]any{
+				{"id": dexClientID, "secret": dexClientPass, "name": "MAS", "redirectURIs": []string{stack.MASBase + "/upstream/callback/" + masProviderID}},
+				{"id": "probe", "secret": "probe-secret", "name": "Probe", "redirectURIs": []string{"http://probe.invalid/callback"}},
+			},
+			"staticPasswords": []map[string]any{
+				{"email": "ada@example.com", "hash": string(hash), "username": "ada", "userID": "08a8684b-db88-4b73-90a9-3cd1661f5466"},
+				{"email": "bob@example.com", "hash": string(hash), "username": "bob", "userID": "18a8684b-db88-4b73-90a9-3cd1661f5467"},
+			},
+		})
+		require.NoError(t, err)
+		dex, err := testcontainers.Run(ctx, envOr("E2E_DEX_IMAGE", defaultDexImage),
+			testcontainers.WithCmd("dex", "serve", "/etc/dex/config.yaml"),
+			testcontainers.WithFiles(testcontainers.ContainerFile{Reader: bytes.NewReader(dexConfig), ContainerFilePath: "/etc/dex/config.yaml", FileMode: 0o644}),
+			testcontainers.WithExposedPorts("5556/tcp"),
+			network.WithNetwork([]string{"dex"}, nw),
+			testcontainers.WithWaitStrategy(wait.ForHTTP("/dex/.well-known/openid-configuration").WithPort("5556/tcp").WithStartupTimeout(2*time.Minute)),
+		)
+		require.NoError(t, err, "start dex")
+		t.Cleanup(func() {
+			if t.Failed() {
+				dumpDockerLogs(t, dex, "dex")
+			}
+			_ = dex.Terminate(context.Background())
+		})
+		stack.hosts["dex:5556"] = mappedAddr(t, dex, "5556/tcp")
+
+	}
 
 	// Matrix Authentication Service: a generated base configuration (so the
 	// schema is the image's own) with this stack's settings on top.
@@ -176,6 +196,13 @@ CREATE DATABASE mas ENCODING 'UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=templat
 	})
 	require.NoError(t, err, "start Synapse")
 	stack.hosts["synapse:8008"] = mappedAddr(t, syn, "8008/tcp")
+
+	if stack.mm != nil {
+		// The bridge plugin serves the token endpoint MAS uses for Mattermost.
+		stack.mm.InstallBridge(t, ctx, stack.MMAdmin, BridgeConfig{
+			MatrixServerURL: stack.SynapseBase, MatrixServerDomain: masServerName, ASToken: asToken, HSToken: hsToken,
+		})
+	}
 	return stack
 }
 
@@ -213,6 +240,32 @@ func masConfiguration(t *testing.T, s *masStack) []byte {
 	cfg["matrix"] = map[string]any{"kind": "synapse", "homeserver": masServerName, "secret": masSharedSecret, "endpoint": s.SynapseBase + "/"}
 	cfg["clients"] = []any{map[string]any{"client_id": masAdminID, "client_auth_method": "client_secret_basic", "client_secret": masAdminPass}}
 	cfg["policy"] = map[string]any{"data": map[string]any{"admin_clients": []any{masAdminID}}}
+	if s.MMApp != nil {
+		cfg["upstream_oauth2"] = map[string]any{"providers": []any{map[string]any{
+			"id": masProviderID, "human_name": "Mattermost",
+			"client_id": s.MMApp.Id, "client_secret": s.MMApp.ClientSecret,
+			// Mattermost is an OAuth 2.0 provider, not OpenID Connect: no discovery
+			// and no id token, so MAS reads the person from the userinfo endpoint.
+			"token_endpoint_auth_method": "client_secret_post",
+			"discovery_mode":             "disabled",
+			"authorization_endpoint":     s.MMBase + "/oauth/authorize",
+			// Mattermost answers the token request with empty "scope" and "id_token"
+			// fields, which MAS rejects; the plugin passes the exchange on without them.
+			"token_endpoint":    s.MMBase + "/plugins/" + PluginID + "/sso/mattermost/token",
+			"userinfo_endpoint": s.MMBase + "/api/v4/users/me",
+			"fetch_userinfo":    true,
+			"scope":             "user",
+			"claims_imports": map[string]any{
+				"subject":     map[string]any{"template": "{{ user.id }}"},
+				"localpart":   map[string]any{"action": "require", "template": "{{ user.username }}", "on_conflict": "fail"},
+				"displayname": map[string]any{"action": "suggest", "template": "{{ user.nickname | default(value=user.username) }}"},
+				"email":       map[string]any{"action": "suggest", "template": "{{ user.email }}"},
+			},
+		}}}
+		data, err := yaml.Marshal(cfg)
+		require.NoError(t, err)
+		return data
+	}
 	cfg["upstream_oauth2"] = map[string]any{"providers": []any{map[string]any{
 		"id": masProviderID, "human_name": "Test login", "issuer": s.DexBase,
 		"client_id": dexClientID, "client_secret": dexClientPass, "token_endpoint_auth_method": "client_secret_basic",
@@ -229,6 +282,32 @@ func masConfiguration(t *testing.T, s *masStack) []byte {
 	data, err := yaml.Marshal(cfg)
 	require.NoError(t, err)
 	return data
+}
+
+// startMattermostProvider runs a real Mattermost as the identity provider:
+// its OAuth 2.0 provider is switched on and an application for MAS is created.
+func (s *masStack) startMattermostProvider(t *testing.T, ctx context.Context, nw *testcontainers.DockerNetwork) {
+	t.Helper()
+	s.MMBase = "http://mattermost:8065"
+	mm := StartMattermost(t, ctx, MattermostOptions{
+		Network: nw.Name,
+		Alias:   "mattermost",
+		Env:     map[string]string{"MM_SERVICESETTINGS_ENABLEOAUTHSERVICEPROVIDER": "true"},
+	})
+	s.mm = mm
+	s.hosts["mattermost:8065"] = strings.TrimPrefix(mm.URL, "http://")
+
+	admin, _ := mm.CreateAdmin(t, ctx)
+	s.MMAdmin = admin
+	app, _, err := admin.CreateOAuthApp(ctx, &model.OAuthApp{
+		Name:         "Matrix sign-in",
+		Description:  "Matrix Authentication Service",
+		Homepage:     s.MASBase,
+		CallbackUrls: []string{s.MASBase + "/upstream/callback/" + masProviderID},
+		IsTrusted:    true,
+	})
+	require.NoError(t, err, "create the OAuth application for MAS")
+	s.MMApp = app
 }
 
 const masSharedSecret = "synapse-to-mas-shared-secret-0123456789"

@@ -31,6 +31,8 @@ type MattermostOptions struct {
 	Network string
 	// Alias is the DNS alias other containers use to reach Mattermost.
 	Alias string
+	// Env adds or overrides server settings (MM_... environment variables).
+	Env map[string]string
 }
 
 // MattermostServer is a running Mattermost container.
@@ -125,6 +127,10 @@ func StartMattermost(t *testing.T, ctx context.Context, opts MattermostOptions) 
 		env["MM_LICENSE"] = license
 		env["MM_CONNECTEDWORKSPACESSETTINGS_ENABLESHAREDCHANNELS"] = "true"
 		env["MM_CONNECTEDWORKSPACESSETTINGS_ENABLEREMOTECLUSTERSERVICE"] = "true"
+	}
+
+	for k, v := range opts.Env {
+		env[k] = v
 	}
 
 	mm, err := testcontainers.Run(ctx, mmImage,

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -271,6 +272,10 @@ func trySSO(t *testing.T, s *masStack, email string) (token, failure string) {
 			}
 			return token, ""
 		}
+		if s.MMBase != "" && strings.HasPrefix(next, s.MMBase+"/oauth/authorize") {
+			next = s.authorizeAtMattermost(t, next, strings.Split(email, "@")[0])
+			continue
+		}
 		var res *http.Response
 		var err error
 		if method == http.MethodPost {
@@ -448,4 +453,23 @@ func roomMessages(t *testing.T, client *http.Client, base, room, token string) [
 		return true
 	})
 	return bodies
+}
+
+// authorizeAtMattermost is the person agreeing, in Mattermost, to sign in to
+// Matrix: it signs them in and approves the OAuth request MAS sent them to,
+// and returns where Mattermost sends them back to.
+func (s *masStack) authorizeAtMattermost(t *testing.T, authorizeURL, username string) string {
+	t.Helper()
+	u, err := url.Parse(authorizeURL)
+	require.NoError(t, err)
+	q := u.Query()
+	cl := model.NewAPIv4Client("http://" + s.hosts["mattermost:8065"])
+	_, _, err = cl.Login(context.Background(), username, dexUserPass)
+	require.NoError(t, err, "sign in to Mattermost as %s", username)
+	redirect, _, err := cl.AuthorizeOAuthApp(context.Background(), &model.AuthorizeRequest{
+		ResponseType: q.Get("response_type"), ClientId: q.Get("client_id"), RedirectURI: q.Get("redirect_uri"),
+		Scope: q.Get("scope"), State: q.Get("state"),
+	})
+	require.NoError(t, err, "approve the OAuth request: %s", authorizeURL)
+	return redirect
 }

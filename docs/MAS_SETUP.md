@@ -8,8 +8,10 @@ that up with [Matrix Authentication Service](https://github.com/element-hq/matri
 
 ## How it fits together
 
-Mattermost cannot be the identity provider itself (it is an OAuth 2.0 provider,
-not an OpenID Connect one), so both sides trust one provider that can:
+The recommended shape is one OpenID Connect provider that both sides trust.
+(If your people sign in to Mattermost with their own Mattermost passwords and
+you have no separate provider, Mattermost itself can be the provider; see
+[Mattermost as the provider](#mattermost-as-the-provider) at the end.)
 
 ```
                      ┌────────────────────┐
@@ -175,7 +177,65 @@ to the provider as `ada` take over the Matrix account `@ada`.** Only use it
 when the provider guarantees usernames are unique and cannot be chosen freely
 by the person.
 
+## Mattermost as the provider
+
+Mattermost is an OAuth 2.0 provider, not an OpenID Connect one: it has no
+discovery document and no id token, and its token endpoint answers with
+`"scope":""` and `"id_token":""`, which MAS rejects. So MAS reads the person
+from Mattermost's userinfo endpoint, and the plugin offers a small token
+endpoint that passes the exchange to Mattermost and returns the answer without
+the empty fields.
+
+1. In Mattermost, turn on **System Console → Integrations → OAuth 2.0 Service
+   Provider** and create an OAuth application (**Integrations → OAuth 2.0
+   Applications**) with the callback URL
+   `https://mas.example.com/upstream/callback/<provider id>`. Mark it trusted.
+2. In MAS, use this provider instead of the OpenID Connect one above:
+
+   ```yaml
+   upstream_oauth2:
+     providers:
+       - id: 01HQW90Z35CMXFJWQPHC3BGZGQ              # a ULID of your choice
+         human_name: "Mattermost"
+         client_id: "<the OAuth application's id>"
+         client_secret: "<its secret>"
+         token_endpoint_auth_method: client_secret_post
+         discovery_mode: disabled
+         authorization_endpoint: https://mattermost.example.com/oauth/authorize
+         token_endpoint: https://mattermost.example.com/plugins/com.mattermost.plugin-matrix-bridge/sso/mattermost/token
+         userinfo_endpoint: https://mattermost.example.com/api/v4/users/me
+         fetch_userinfo: true
+         scope: user
+         claims_imports:
+           subject:
+             template: "{{ user.id }}"
+           localpart:
+             action: require
+             template: "{{ user.username }}"
+             on_conflict: fail
+           displayname:
+             action: suggest
+             template: "{{ user.nickname | default(value=user.username) }}"
+           email:
+             action: suggest
+             template: "{{ user.email }}"
+   ```
+
+3. The subject the bridge links is the person's **Mattermost user ID**, so
+   nothing else is needed: the bridge already knows it.
+
+`MAS Identity Provider ID` in the bridge settings is the `id` above. The
+plugin's token route is public like Mattermost's own token endpoint and only
+forwards to the Mattermost server it runs in.
+
 ## What is tested
+
+The Mattermost-as-provider recipe runs in
+[`e2e/mas_mattermost_test.go`](../e2e/mas_mattermost_test.go) against a real
+Mattermost, MAS and Synapse: a person signs in to Matrix with their Mattermost
+account and lands on the account the bridge made for them.
+
+
 
 [`e2e/mas_test.go`](../e2e/mas_test.go) runs the whole thing against real
 software: Synapse delegating to MAS, MAS with an upstream OpenID Connect
