@@ -96,6 +96,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Ghosts to mirror accounts migration | Mattermost → Matrix | ✅ | /matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver. |
 | Cut-over mode | Mattermost → Matrix | ✅ | Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing. |
 | Linking a native account retires the mirror account | Mattermost → Matrix | ✅ | When a person enables double puppeting with a native Matrix account, their mirror account leaves the bridged rooms, the native account is invited, and the old name stays reserved. A claimed mirror account is not made to leave. |
+| Team cut-over: read-only channels, pinned link, report, archive | Mattermost → Matrix | ✅ | /matrix migrate-team report | readonly | writable | archive (each changing step needs confirm). Read-only channels still receive what arrives from Matrix; the report compares members and messages not yet in each room. |
 
 ## Rooms
 
@@ -129,7 +130,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 41
+- ✅ supported: 42
 - 🟡 partial: 4
 - ❌ gap: 26
 - — n/a: 0

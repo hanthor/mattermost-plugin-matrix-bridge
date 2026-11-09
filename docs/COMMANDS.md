@@ -16,6 +16,7 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix backfill`](#matrix-backfill) | Backfill existing data | `/matrix backfill all` |
 | [`/matrix history`](#matrix-history) | Import a channel's past messages | `/matrix history confirm` |
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
+| [`/matrix migrate-team`](#matrix-migrate-team) | Cut a team over to Matrix: report, read-only channels, archive | `/matrix migrate-team report` |
 | [`/matrix migrate`](#matrix-migrate) | Re-run KV migrations | `/matrix migrate` |
 | [`/matrix call`](#calls-matrix-call) | Start a call both sides can join | `/matrix call Weekly sync` |
 | [`/matrix claim`](#mirror-mode-matrix-claim) | Mirror mode: take over your Matrix account | `/matrix claim` |
@@ -564,6 +565,23 @@ own Matrix client posts in Mattermost as you, and the bridge keeps sending your
 Mattermost messages from the same account. `/matrix status` shows how many
 accounts exist and how many are claimed. See
 [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md#54-claiming-accounts).
+
+## `/matrix migrate-team`
+
+The last steps of moving a team to Matrix, for system administrators, run in
+any channel of the team. Only channels with a Matrix room are affected, and
+every step that changes something needs `confirm`; without it the command says
+what would happen.
+
+| Command | What it does |
+|---|---|
+| `/matrix migrate-team report` | Per channel: read-only or not, members on both sides, and how many messages are not in the room yet (✅ when none). |
+| `/matrix migrate-team readonly confirm` | Rejects new posts from people, posts and pins a message with the room link. What arrives from Matrix still lands. |
+| `/matrix migrate-team writable confirm` | Undoes read-only. The pinned notices stay. |
+| `/matrix migrate-team archive confirm` | Archives the read-only channels (posts stay and can be restored). |
+
+Import the remaining messages with [`/matrix history`](#matrix-history) before
+making a channel read-only. Matrix member counts include the bridge's own accounts.
 
 ### Moving to mirror mode: `/matrix migrate ghosts-to-mirror`
 
