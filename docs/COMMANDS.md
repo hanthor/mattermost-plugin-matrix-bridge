@@ -16,6 +16,7 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix backfill`](#matrix-backfill) | Backfill existing data | `/matrix backfill all` |
 | [`/matrix history`](#matrix-history) | Import a channel's past messages | `/matrix history confirm` |
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
+| [`/matrix dm`](#matrix-dm) | Agree to bridge your direct and group messages | `/matrix dm on` |
 | [`/matrix migrate-team`](#matrix-migrate-team) | Cut a team over to Matrix: report, read-only channels, archive | `/matrix migrate-team report` |
 | [`/matrix migrate`](#matrix-migrate) | Re-run KV migrations | `/matrix migrate` |
 | [`/matrix call`](#calls-matrix-call) | Start a call both sides can join | `/matrix call Weekly sync` |
@@ -567,6 +568,22 @@ own Matrix client posts in Mattermost as you, and the bridge keeps sending your
 Mattermost messages from the same account. `/matrix status` shows how many
 accounts exist and how many are claimed. See
 [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md#54-claiming-accounts).
+
+## `/matrix dm`
+
+Direct and group messages are private, so they are bridged only when an
+administrator turns on **Bridge Direct Messages** in the plugin settings *and*
+everyone in a conversation agrees.
+
+| Command | What it does |
+|---|---|
+| `/matrix dm on` | You agree. Conversations where everyone has agreed get a private Matrix room (only the people in the conversation can join) and new messages are copied to it. |
+| `/matrix dm off` | You withdraw. Your bridged conversations stop syncing in both directions; their Matrix rooms stay as they are. Turning it on again later makes a new room. |
+| `/matrix dm status` | Shows your setting and how many of your conversations have a room. |
+
+Earlier messages are not copied. Matrix server administrators can read the
+rooms. A direct message started from Matrix does not become a Mattermost direct
+channel (Mattermost refuses direct channels with remote users).
 
 ## `/matrix migrate-team`
 
