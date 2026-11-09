@@ -125,13 +125,14 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
 | Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
 | Channel shows the linked room in Mattermost | Mattermost → Matrix | ✅ | The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself. |
+| Post menu: Open in Matrix and Copy Matrix event ID | Mattermost → Matrix | ✅ | Both actions appear on posts that were synced to Matrix. Open in Matrix uses Element Web when its address is configured and matrix.to otherwise. The server route is tested against a real homeserver; the menu itself is covered by webapp unit tests only. |
 | Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. |
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 | History import: attachments and reactions | Mattermost → Matrix | ✅ | Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text. |
 
 ## Totals
 
-- ✅ supported: 44
+- ✅ supported: 45
 - 🟡 partial: 4
 - ❌ gap: 25
 - — n/a: 0

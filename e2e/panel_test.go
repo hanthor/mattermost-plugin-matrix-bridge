@@ -80,6 +80,23 @@ func TestBridgePanelAPI(t *testing.T) {
 		capabilities.Verify(t, "integration.channel_header", ch["room_id"] == roomID && ch["element_url"] != "")
 	})
 
+	t.Run("a post knows its Matrix event, for Open in Matrix and Copy event ID", func(t *testing.T) {
+		post, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "Find me in Matrix"})
+		require.NoError(t, err)
+		ev := WaitForMatrixMessage(t, alice, roomID, "Find me in Matrix")
+
+		var info map[string]any
+		WaitFor(t, bridgeTimeout, "the post to learn its event ID", func() bool {
+			status, body := pluginAPI(t, h, carolClient, http.MethodGet, "/posts/"+post.Id+"/matrix")
+			info = body
+			return status == http.StatusOK && body["bridged"] == true
+		})
+		assert.Equal(t, ev.Get("event_id").Str, info["event_id"])
+		assert.Contains(t, info["permalink"], roomID)
+		assert.Contains(t, info["permalink"], ev.Get("event_id").Str)
+		capabilities.Verify(t, "integration.post_actions", info["event_id"] == ev.Get("event_id").Str)
+	})
+
 	t.Run("a private channel is closed to people who are not in it", func(t *testing.T) {
 		private, _, err := h.Admin.CreateChannel(ctx, &model.Channel{TeamId: h.Team.Id, Name: "secret-panel", DisplayName: "Secret", Type: model.ChannelTypePrivate})
 		require.NoError(t, err)

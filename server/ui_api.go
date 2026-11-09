@@ -25,6 +25,7 @@ func (p *Plugin) registerUIRoutes(router *mux.Router) {
 	ui.HandleFunc("/me/link", p.handleUILinkStart).Methods(http.MethodPost)
 	ui.HandleFunc("/me/link", p.handleUIUnlink).Methods(http.MethodDelete)
 	ui.HandleFunc("/channels/{channelId}", p.handleUIChannel).Methods(http.MethodGet)
+	ui.HandleFunc("/posts/{postId}/matrix", p.handleUIPostMatrix).Methods(http.MethodGet)
 	ui.HandleFunc("/channels/{channelId}/call", p.handleUICall).Methods(http.MethodPost)
 	ui.HandleFunc("/channels/{channelId}/bridge", p.handleUIBridge).Methods(http.MethodPost)
 }
@@ -292,4 +293,62 @@ func (p *Plugin) handleUIBridge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": text})
+}
+
+type uiPostMatrix struct {
+	Bridged   bool   `json:"bridged"`
+	EventID   string `json:"event_id,omitempty"`
+	RoomID    string `json:"room_id,omitempty"`
+	Permalink string `json:"permalink,omitempty"`
+}
+
+// handleUIPostMatrix returns where a post lives in Matrix, for "Open in
+// Matrix" and "Copy Matrix event ID" on the post menu.
+func (p *Plugin) handleUIPostMatrix(w http.ResponseWriter, r *http.Request) {
+	userID := userFromContext(r)
+	postID := mux.Vars(r)["postId"]
+	if !model.IsValidId(postID) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "post not found"})
+		return
+	}
+	post, appErr := p.API.GetPost(postID)
+	if appErr != nil || post == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "post not found"})
+		return
+	}
+	if !p.API.HasPermissionToChannel(userID, post.ChannelId, model.PermissionReadChannel) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "no access to this channel"})
+		return
+	}
+	out := uiPostMatrix{}
+	eventID, _ := post.Props[p.historyEventKey()].(string)
+	if eventID == "" || p.mattermostToMatrixBridge == nil || p.matrixClient == nil {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	identifier, err := p.mattermostToMatrixBridge.GetMatrixRoomID(post.ChannelId)
+	if err != nil || identifier == "" {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	roomID := identifier
+	if strings.HasPrefix(identifier, "#") {
+		if resolved, err := p.matrixClient.ResolveRoomAlias(identifier); err == nil {
+			roomID = resolved
+		}
+	}
+	out.Bridged = true
+	out.EventID = eventID
+	out.RoomID = roomID
+	out.Permalink = p.eventLink(roomID, eventID)
+	writeJSON(w, http.StatusOK, out)
+}
+
+// eventLink is a link that opens one event: in Element Web when its address
+// is configured, otherwise through matrix.to.
+func (p *Plugin) eventLink(roomID, eventID string) string {
+	if base := strings.TrimRight(p.getConfiguration().ElementURL, "/"); base != "" {
+		return base + "/#/room/" + roomID + "/" + eventID
+	}
+	return "https://matrix.to/#/" + roomID + "/" + eventID
 }
