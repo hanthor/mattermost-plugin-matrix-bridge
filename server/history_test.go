@@ -35,6 +35,7 @@ func historyFixture(t *testing.T, posts ...*model.Post) (*Plugin, *fakeSynapse, 
 	}
 	api.On("GetPostsForChannel", historyChannel, 0, historyPageSize).Return(list, nil).Maybe()
 	api.On("GetPostsForChannel", historyChannel, mock.Anything, historyPageSize).Return(&model.PostList{}, nil).Maybe()
+	api.On("GetReactions", mock.Anything).Return([]*model.Reaction{}, nil).Maybe()
 	api.On("UpdatePost", mock.Anything).Return(func(post *model.Post) *model.Post {
 		post.UpdateAt++
 		return post
@@ -170,6 +171,7 @@ func TestHistoryImportSkipsBotsAndMatrixUsers(t *testing.T) {
 	api.On("GetPostsForChannel", historyChannel, 0, historyPageSize).Return(list, nil)
 	api.On("GetPostsForChannel", historyChannel, mock.Anything, historyPageSize).Return(&model.PostList{}, nil).Maybe()
 	api.On("UpdatePost", mock.Anything).Return(func(post *model.Post) *model.Post { return post }, nil).Maybe()
+	api.On("GetReactions", mock.Anything).Return([]*model.Reaction{}, nil).Maybe()
 
 	require.NoError(t, p.StartChannelHistory(historyChannel, 0))
 	waitForHistory(t, p)
@@ -189,4 +191,56 @@ func TestHistoryImportRefusesToRunTwiceAtOnce(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already running")
 	assert.True(t, p.ChannelHistoryStatus(historyChannel).Running)
+}
+
+func TestHistoryImportCarriesAttachmentsAndReactions(t *testing.T) {
+	withFile := oldPost("p1", "mm-ada", "Spec attached", 300)
+	withFile.FileIds = []string{"f1"}
+	reactedAt := time.Now().AddDate(0, 0, -299).UnixMilli()
+	p, hs, api := historyFixture(t, withFile)
+	p.configuration.MatrixServerURL = "https://example.com"
+	p.pendingFiles = NewPendingFileTracker()
+	p.mattermostToMatrixBridge.fileTracker = p.pendingFiles
+	p.maxFileSize = 1 << 20
+	api.On("GetFileInfo", "f1").Return(&model.FileInfo{Id: "f1", Name: "spec.pdf", MimeType: "application/pdf", Size: 5}, nil)
+	api.On("GetFile", "f1").Return([]byte("12345"), nil)
+	api.ExpectedCalls = filterCalls(api.ExpectedCalls, "GetReactions")
+	api.On("GetReactions", "p1").Return([]*model.Reaction{
+		{PostId: "p1", UserId: "mm-bob", EmojiName: "+1", CreateAt: reactedAt},
+	}, nil)
+
+	plan, err := p.PlanChannelHistory(historyChannel, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 1, plan.Files)
+
+	require.NoError(t, p.StartChannelHistory(historyChannel, 0))
+	waitForHistory(t, p)
+
+	assert.Equal(t, []string{"spec.pdf"}, hs.uploads)
+	var fileEvent *fakeSent
+	for _, m := range hs.messages() {
+		if m.Content["msgtype"] == "m.file" {
+			m := m
+			fileEvent = &m
+		}
+	}
+	require.NotNil(t, fileEvent, "the attachment is sent as a file message")
+	assert.Equal(t, "mxc://example.com/uploaded", fileEvent.Content["url"])
+	assert.Equal(t, int64Str(withFile.CreateAt), fileEvent.TS, "the file keeps the time of its post")
+
+	require.Len(t, hs.reactions, 1)
+	assert.Equal(t, "@bob:example.com", hs.reactions[0].UserID, "the reaction comes from the person who reacted")
+	assert.Equal(t, int64Str(reactedAt), hs.reactions[0].TS)
+	assert.Equal(t, 1, p.ChannelHistoryStatus(historyChannel).Reactions)
+}
+
+// filterCalls drops the registered expectations of one mocked method.
+func filterCalls(calls []*mock.Call, method string) []*mock.Call {
+	var kept []*mock.Call
+	for _, c := range calls {
+		if c.Method != method {
+			kept = append(kept, c)
+		}
+	}
+	return kept
 }

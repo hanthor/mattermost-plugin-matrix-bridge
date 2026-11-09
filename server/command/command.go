@@ -125,8 +125,10 @@ type HistoryReport struct {
 	Imported int
 	Skipped  int
 	Failed   int
-	// Files counts attachments that were not carried across.
+	// Files counts the attachments that come with the pending messages.
 	Files int
+	// Reactions counts the reactions imported so far.
+	Reactions int
 	// Running is set while an import is in progress.
 	Running bool
 	// Truncated is set when the channel has more history than was examined.
@@ -1843,7 +1845,7 @@ func historyPreview(plan, last HistoryReport) string {
 		sb.WriteString(fmt.Sprintf("%d messages would be imported, oldest first (%s to %s), as their authors and with their original times.",
 			plan.Pending, time.UnixMilli(plan.Oldest).UTC().Format("2006-01-02"), time.UnixMilli(plan.Newest).UTC().Format("2006-01-02")))
 		if plan.Files > 0 {
-			sb.WriteString(fmt.Sprintf("\n\n%d attachments are not carried across yet.", plan.Files))
+			sb.WriteString(fmt.Sprintf("\n\n%d attachments are uploaded with them (files above the size limit are skipped), and reactions are replayed with their original times.", plan.Files))
 		}
 		if plan.Truncated {
 			sb.WriteString("\n\nThis channel has more history than one run examines; run it again after it finishes.")

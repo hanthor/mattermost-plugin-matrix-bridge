@@ -149,6 +149,7 @@ var All = []Capability{
 	{ID: "integration.channel_header", Area: "Integration", Name: "Channel shows the linked room in Mattermost", Direction: MattermostToMatrix, Status: Supported, Notes: "The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself."},
 	{ID: "integration.backfill", Area: "Integration", Name: "Structure backfill (users, teams, channels)", Direction: MattermostToMatrix, Status: Supported, Notes: "/matrix backfill creates ghosts, spaces and rooms."},
 	{ID: "history.import", Area: "Integration", Name: "Message history import with original timestamps", Direction: MattermostToMatrix, Status: Partial, Notes: "/matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time."},
+	{ID: "history.import.files", Area: "Integration", Name: "History import: attachments and reactions", Direction: MattermostToMatrix, Status: Supported, Notes: "Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text."},
 }
 
 // ByID returns the capability with the given ID or panics; an unknown ID is

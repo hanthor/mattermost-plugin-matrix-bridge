@@ -46,7 +46,7 @@ func TestHistoryCommandPreviewSendsNothing(t *testing.T) {
 	text := runHistory(h, "/matrix history")
 	assert.Contains(t, text, "42 messages would be imported")
 	assert.Contains(t, text, "2025-01-02 to 2025-01-20")
-	assert.Contains(t, text, "3 attachments are not carried across yet")
+	assert.Contains(t, text, "3 attachments are uploaded with them")
 	assert.Contains(t, text, "/matrix history confirm")
 	assert.Equal(t, []int{0}, h.started, "only a plan call (limit 0 recorded as -0), no start")
 }

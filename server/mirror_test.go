@@ -30,6 +30,8 @@ type fakeSynapse struct {
 	joins       []string
 	leaves      []string
 	invites     []string
+	uploads     []string
+	reactions   []fakeSent
 	deactivated []string
 	// sent records the messages sent to rooms, in order.
 	sent   []fakeSent
@@ -80,6 +82,18 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 				Body: fmt.Sprint(content["body"]), Content: content,
 			})
 			_ = json.NewEncoder(w).Encode(map[string]string{"event_id": fmt.Sprintf("$ev%d", len(f.sent))})
+		case strings.HasPrefix(r.URL.Path, "/_matrix/media/") && strings.HasSuffix(r.URL.Path, "/upload"):
+			f.uploads = append(f.uploads, r.URL.Query().Get("filename"))
+			_, _ = w.Write([]byte(`{"content_uri":"mxc://example.com/uploaded"}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/send/m.reaction/"):
+			var content map[string]any
+			_ = json.Unmarshal(body, &content)
+			relates, _ := content["m.relates_to"].(map[string]any)
+			f.reactions = append(f.reactions, fakeSent{
+				Room: roomFromPath(r.URL.Path), UserID: r.URL.Query().Get("user_id"), TS: r.URL.Query().Get("ts"),
+				Body: fmt.Sprint(relates["key"]), Content: content,
+			})
+			_ = json.NewEncoder(w).Encode(map[string]string{"event_id": fmt.Sprintf("$re%d", len(f.reactions))})
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
 			_, _ = w.Write([]byte(`{}`))

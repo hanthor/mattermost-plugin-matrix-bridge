@@ -550,8 +550,10 @@ that stopped (three failures in a row stop a run) or add messages written since.
 While it runs, `/matrix history` shows progress; afterwards it shows what the
 last run did.
 
-Not carried across yet: attachments (the preview counts them), reactions,
-earlier versions of edited messages and direct messages. People who use their
+Attachments are uploaded with their message (files above the size limit are
+skipped) and reactions are replayed from the people who reacted, with their
+original times. Not carried across: earlier versions of edited messages (the
+latest text is imported) and direct messages. People who use their
 own Matrix token for the bridge (double puppeting) show the import time rather
 than the original one, because only the bridge itself may set a message's time.
 

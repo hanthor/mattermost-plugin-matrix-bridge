@@ -850,6 +850,12 @@ func (b *MattermostToMatrixBridge) SyncReactionToMatrix(reaction *model.Reaction
 
 // addReactionToMatrix adds a new reaction to Matrix
 func (b *MattermostToMatrixBridge) addReactionToMatrix(reaction *model.Reaction, channelID string) error {
+	return b.addReactionToMatrixAt(reaction, channelID, 0)
+}
+
+// addReactionToMatrixAt is addReactionToMatrix with the reaction's time set to
+// timestampMs when it is not zero (history import).
+func (b *MattermostToMatrixBridge) addReactionToMatrixAt(reaction *model.Reaction, channelID string, timestampMs int64) error {
 	// Get Matrix room identifier
 	matrixRoomIdentifier, err := b.GetMatrixRoomID(channelID)
 	if err != nil {
@@ -918,7 +924,7 @@ func (b *MattermostToMatrixBridge) addReactionToMatrix(reaction *model.Reaction,
 	emoji := b.convertEmojiForMatrix(reaction.EmojiName)
 
 	// Send reaction as ghost user
-	_, err = sender.SendReactionAsGhost(matrixRoomID, matrixEventID, emoji, ghostUserID)
+	_, err = sender.SendReactionAsGhostAt(matrixRoomID, matrixEventID, emoji, ghostUserID, timestampMs)
 	if err != nil {
 		// The same reaction already exists in the room (hooks can fire more than
 		// once for one reaction); the desired state is reached.
