@@ -62,7 +62,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Display name and avatar | Mattermost → Matrix | ✅ | Refreshed on the user's next activity or by a 15-minute sweep; Mattermost has no profile-change hook. |
 | Display name and avatar | Matrix → Mattermost | ✅ |  |
-| Deactivated users leave rooms | Mattermost → Matrix | ❌ | UserHasBeenDeactivated should make the ghost leave and deactivate. |
+| Deactivated users leave rooms | Mattermost → Matrix | ✅ | A deactivated person's ghost or unclaimed mirror account leaves every bridged room; with an admin token the mirror account is also deactivated on the homeserver. A claimed account is the person's own and is left alone. |
 | Self-service account linking | Matrix → Mattermost | ✅ | /matrix link issues a code; "!mattermost link <code>" to the bridge bot binds the accounts. Linked Matrix users post as their real Mattermost account. |
 | Double puppeting (use my own Matrix account) | Mattermost → Matrix | ✅ | "!mattermost login <access_token>" lets the bridge send as the linked Matrix account. |
 | Automatic linking through shared SSO (OIDC / Matrix Authentication Service) | Mattermost → Matrix | ❌ | Match accounts by verified email from a shared identity provider so linking is zero-touch. |
@@ -95,6 +95,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Shared login with MAS and an OpenID Connect provider | Matrix → Mattermost | ✅ | The bridge creates each mirror account in MAS and links it to the person's OpenID Connect subject, so the company login lands on the account it made. Verified against real Synapse, MAS and Dex (docs/MAS_SETUP.md); the plugin driving a Mattermost signed in with OpenID Connect is not covered end to end. |
 | Ghosts to mirror accounts migration | Mattermost → Matrix | ✅ | /matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver. |
 | Cut-over mode | Mattermost → Matrix | ✅ | Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing. |
+| Linking a native account retires the mirror account | Mattermost → Matrix | ✅ | When a person enables double puppeting with a native Matrix account, their mirror account leaves the bridged rooms, the native account is invited, and the old name stays reserved. A claimed mirror account is not made to leave. |
 
 ## Rooms
 
@@ -128,7 +129,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 39
+- ✅ supported: 41
 - 🟡 partial: 4
-- ❌ gap: 27
+- ❌ gap: 26
 - — n/a: 0

@@ -59,6 +59,8 @@ type Harness struct {
 	ASToken, HSToken string
 	// Registration is the appservice registration file installed on hs1.
 	Registration string
+	// MatrixAdmin is a homeserver admin account (mirror mode only).
+	MatrixAdmin *client.CSAPI
 
 	// Mattermost is the Mattermost deployment reachable from the test host.
 	Mattermost *MattermostServer
@@ -166,6 +168,7 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 	if opts.MirrorMode {
 		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})
 		cfg.AdminToken = admin.AccessToken
+		h.MatrixAdmin = admin
 	}
 	h.settings = cfg.settings()
 	mm.InstallBridge(t, ctx, h.Admin, cfg)

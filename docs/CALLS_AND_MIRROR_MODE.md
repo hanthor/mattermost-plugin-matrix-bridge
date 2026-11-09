@@ -10,10 +10,11 @@ This document settles the design for both so the work in
 account resolver, collisions, pinned mode, `/matrix claim` with an admin
 token or through the first message after shared login), call presence in both
 directions (Tier 1) and `/matrix call` with a configurable Element Call URL
-(Tier 2). Not implemented: recordings and transcripts as thread attachments,
-retiring a mirror when a native account is linked later (scenario 4),
-deactivation handling (scenario 5), the encryption guard (scenario 7) and
-power levels from channel roles (scenario 10). The ghost-to-mirror migration
+(Tier 2). Retiring a mirror when a native account is linked later (scenario 4),
+deactivation handling (scenario 5) and encrypted rooms (scenario 7, see
+[ENCRYPTION.md](ENCRYPTION.md)) are implemented too. Not implemented:
+recordings and transcripts as thread attachments and power levels from channel
+roles (scenario 10). The ghost-to-mirror migration
 (`/matrix migrate ghosts-to-mirror`) and a cut-over mode that freezes accounts
 and rooms are implemented; cut-over is deliberately smaller than the
 read-only relay sketched in scenario 6. The sections below describe the design; the

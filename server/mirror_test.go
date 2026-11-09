@@ -22,13 +22,15 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
-	mu        sync.Mutex
-	existing  map[string]bool // accounts that already exist (natives)
-	created   []string
-	passwords map[string]string
-	inhibited map[string]bool
-	joins     []string
-	leaves    []string
+	mu          sync.Mutex
+	existing    map[string]bool // accounts that already exist (natives)
+	created     []string
+	passwords   map[string]string
+	inhibited   map[string]bool
+	joins       []string
+	leaves      []string
+	invites     []string
+	deactivated []string
 	// sent records the messages sent to rooms, in order.
 	sent   []fakeSent
 	server *httptest.Server
@@ -80,6 +82,14 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 			_ = json.NewEncoder(w).Encode(map[string]string{"event_id": fmt.Sprintf("$ev%d", len(f.sent))})
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
+			_, _ = w.Write([]byte(`{}`))
+		case strings.HasPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"):
+			f.deactivated = append(f.deactivated, strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"))
+			_, _ = w.Write([]byte(`{}`))
+		case strings.HasSuffix(r.URL.Path, "/invite"):
+			var req map[string]any
+			_ = json.Unmarshal(body, &req)
+			f.invites = append(f.invites, fmt.Sprint(req["user_id"])+" to "+roomFromPath(r.URL.Path))
 			_, _ = w.Write([]byte(`{}`))
 		case strings.HasSuffix(r.URL.Path, "/leave"):
 			f.leaves = append(f.leaves, r.URL.Query().Get("user_id")+" from "+roomFromPath(r.URL.Path))
