@@ -195,26 +195,29 @@ func (m *MattermostServer) InstallBridge(t *testing.T, ctx context.Context, admi
 	patch := &model.Config{}
 	patch.LogSettings.ConsoleLevel = model.NewPointer("DEBUG")
 	patch.LogSettings.FileLevel = model.NewPointer("DEBUG")
-	patch.PluginSettings.Plugins = map[string]map[string]any{
-		PluginID: {
-			"matrix_server_url":    cfg.MatrixServerURL,
-			"matrix_server_domain": cfg.MatrixServerDomain,
-			"matrix_as_token":      cfg.ASToken,
-			"matrix_hs_token":      cfg.HSToken,
-			"enable_sync":          true,
-			"rate_limiting_mode":   "disabled",
-			"enable_mirror_mode":   cfg.MirrorMode,
-			"matrix_admin_token":   cfg.AdminToken,
-			"sync_user_profiles":   true,
-			"calls_mode":           cfg.CallsMode,
-			"element_call_url":     cfg.ElementCallURL,
-		},
-	}
+	patch.PluginSettings.Plugins = map[string]map[string]any{PluginID: cfg.settings()}
 	_, _, err = admin.PatchConfig(ctx, patch)
 	require.NoError(t, err, "configure plugin")
 
 	_, err = admin.EnablePlugin(ctx, PluginID)
 	require.NoError(t, err, "enable plugin")
+}
+
+// settings is the plugin's configuration as Mattermost stores it.
+func (cfg BridgeConfig) settings() map[string]any {
+	return map[string]any{
+		"matrix_server_url":    cfg.MatrixServerURL,
+		"matrix_server_domain": cfg.MatrixServerDomain,
+		"matrix_as_token":      cfg.ASToken,
+		"matrix_hs_token":      cfg.HSToken,
+		"enable_sync":          true,
+		"rate_limiting_mode":   "disabled",
+		"enable_mirror_mode":   cfg.MirrorMode,
+		"matrix_admin_token":   cfg.AdminToken,
+		"sync_user_profiles":   true,
+		"calls_mode":           cfg.CallsMode,
+		"element_call_url":     cfg.ElementCallURL,
+	}
 }
 
 func envOr(key, fallback string) string {

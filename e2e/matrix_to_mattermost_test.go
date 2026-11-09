@@ -9,6 +9,8 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/e2e/capabilities"
 )
 
 // TestMatrixToMattermost covers everything that flows from a mapped Matrix room
@@ -35,6 +37,7 @@ func TestMatrixToMattermost(t *testing.T) {
 		assert.Contains(t, author.Username, "alice")
 		assert.NotNil(t, rootPost.GetProp("from_matrix"))
 		aliceMM = author
+		capabilities.Verify(t, "messages.text.in", author.IsRemote() && rootPost.GetProp("from_matrix") != nil)
 	})
 
 	t.Run("HTML is converted to markdown", func(t *testing.T) {
@@ -71,6 +74,7 @@ func TestMatrixToMattermost(t *testing.T) {
 			post, _, err := h.Admin.GetPost(ctx, rootPost.Id, "")
 			return err == nil && post.Message == "Hello from Matrix (edited)"
 		})
+		capabilities.Verify(t, "messages.edit.in", true)
 	})
 
 	t.Run("thread reply lands in the post's thread", func(t *testing.T) {
@@ -90,6 +94,7 @@ func TestMatrixToMattermost(t *testing.T) {
 		})
 		reply := WaitForPostWithMessage(t, h.Admin, channel.Id, "Threaded reply")
 		assert.Equal(t, rootPost.Id, reply.RootId)
+		capabilities.Verify(t, "messages.thread.in", reply.RootId == rootPost.Id)
 	})
 
 	t.Run("reaction is added and removed", func(t *testing.T) {
@@ -114,6 +119,7 @@ func TestMatrixToMattermost(t *testing.T) {
 			reactions, _, err := h.Admin.GetReactions(ctx, rootPost.Id)
 			return err == nil && len(reactions) == 0
 		})
+		capabilities.Verify(t, "reactions.add_remove.in", true) // added then removed, both waited for above
 	})
 
 	t.Run("image upload becomes a file attachment", func(t *testing.T) {
@@ -134,6 +140,7 @@ func TestMatrixToMattermost(t *testing.T) {
 		info, _, err := h.Admin.GetFileInfo(ctx, post.FileIds[0])
 		require.NoError(t, err)
 		assert.Equal(t, "pic.png", info.Name)
+		capabilities.Verify(t, "files.attachments.in", info.Name == "pic.png")
 	})
 
 	t.Run("redacted message is deleted", func(t *testing.T) {
@@ -145,6 +152,7 @@ func TestMatrixToMattermost(t *testing.T) {
 			_, resp, err := h.Admin.GetPost(ctx, post.Id, "")
 			return err != nil && resp != nil && resp.StatusCode == 404
 		})
+		capabilities.Verify(t, "messages.delete.in", true)
 	})
 
 	t.Run("joining the room adds the user to the channel and leaving removes them", func(t *testing.T) {
@@ -156,6 +164,7 @@ func TestMatrixToMattermost(t *testing.T) {
 		WaitFor(t, bridgeTimeout, "bob to be removed from channel", func() bool {
 			return !IsUserInChannel(t, h.Admin, channel.Id, bobMM.Id)
 		})
+		capabilities.Verify(t, "membership.join_leave.in", true) // joined and left, both waited for above
 	})
 
 	t.Run("display name change is synced to the user profile", func(t *testing.T) {
@@ -168,6 +177,7 @@ func TestMatrixToMattermost(t *testing.T) {
 			}
 			return user.Nickname == "Alice Liddell" || user.FirstName == "Alice"
 		})
+		capabilities.Verify(t, "users.profile.in", true)
 	})
 
 	t.Run("room name and topic update the channel", func(t *testing.T) {
@@ -185,6 +195,7 @@ func TestMatrixToMattermost(t *testing.T) {
 			ch, _, err := h.Admin.GetChannel(ctx, channel.Id)
 			return err == nil && ch.DisplayName == "Renamed from Matrix" && ch.Header == "Topic from Matrix"
 		})
+		capabilities.Verify(t, "rooms.name_topic.in", true)
 	})
 
 	t.Run("typing notifications reach Mattermost", func(t *testing.T) {
@@ -199,7 +210,9 @@ func TestMatrixToMattermost(t *testing.T) {
 			alice.MustSendTyping(t, roomID, true, 30000)
 			time.Sleep(time.Second)
 		}
-		assert.True(t, <-done, "expected a typing websocket event for the bridged user")
+		typed := <-done
+		assert.True(t, typed, "expected a typing websocket event for the bridged user")
+		capabilities.Verify(t, "ephemeral.typing.in", typed)
 	})
 
 	t.Run("no Matrix message is echoed back", func(t *testing.T) {

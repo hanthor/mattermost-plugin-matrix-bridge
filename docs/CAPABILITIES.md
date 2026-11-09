@@ -110,7 +110,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Room name/topic → channel name/header | Matrix → Mattermost | ✅ |  |
 | Archive ↔ tombstone/leave | Mattermost → Matrix | ❌ |  |
 | Tombstone ↔ archive | Matrix → Mattermost | ❌ |  |
-| Direct and group messages | Mattermost → Matrix | ✅ |  |
+| Direct and group messages between Mattermost users | Mattermost → Matrix | ❌ | Not bridged: only channels with a room mapping sync, and a new direct message has none, so no Matrix room is created. Bridging private conversations is a deliberate opt-in that is not built yet; it matters for migrating a community (see the issue on direct messages). |
 | Direct messages | Matrix → Mattermost | ❌ | Mattermost refuses direct channels with remote users ("Cannot create a direct channel with a remote user"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users. |
 | Team ↔ space | Mattermost → Matrix | 🟡 | Spaces are created and rooms added; team membership is not mirrored. |
 | End-to-end encrypted rooms | Matrix → Mattermost | ❌ | Needs MSC3202 appservice encryption; not planned. |
@@ -121,7 +121,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
 | Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
-| Channel header shows the linked room | Mattermost → Matrix | ❌ | Webapp channel header button and RHS. |
+| Channel shows the linked room in Mattermost | Mattermost → Matrix | ✅ | The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself. |
 | Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. |
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 

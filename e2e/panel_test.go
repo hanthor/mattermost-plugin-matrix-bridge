@@ -77,6 +77,7 @@ func TestBridgePanelAPI(t *testing.T) {
 		_, adminView := pluginAPI(t, h, h.Admin, http.MethodGet, "/channels/"+channel.Id)
 		assert.Equal(t, true, adminView["can_manage"])
 		capabilities.Verify(t, "ui.panel", ch["room_id"] == roomID)
+		capabilities.Verify(t, "integration.channel_header", ch["room_id"] == roomID && ch["element_url"] != "")
 	})
 
 	t.Run("a private channel is closed to people who are not in it", func(t *testing.T) {

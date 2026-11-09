@@ -192,6 +192,7 @@ func TestMattermostClientView(t *testing.T) {
 			return err == nil && unread.MentionCount > before.MentionCount
 		})
 		capabilities.Verify(t, "client.mentions", true)
+		capabilities.Verify(t, "messages.mentions.in", true) // her ghost was mentioned in Matrix and she was notified
 	})
 
 	t.Run("an edit reaches clients as post_edited", func(t *testing.T) {
