@@ -141,6 +141,12 @@ func (p *Plugin) OnConfigurationChange() error {
 	p.setConfiguration(configuration)
 
 	p.initMatrixClient()
+	// The bridges hold the client they were built with; give them the new one
+	// so a changed server URL or token takes effect and every part of the
+	// plugin shares one client (and what it has learned about rooms).
+	if p.mattermostToMatrixBridge != nil {
+		p.initBridges()
+	}
 
 	return nil
 }

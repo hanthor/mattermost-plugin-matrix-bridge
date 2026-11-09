@@ -30,6 +30,8 @@ export type ChannelStatus = {
     cutover: boolean;
     mode: string;
     participants: number;
+    encrypted?: boolean;
+    encryption_works?: boolean;
 };
 
 export type Claim = {matrix_user_id: string; one_time_password: string};

@@ -68,6 +68,8 @@ func (m *mockPlugin) StartChannelHistory(_ string, _ int) error { return nil }
 
 func (m *mockPlugin) ChannelHistoryStatus(_ string) HistoryReport { return HistoryReport{} }
 
+func (m *mockPlugin) EncryptionSupported() bool { return false }
+
 func (m *mockPlugin) MirrorStatus() MirrorStatus {
 	return MirrorStatus{Mode: "ghost"}
 }

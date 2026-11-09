@@ -157,6 +157,10 @@ type uiChannel struct {
 	Cutover      bool   `json:"cutover"`
 	Mode         string `json:"mode"`
 	Participants int    `json:"participants"`
+	// Encrypted is set when the room has end-to-end encryption, and
+	// EncryptionWorks when the bridge can handle that.
+	Encrypted       bool `json:"encrypted"`
+	EncryptionWorks bool `json:"encryption_works"`
 }
 
 func (p *Plugin) handleUIChannel(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +203,10 @@ func (p *Plugin) handleUIChannel(w http.ResponseWriter, r *http.Request) {
 			if overview, err := p.matrixClient.GetRoomOverview(roomID); err == nil {
 				out.RoomName = overview.Name
 				out.Participants = overview.Members
+			}
+			if encrypted, err := p.matrixClient.IsRoomEncrypted(roomID); err == nil {
+				out.Encrypted = encrypted
+				out.EncryptionWorks = p.EncryptionSupported()
 			}
 		}
 	}

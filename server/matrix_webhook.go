@@ -207,6 +207,11 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		return nil
 	}
 
+	if event.Type == "m.room.encryption" {
+		p.noteEncryption(event)
+		return nil
+	}
+
 	// An event the bridge sent comes back through the transaction; never
 	// relay it again. Exact for every account, including a claimed mirror
 	// account whose own client shares the sender with the bridge.
@@ -454,3 +459,18 @@ func (p *Plugin) createDMChannelForGhostUser(roomID, ghostUserID, matrixUserID s
 
 	return dmChannel.Id, nil
 }
+
+// noteEncryption keeps track of rooms that turn on end-to-end encryption.
+func (p *Plugin) noteEncryption(event MatrixEvent) {
+	if p.matrixClient != nil {
+		p.matrixClient.NoteRoomEncrypted(event.RoomID)
+	}
+	channelID, _ := p.getChannelIDFromMatrixRoom(event.RoomID)
+	if channelID != "" && !p.EncryptionSupported() {
+		p.logger.LogWarn("A bridged Matrix room turned on end-to-end encryption; the bridge cannot read or send into it, so syncing stops for this room",
+			"room_id", event.RoomID, "channel_id", channelID)
+	}
+}
+
+// EncryptionSupported implements command.PluginAccessor.
+func (p *Plugin) EncryptionSupported() bool { return false }

@@ -113,7 +113,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Direct and group messages between Mattermost users | Mattermost → Matrix | ❌ | Not bridged: only channels with a room mapping sync, and a new direct message has none, so no Matrix room is created. Bridging private conversations is a deliberate opt-in that is not built yet; it matters for migrating a community (see the issue on direct messages). |
 | Direct messages | Matrix → Mattermost | ❌ | Mattermost refuses direct channels with remote users ("Cannot create a direct channel with a remote user"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users. |
 | Team ↔ space | Mattermost → Matrix | 🟡 | Spaces are created and rooms added; team membership is not mirrored. |
-| End-to-end encrypted rooms | Matrix → Mattermost | ❌ | Needs MSC3202 appservice encryption; not planned. |
+| End-to-end encrypted rooms | Matrix → Mattermost | ❌ | Refused, not half-working: an encrypted room cannot be mapped, and a mapped room that turns encryption on stops syncing in both directions with a warning in /matrix status and the panel; nothing is sent in the clear. Support through mautrix-go's crypto is planned (docs/ENCRYPTION.md). |
 
 ## Integration
 
