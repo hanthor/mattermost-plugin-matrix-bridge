@@ -309,7 +309,7 @@ func (p *Plugin) InvalidateChannelMapping(channelID string) {
 		p.roomMappingCache.Delete(kvstore.BuildChannelMappingKey(channelID))
 	}
 	// A mapping changed: refresh the room's bridge-information event.
-	go p.syncBridgeInfo(channelID)
+	go p.syncBridgeInfoSafely(channelID)
 }
 
 // GetConfiguration returns the plugin configuration

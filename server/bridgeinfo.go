@@ -54,6 +54,17 @@ func (p *Plugin) bridgeInfoContent(channelID string) map[string]any {
 	return content
 }
 
+// syncBridgeInfoSafely runs syncBridgeInfo as a background task. The
+// information is cosmetic, so a failure in it must never take the plugin down.
+func (p *Plugin) syncBridgeInfoSafely(channelID string) {
+	defer func() {
+		if r := recover(); r != nil {
+			p.logger.LogWarn("Bridge information update failed", "channel_id", channelID, "panic", fmt.Sprint(r))
+		}
+	}()
+	p.syncBridgeInfo(channelID)
+}
+
 // syncBridgeInfo makes the room's bridge-information event match the
 // channel's mapping: set when mapped, cleared when not.
 func (p *Plugin) syncBridgeInfo(channelID string) {
