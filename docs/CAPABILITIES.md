@@ -103,6 +103,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Shared login with Mattermost as the identity provider | Matrix → Mattermost | ✅ | Mattermost is an OAuth 2.0 provider, not OpenID Connect, so MAS is configured without discovery and reads the person from /api/v4/users/me (docs/MAS_SETUP.md). Tested against a real Mattermost and MAS. |
 | Ghosts to mirror accounts migration | Mattermost → Matrix | ✅ | /matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver. |
 | Cut-over mode | Mattermost → Matrix | ✅ | Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing. |
+| Telling people their Matrix ID, bringing over direct messages and favourites | Mattermost → Matrix | ✅ | /matrix welcome (preview, then confirm) sends everyone with an unclaimed mirror account a direct message from the bridge with their Matrix ID and how to claim it, and brings their bridged direct-message rooms (m.direct) and favourite channels (m.favourite) into the Matrix account. It is safe to repeat and never messages a person twice; claimed accounts are left alone. Not yet: an email or login banner. |
 | Linking a native account retires the mirror account | Mattermost → Matrix | ✅ | When a person enables double puppeting with a native Matrix account, their mirror account leaves the bridged rooms, the native account is invited, and the old name stays reserved. A claimed mirror account is not made to leave. |
 | Team cut-over: read-only channels, pinned link, report, archive | Mattermost → Matrix | ✅ | /matrix migrate-team report | readonly | writable | archive (each changing step needs confirm). Read-only channels still receive what arrives from Matrix; the report compares members and messages not yet in each room. |
 
@@ -183,7 +184,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 91
+- ✅ supported: 92
 - 🟡 partial: 4
 - ❌ gap: 5
 - — n/a: 0

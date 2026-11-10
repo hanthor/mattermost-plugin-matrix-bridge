@@ -106,3 +106,23 @@ func (c *Client) SendImageReactionAt(roomID, eventID, mxc, shortcode, userID str
 	}
 	return c.sendEventAsUserAt(roomID, "m.reaction", content, userID, timestampMs)
 }
+
+// SetAccountData stores a global account data event for an account the bridge
+// controls.
+func (c *Client) SetAccountData(userID, eventType string, content any) error {
+	path, err := BuildSecureURL("/_matrix/client/v3/user/", userID, "account_data", eventType)
+	if err != nil {
+		return errors.Wrap(err, "invalid user ID")
+	}
+	return c.sendJSONAsUser(http.MethodPut, path, content, userID)
+}
+
+// AddRoomTag tags a room for an account the bridge controls (for example
+// m.favourite).
+func (c *Client) AddRoomTag(userID, roomID, tag string, order float64) error {
+	path, err := BuildSecureURL("/_matrix/client/v3/user/", userID, "rooms", roomID, "tags", tag)
+	if err != nil {
+		return errors.Wrap(err, "invalid ID")
+	}
+	return c.sendJSONAsUser(http.MethodPut, path, map[string]any{"order": order}, userID)
+}

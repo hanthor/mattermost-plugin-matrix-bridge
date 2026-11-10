@@ -208,6 +208,10 @@ type PluginAccessor interface {
 	// returned text is shown to the administrator.
 	MigrateTeam(userID, teamID, action string, confirm bool) (string, error)
 
+	// WelcomeAccounts tells people with an unclaimed mirror account their
+	// Matrix ID and brings their direct-message and favourite rooms over.
+	WelcomeAccounts(userID string, confirm bool) (string, error)
+
 	// DirectMessages handles /matrix dm: action is on, off or status.
 	DirectMessages(userID, action string) (string, error)
 
@@ -514,6 +518,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 		{Item: "status", HelpText: "Show your setting"},
 	})
 	matrixData.AddCommand(dmCmd)
+	matrixData.AddCommand(model.NewAutocompleteData("welcome", "[confirm]", "Tell people with an unclaimed Matrix account their Matrix ID and bring over their direct messages and favourites"))
 	teamCmd := model.NewAutocompleteData("migrate-team", "report|readonly|writable|archive [confirm]", "Cut a team over to Matrix: report, make channels read-only, archive")
 	teamCmd.AddStaticListArgument("action", true, []model.AutocompleteListItem{
 		{Item: "report", HelpText: "Compare members and messages per channel"},
@@ -1379,6 +1384,12 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeHistoryCommand(args)
 	case "migrate-team":
 		return c.executeMigrateTeamCommand(args)
+	case "welcome":
+		text, err := c.plugin.WelcomeAccounts(args.UserId, strings.HasSuffix(strings.TrimSpace(args.Command), " confirm"))
+		if err != nil {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+		}
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	case "repair":
 		text, err := c.plugin.RepairMembership(args.ChannelId)
 		if err != nil {
@@ -1445,7 +1456,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "retry", "doctor":
+	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "welcome", "retry", "doctor":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
