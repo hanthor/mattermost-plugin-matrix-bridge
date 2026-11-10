@@ -63,6 +63,8 @@ type Plugin struct {
 
 	// inbox journals Matrix events until their handlers finish.
 	inbox inboxState
+	// realtime is the typing/presence/receipt event client (see realtime.go).
+	realtime realtimeState
 
 	// recentTransactions is the in-memory part of transaction deduplication
 	// (transaction ID -> time handled); historyRuns marks channels whose history
@@ -174,6 +176,7 @@ func (p *Plugin) OnActivate() error {
 	// Initialize bridge components after getting remote ID
 	p.initBridges()
 	p.startEncryption()
+	p.startRealtime()
 	p.startInbox()
 	p.startOutbox()
 
@@ -197,6 +200,7 @@ func (p *Plugin) OnActivate() error {
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
 	p.stopEncryption()
+	p.stopRealtime()
 	p.stopInbox()
 	p.stopOutbox()
 	if p.reactionBatcher != nil {

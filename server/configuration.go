@@ -29,6 +29,8 @@ type configuration struct {
 	EnableSync           bool   `json:"enable_sync"`
 	EnableDirectMessages bool   `json:"enable_direct_messages"` // Bridge direct and group messages whose participants all agreed
 	EnableEncryption     bool   `json:"enable_encryption"`      // Bridge end-to-end encrypted Matrix rooms (bridge bot holds the keys)
+	EnableRealtime       bool   `json:"enable_realtime"`        // Send typing, presence, custom status and read receipts to Matrix
+	RealtimePollSeconds  int    `json:"realtime_poll_seconds"`  // How often status and read state are checked (default 30)
 	MatrixUsernamePrefix string `json:"matrix_username_prefix"`
 	RateLimitingMode     string `json:"rate_limiting_mode"`
 	EnableMirrorMode     bool   `json:"enable_mirror_mode"`   // Hijack Matrix server to mirror Mattermost
@@ -158,6 +160,7 @@ func (p *Plugin) OnConfigurationChange() error {
 	if p.mattermostToMatrixBridge != nil {
 		p.initBridges()
 		p.startEncryption()
+		p.startRealtime()
 	}
 
 	return nil

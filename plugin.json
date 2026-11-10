@@ -76,6 +76,20 @@
                 "default": false
             },
             {
+                "key": "enable_realtime",
+                "display_name": "Send Typing, Presence and Read Receipts",
+                "type": "bool",
+                "default": false,
+                "help_text": "Show who is typing, who is online and what they have read to people in Matrix. Typing events only reach channel members, so a small bot account (matrix-bridge-events) joins every bridged channel. Status and read state are checked every 30 seconds. In a cluster one server does this work."
+            },
+            {
+                "key": "realtime_poll_seconds",
+                "display_name": "Status Check Interval (seconds)",
+                "type": "number",
+                "default": 30,
+                "help_text": "How often status, custom status and read state are checked when typing, presence and read receipts are on. The minimum is 2."
+            },
+            {
                 "key": "matrix_username_prefix",
                 "display_name": "Matrix User Prefix",
                 "type": "text",

@@ -22,6 +22,7 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
+	ephemeral    []string         // typing, presence and receipts sent
 	timeline     []map[string]any // room history returned by /messages, newest first
 	redactions   []string         // rooms an event was redacted in
 	redactFails  bool
@@ -155,6 +156,15 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/messages"):
 			// One page: newest first, with no further token.
 			_ = json.NewEncoder(w).Encode(map[string]any{"chunk": f.timeline, "end": ""})
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/typing/"):
+			f.ephemeral = append(f.ephemeral, "typing "+r.URL.Query().Get("user_id")+" "+string(body))
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/presence/"):
+			f.ephemeral = append(f.ephemeral, "presence "+r.URL.Query().Get("user_id")+" "+string(body))
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/receipt/m.read/"):
+			f.ephemeral = append(f.ephemeral, "receipt "+r.URL.Query().Get("user_id")+" "+r.URL.Path[strings.Index(r.URL.Path, "/receipt/")+9:])
+			_, _ = w.Write([]byte(`{}`))
 		case strings.HasSuffix(r.URL.Path, "/invite"):
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)

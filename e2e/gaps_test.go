@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/matrix-org/complement/b"
 	"github.com/matrix-org/complement/client"
@@ -29,10 +30,17 @@ func TestCapabilityGaps(t *testing.T) {
 	h := NewHarness(t)
 	ctx := context.Background()
 
+	// Typing, status and read receipts are opt-in; check often so the probes are quick.
+	h.SetBridgeSetting("realtime_poll_seconds", 2)
+	h.SetBridgeSetting("enable_realtime", true)
+
 	alice := h.NewMatrixUser("alice")
 	channel := h.CreateChannel("gaps", "Gaps")
 	roomID := h.CreateMappedRoom(alice, channel.Id, "Gaps")
 	adminGhost := h.GhostUserID(h.AdminUser.Id)
+
+	// The event bot joins the bridged channel on its next check.
+	time.Sleep(6 * time.Second)
 
 	// Seed one message in each direction so both users exist on both sides.
 	seedPost, _, err := h.Admin.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "seed from mattermost"})

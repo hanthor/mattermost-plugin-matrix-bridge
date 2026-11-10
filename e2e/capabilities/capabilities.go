@@ -90,12 +90,12 @@ var All = []Capability{
 	{ID: "polls.in", Area: "Attachments", Name: "Polls (MSC3381)", Direction: MatrixToMattermost, Status: Partial, Notes: "A poll start is posted as its question and numbered options. Votes are not relayed."},
 
 	// Presence and ephemeral
-	{ID: "ephemeral.typing", Area: "Ephemeral", Name: "Typing notifications", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Mattermost exposes no plugin hook for typing; a websocket listener in the plugin could provide it."},
+	{ID: "ephemeral.typing", Area: "Ephemeral", Name: "Typing notifications", Direction: MattermostToMatrix, Status: Supported, Notes: "Needs Send Typing, Presence and Read Receipts to be on. A small bot (matrix-bridge-events) joins bridged channels, reads the server's typing events and shows the person typing in the room. In a cluster one server does it."},
 	{ID: "ephemeral.typing.in", Area: "Ephemeral", Name: "Typing notifications", Direction: MatrixToMattermost, Status: Supported, Notes: "Requires receive_ephemeral in the registration."},
-	{ID: "ephemeral.presence", Area: "Ephemeral", Name: "Presence / status", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Ghosts should mirror online/away/offline."},
+	{ID: "ephemeral.presence", Area: "Ephemeral", Name: "Presence / status", Direction: MattermostToMatrix, Status: Supported, Notes: "Needs the same setting. Online, away and do-not-disturb become online, unavailable and unavailable; checked every 30 seconds (adjustable)."},
 	{ID: "ephemeral.presence.in", Area: "Ephemeral", Name: "Presence / status", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
-	{ID: "ephemeral.custom_status", Area: "Ephemeral", Name: "Custom status ↔ presence status_msg", Direction: MattermostToMatrix, Status: Unsupported, Notes: ""},
-	{ID: "ephemeral.read_receipts", Area: "Ephemeral", Name: "Read receipts", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Channel views could become m.read receipts from the ghost."},
+	{ID: "ephemeral.custom_status", Area: "Ephemeral", Name: "Custom status ↔ presence status_msg", Direction: MattermostToMatrix, Status: Supported, Notes: "Needs the same setting. The custom status (emoji and text) becomes the presence status message; expired ones are cleared."},
+	{ID: "ephemeral.read_receipts", Area: "Ephemeral", Name: "Read receipts", Direction: MattermostToMatrix, Status: Supported, Notes: "Needs the same setting. People who viewed a recently active channel after the latest bridged message get a read receipt on it, checked every 30 seconds. The other direction needs a Mattermost API that does not exist."},
 	{ID: "ephemeral.read_receipts.in", Area: "Ephemeral", Name: "Read receipts", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Mattermost has no plugin API to mark a channel viewed for another user."},
 
 	// Users
