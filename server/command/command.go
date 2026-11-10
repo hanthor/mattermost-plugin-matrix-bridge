@@ -212,6 +212,9 @@ type PluginAccessor interface {
 	DeadLetters() int
 	RetryDeadLetters() (int, error)
 
+	// Doctor runs the setup checks (and the channel's checks) and returns the report.
+	Doctor(channelID string) string
+
 	// Identity linking (one person on both networks)
 	CreateIdentityLinkCode(mattermostUserID string) (string, error)
 	GetIdentityLink(mattermostUserID string) (matrixUserID string, puppeted bool, ok bool)
@@ -488,6 +491,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("doctor", "", "Check the bridge setup and this channel, with what to fix"))
 	matrixData.AddCommand(model.NewAutocompleteData("retry", "", "Replay changes that could not be delivered across the bridge"))
 	dmCmd := model.NewAutocompleteData("dm", "[on|off|status]", "Allow your direct messages to be bridged to Matrix (only if everyone in the conversation agrees)")
 	dmCmd.AddStaticListArgument("action", false, []model.AutocompleteListItem{
@@ -1361,6 +1365,8 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeHistoryCommand(args)
 	case "migrate-team":
 		return c.executeMigrateTeamCommand(args)
+	case "doctor":
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: c.plugin.Doctor(args.ChannelId)}
 	case "retry":
 		n, err := c.plugin.RetryDeadLetters()
 		if err != nil {
@@ -1410,7 +1416,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "retry":
+	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "retry", "doctor":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}

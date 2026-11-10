@@ -70,6 +70,8 @@ func (m *mockPlugin) ChannelHistoryStatus(_ string) HistoryReport { return Histo
 
 func (m *mockPlugin) EncryptionSupported() bool { return false }
 
+func (m *mockPlugin) Doctor(string) string { return "" }
+
 func (m *mockPlugin) DeadLetters() int { return 0 }
 
 func (m *mockPlugin) RetryDeadLetters() (int, error) { return 0, nil }

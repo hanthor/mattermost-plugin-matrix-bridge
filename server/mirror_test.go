@@ -33,8 +33,13 @@ type fakeSynapse struct {
 	uploads      []string
 	createdRooms []map[string]any
 	down         bool // the homeserver answers 503 to message sends
-	reactions    []fakeSent
-	deactivated  []string
+	// doctor endpoints
+	whoami      string
+	pingFails   bool
+	joinedRooms []string
+	botPower    int
+	reactions   []fakeSent
+	deactivated []string
 	// sent records the messages sent to rooms, in order.
 	sent   []fakeSent
 	server *httptest.Server
@@ -102,6 +107,21 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
 			_, _ = w.Write([]byte(`{}`))
+		case r.URL.Path == "/_matrix/client/versions":
+			_, _ = w.Write([]byte(`{"versions":["v1.1","v1.12"]}`))
+		case r.URL.Path == "/_matrix/client/v3/account/whoami":
+			_ = json.NewEncoder(w).Encode(map[string]string{"user_id": f.whoami})
+		case strings.HasSuffix(r.URL.Path, "/ping") && strings.Contains(r.URL.Path, "/appservice/"):
+			if f.pingFails {
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = w.Write([]byte(`{"errcode":"M_URL_NOT_REACHABLE","error":"cannot connect"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"duration_ms":12}`))
+		case r.URL.Path == "/_matrix/client/v3/joined_rooms":
+			_ = json.NewEncoder(w).Encode(map[string]any{"joined_rooms": f.joinedRooms})
+		case strings.Contains(r.URL.Path, "/state/m.room.power_levels"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"users": map[string]int{"@_mattermost_bridge:example.com": f.botPower}, "users_default": 0})
 		case r.Method == http.MethodPost && r.URL.Path == "/_matrix/client/v3/createRoom":
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)

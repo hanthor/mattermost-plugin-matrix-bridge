@@ -17,6 +17,8 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix history`](#matrix-history) | Import a channel's past messages | `/matrix history confirm` |
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix dm`](#matrix-dm) | Agree to bridge your direct and group messages | `/matrix dm on` |
+| [`/matrix doctor`](#matrix-doctor) | Check the setup and this channel, with what to fix | `/matrix doctor` |
+| [`/matrix retry`](#matrix-retry) | Send changes that could not be delivered again | `/matrix retry` |
 | [`/matrix migrate-team`](#matrix-migrate-team) | Cut a team over to Matrix: report, read-only channels, archive | `/matrix migrate-team report` |
 | [`/matrix migrate`](#matrix-migrate) | Re-run KV migrations | `/matrix migrate` |
 | [`/matrix call`](#calls-matrix-call) | Start a call both sides can join | `/matrix call Weekly sync` |
@@ -568,6 +570,24 @@ own Matrix client posts in Mattermost as you, and the bridge keeps sending your
 Mattermost messages from the same account. `/matrix status` shows how many
 accounts exist and how many are claimed. See
 [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md#54-claiming-accounts).
+
+## `/matrix doctor`
+
+System administrators. Runs the checks a first setup tends to fail and says
+what to do about each; it never changes anything. It checks the settings, that
+Mattermost can reach the homeserver, that the appservice token is accepted and
+the server name matches, that the homeserver can call the plugin back (the
+appservice ping, which proves the registration URL and the homeserver token),
+encryption and Matrix Authentication Service when they are switched on, stuck
+deliveries and rate limits. Run in a bridged channel it also checks the
+mapping in both directions, the bridge bot's membership and power level, and
+whether the room is encrypted or the channel read-only.
+
+## `/matrix retry`
+
+System administrators. Queues again the changes that could not be delivered
+across the bridge and were set aside (`/matrix status` shows how many). See
+[OPERATIONS.md](OPERATIONS.md#delivery-guarantees).
 
 ## `/matrix dm`
 
