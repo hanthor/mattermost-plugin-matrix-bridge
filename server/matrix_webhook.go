@@ -228,6 +228,11 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 	switch event.Type {
 	case "m.room.message":
 		return p.matrixToMattermostBridge.syncMatrixMessageToMattermost(event, channelID)
+	case "m.sticker":
+		return p.matrixToMattermostBridge.syncMatrixFileToMattermost(stickerAsImage(event), channelID)
+	case pollStartStable, pollStartUnstable:
+		event.Type = "m.room.message"
+		return p.matrixToMattermostBridge.syncMatrixMessageToMattermost(event, channelID)
 	case "m.reaction":
 		return p.matrixToMattermostBridge.syncMatrixReactionToMattermost(event, channelID)
 	case "m.room.member":
@@ -236,6 +241,11 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		return p.matrixToMattermostBridge.syncMatrixRedactionToMattermost(event, channelID)
 	case callMemberEventLegacy, callMemberEventRTC:
 		return p.handleMatrixCallEvent(event, channelID)
+	case pinnedEventsType:
+		if event.Sender == p.BridgeBotUserID() {
+			return nil
+		}
+		return p.syncMatrixPins(event, channelID)
 	case "m.room.name":
 		return p.syncMatrixRoomNameToMattermost(event, channelID)
 	case "m.room.topic":

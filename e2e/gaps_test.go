@@ -75,6 +75,8 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("pinned post becomes m.room.pinned_events", func(t *testing.T) {
+		// The bot must be allowed to set room state, as in a room it created.
+		h.GrantBridgePower(alice, roomID, 50)
 		_, err := h.Admin.PinPost(ctx, seedPost.Id)
 		require.NoError(t, err)
 		works := TryFor(probeTimeout, func() bool {

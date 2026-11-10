@@ -71,10 +71,10 @@ var All = []Capability{
 	{ID: "messages.reply_fallback.in", Area: "Messages", Name: "Matrix replies keep the quoted message in Mattermost", Direction: MatrixToMattermost, Status: Supported, Notes: "A Matrix reply to a message that is not the thread's root appears in the thread with the replied-to message quoted (author and first line), since Mattermost threads have no reply-to."},
 	{ID: "messages.mentions", Area: "Messages", Name: "User mentions", Direction: MattermostToMatrix, Status: Supported, Notes: "m.mentions and pills."},
 	{ID: "messages.mentions.in", Area: "Messages", Name: "User mentions", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
-	{ID: "messages.channel_mentions", Area: "Messages", Name: "@channel / @here ↔ @room", Direction: MattermostToMatrix, Status: Unsupported, Notes: "@channel should set m.mentions.room; @room should become @channel."},
-	{ID: "messages.channel_mentions.in", Area: "Messages", Name: "@room ↔ @channel", Direction: MatrixToMattermost, Status: Unsupported, Notes: ""},
-	{ID: "messages.pins", Area: "Messages", Name: "Pinned messages", Direction: MattermostToMatrix, Status: Unsupported, Notes: "m.room.pinned_events."},
-	{ID: "messages.pins.in", Area: "Messages", Name: "Pinned messages", Direction: MatrixToMattermost, Status: Unsupported, Notes: ""},
+	{ID: "messages.channel_mentions", Area: "Messages", Name: "@channel / @here ↔ @room", Direction: MattermostToMatrix, Status: Supported, Notes: "@channel, @all and @here in a Mattermost post set m.mentions.room on the Matrix message, so room-wide notifications fire."},
+	{ID: "messages.channel_mentions.in", Area: "Messages", Name: "@room ↔ @channel", Direction: MatrixToMattermost, Status: Supported, Notes: "A Matrix room mention (m.mentions.room, or the text @room) becomes @channel in the Mattermost post."},
+	{ID: "messages.pins", Area: "Messages", Name: "Pinned messages", Direction: MattermostToMatrix, Status: Supported, Notes: "Pinning or unpinning a post updates the room's m.room.pinned_events with the events of the pinned posts that were synced. In a room mapped with /matrix map the bot needs moderator rights (power level 50) to set it."},
+	{ID: "messages.pins.in", Area: "Messages", Name: "Pinned messages", Direction: MatrixToMattermost, Status: Supported, Notes: "Pinning an event in Matrix pins its post and unpinning unpins it; only events that have a post are affected."},
 
 	// Reactions
 	{ID: "reactions.add_remove", Area: "Reactions", Name: "Add and remove reactions", Direction: MattermostToMatrix, Status: Supported, Notes: "4,400+ emoji names mapped to Unicode."},
@@ -85,9 +85,9 @@ var All = []Capability{
 	// Attachments
 	{ID: "files.attachments", Area: "Attachments", Name: "Files, images, audio, video", Direction: MattermostToMatrix, Status: Supported, Notes: "One m.file/m.image/m.audio/m.video event per attachment."},
 	{ID: "files.attachments.in", Area: "Attachments", Name: "Files, images, audio, video", Direction: MatrixToMattermost, Status: Supported, Notes: "Downloaded through authenticated media endpoints."},
-	{ID: "files.stickers.in", Area: "Attachments", Name: "Stickers (m.sticker)", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Should be posted as an image attachment."},
-	{ID: "files.location.in", Area: "Attachments", Name: "Location (m.location)", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Should be posted as a map link."},
-	{ID: "polls.in", Area: "Attachments", Name: "Polls (MSC3381)", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Could map to interactive message attachments."},
+	{ID: "files.stickers.in", Area: "Attachments", Name: "Stickers (m.sticker)", Direction: MatrixToMattermost, Status: Supported, Notes: "A sticker is posted as an image attachment."},
+	{ID: "files.location.in", Area: "Attachments", Name: "Location (m.location)", Direction: MatrixToMattermost, Status: Supported, Notes: "A location is posted as a link to OpenStreetMap with the shared label."},
+	{ID: "polls.in", Area: "Attachments", Name: "Polls (MSC3381)", Direction: MatrixToMattermost, Status: Partial, Notes: "A poll start is posted as its question and numbered options. Votes are not relayed."},
 
 	// Presence and ephemeral
 	{ID: "ephemeral.typing", Area: "Ephemeral", Name: "Typing notifications", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Mattermost exposes no plugin hook for typing; a websocket listener in the plugin could provide it."},

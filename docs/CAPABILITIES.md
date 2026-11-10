@@ -22,10 +22,10 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Matrix replies keep the quoted message in Mattermost | Matrix → Mattermost | ✅ | A Matrix reply to a message that is not the thread's root appears in the thread with the replied-to message quoted (author and first line), since Mattermost threads have no reply-to. |
 | User mentions | Mattermost → Matrix | ✅ | m.mentions and pills. |
 | User mentions | Matrix → Mattermost | ✅ |  |
-| @channel / @here ↔ @room | Mattermost → Matrix | ❌ | @channel should set m.mentions.room; @room should become @channel. |
-| @room ↔ @channel | Matrix → Mattermost | ❌ |  |
-| Pinned messages | Mattermost → Matrix | ❌ | m.room.pinned_events. |
-| Pinned messages | Matrix → Mattermost | ❌ |  |
+| @channel / @here ↔ @room | Mattermost → Matrix | ✅ | @channel, @all and @here in a Mattermost post set m.mentions.room on the Matrix message, so room-wide notifications fire. |
+| @room ↔ @channel | Matrix → Mattermost | ✅ | A Matrix room mention (m.mentions.room, or the text @room) becomes @channel in the Mattermost post. |
+| Pinned messages | Mattermost → Matrix | ✅ | Pinning or unpinning a post updates the room's m.room.pinned_events with the events of the pinned posts that were synced. In a room mapped with /matrix map the bot needs moderator rights (power level 50) to set it. |
+| Pinned messages | Matrix → Mattermost | ✅ | Pinning an event in Matrix pins its post and unpinning unpins it; only events that have a post are affected. |
 | Integration posts (webhooks, bots) keep their content | Mattermost → Matrix | 🟡 | The text of Slack-style attachments (pretext, title and link, text, fields, image link, footer) is sent as the message, and an overridden sender name is written as a bold prefix. Not yet: a per-message profile (name and icon) in Matrix, image attachments as files, and bot authors in history import. |
 | Long Mattermost posts fit a Matrix event | Mattermost → Matrix | ✅ | A post whose text and HTML copy would exceed Matrix's event size loses the HTML copy first, then is cut and marked. Ordinary long posts (up to Mattermost's 16,383 characters) arrive whole. |
 | Long Matrix messages are split into several posts | Matrix → Mattermost | ✅ | A Matrix message longer than Mattermost's 16,383 characters becomes consecutive posts, cut at paragraph breaks and marked as continued; an edit that is too long is cut with a marker instead of failing. Edits and reactions refer to the first post. |
@@ -47,9 +47,9 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Files, images, audio, video | Mattermost → Matrix | ✅ | One m.file/m.image/m.audio/m.video event per attachment. |
 | Files, images, audio, video | Matrix → Mattermost | ✅ | Downloaded through authenticated media endpoints. |
-| Stickers (m.sticker) | Matrix → Mattermost | ❌ | Should be posted as an image attachment. |
-| Location (m.location) | Matrix → Mattermost | ❌ | Should be posted as a map link. |
-| Polls (MSC3381) | Matrix → Mattermost | ❌ | Could map to interactive message attachments. |
+| Stickers (m.sticker) | Matrix → Mattermost | ✅ | A sticker is posted as an image attachment. |
+| Location (m.location) | Matrix → Mattermost | ✅ | A location is posted as a link to OpenStreetMap with the shared label. |
+| Polls (MSC3381) | Matrix → Mattermost | 🟡 | A poll start is posted as its question and numbered options. Votes are not relayed. |
 
 ## Ephemeral
 
@@ -173,7 +173,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 65
-- 🟡 partial: 5
-- ❌ gap: 25
+- ✅ supported: 71
+- 🟡 partial: 6
+- ❌ gap: 18
 - — n/a: 0

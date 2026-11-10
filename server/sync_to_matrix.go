@@ -1098,6 +1098,20 @@ func (b *MattermostToMatrixBridge) extractMattermostMentions(post *model.Post) *
 
 // addMatrixMentionsWithData converts Mattermost mentions to Matrix format using pre-extracted mention data
 func (b *MattermostToMatrixBridge) addMatrixMentionsWithData(content map[string]any, post *model.Post, mentions *MattermostMentionResults) {
+	b.addMatrixUserMentions(content, post, mentions)
+	// @channel, @all and @here notify everyone: in Matrix that is a room mention.
+	if hasChannelMention(post.Message) {
+		m, _ := content["m.mentions"].(map[string]any)
+		if m == nil {
+			m = map[string]any{}
+			content["m.mentions"] = m
+		}
+		m["room"] = true
+	}
+}
+
+// addMatrixUserMentions turns @username mentions into Matrix user mentions.
+func (b *MattermostToMatrixBridge) addMatrixUserMentions(content map[string]any, post *model.Post, mentions *MattermostMentionResults) {
 	b.logger.LogDebug("Processing mentions for Matrix", "post_id", post.Id, "user_mentions_count", len(mentions.UserMentions), "user_mentions", mentions.UserMentions)
 
 	// Only process if we have user mentions (ignore channel mentions for now)
