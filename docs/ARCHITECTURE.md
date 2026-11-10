@@ -11,6 +11,7 @@ This document provides a detailed technical overview of the Mattermost-Matrix Br
 - [API Integration](#api-integration)
 - [Security Model](#security-model)
 - [Performance Considerations](#performance-considerations)
+- [Decisions](#decisions)
 
 ---
 
@@ -736,6 +737,54 @@ Possible metrics to track:
 - Basic API functionality
 
 ---
+
+## Decisions
+
+Short records of choices that shape the code. Newer entries replace older ones.
+
+### Two delivery paths: hooks are the supported path (#64)
+
+Mattermost → Matrix has two implementations: the plugin hooks
+(`MessageHasBeenPosted`, `MessageHasBeenUpdated`, reaction hooks) and Shared
+Channels (`OnSharedChannelsSyncMsg` and related), which a licensed server uses
+for channels shared through Connected Workspaces.
+
+**Decision.** The hooks path is the supported, tested delivery path. Every
+feature (outbox and retries, history, encryption, direct messages, cut-over,
+reply fallbacks) is built and verified there. The Shared Channels handlers stay
+so existing deployments keep working, but they are **not covered by automated
+tests**, because CI has no license, and new features are not required to support
+them. `/matrix doctor` flags a shared channel ("Delivery path") so operators
+know which path it takes.
+
+**Why not remove it.** Ghost users and posts the bridge created carry the
+remote ID from the registration, and removing the registration would orphan
+them. **Revisit** when a licensed end-to-end job exists (the harness already
+reads `E2E_MM_LICENSE`): then either repeat the core message tests with
+channels shared, or remove the handlers.
+
+### Storage: the key-value store, with indices where scans hurt (#62)
+
+Everything the bridge remembers is in the plugin key-value store.
+
+**Decision.** Stay on the key-value store for now. Plugin-owned SQL tables
+would give indexed lookups and transactions, but they tie the plugin to the
+server's database driver (PostgreSQL and MySQL differ), need their own
+migration and backup story, and are not a supported surface for plugins. The
+cost today is acceptable: the hot paths (a post, an event) read single keys;
+the scans (`ghostRooms`, `bridgedDirectChannels`, `teamMappedChannels`, status
+counts) run on commands and background passes, not per message.
+
+**Mitigations already in place.** The inbound journal and outbox
+(`docs/OPERATIONS.md`) make writes durable and ordered without a database; the
+reconciliation pass is bounded to twenty channels per run.
+
+**Revisit when** a deployment has more than a few thousand bridged channels
+and the scans show up in `/matrix doctor` timings, or when encryption must run
+on more than one node. The first step then is a secondary index per account
+(one key listing its rooms) and incremental encryption persistence; SQL, using
+mautrix-go's SQL crypto store, is the step after that. The key-value
+migrations in `server/migrations.go` are the migration path.
 
 ## Future Enhancements
 

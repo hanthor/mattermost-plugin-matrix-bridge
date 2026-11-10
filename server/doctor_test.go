@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
@@ -14,7 +16,8 @@ func doctorFixture(t *testing.T) (*Plugin, *fakeSynapse) {
 	t.Helper()
 	hs := newFakeSynapse(t)
 	hs.whoami = "@_mattermost_bridge:example.com"
-	p, _ := newMirrorTestBridge(t, hs)
+	p, api := newMirrorTestBridge(t, hs)
+	api.On("GetChannel", mock.Anything).Return(&model.Channel{Id: "chan-1"}, nil).Maybe()
 	p.configuration.EnableSync = true
 	p.configuration.MatrixASToken = "as"
 	p.configuration.MatrixHSToken = "hs"
@@ -126,4 +129,18 @@ func TestDoctorSaysWhenAChannelIsReadOnly(t *testing.T) {
 	require.NoError(t, p.kvstore.Set(cutoverReadOnlyKeyPrefix+"chan-1", []byte("1")))
 
 	assert.True(t, strings.Contains(p.Doctor("chan-1"), "This channel is read-only"))
+}
+
+func TestDoctorSaysWhenAChannelUsesTheSharedChannelsPath(t *testing.T) {
+	hs := newFakeSynapse(t)
+	hs.whoami = "@_mattermost_bridge:example.com"
+	p, api := newMirrorTestBridge(t, hs)
+	api.On("GetChannel", "chan-1").Return(&model.Channel{Id: "chan-1", Shared: model.NewPointer(true)}, nil).Maybe()
+	p.configuration.EnableSync = true
+	hs.members = []string{"@_mattermost_bridge:example.com"}
+	require.NoError(t, p.kvstore.Set(kvstore.BuildChannelMappingKey("chan-1"), []byte("!room:example.com")))
+	require.NoError(t, p.kvstore.Set(kvstore.BuildRoomMappingKey("!room:example.com"), []byte("chan-1")))
+
+	checks := p.doctorChecks("chan-1")
+	assert.Contains(t, titles(checks, doctorWarn), "Delivery path")
 }
