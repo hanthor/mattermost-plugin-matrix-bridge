@@ -414,6 +414,41 @@ func (p *Plugin) handleMatrixCallEvent(event MatrixEvent, channelID string) erro
 	return p.updateMatrixCall(&rec, event.Sender, event.Timestamp)
 }
 
+// handleLegacyCallEvent follows the one-to-one call events most clients send
+// in direct messages (m.call.invite, answer, hangup, reject) and keeps the same
+// card post in step. An invite starts the call, an answer joins the callee, and
+// a hangup or rejection ends it for both.
+func (p *Plugin) handleLegacyCallEvent(event MatrixEvent, channelID string) error {
+	cfg := p.getConfiguration()
+	if cfg.callsMode() == callsModeOff || p.matrixToMattermostBridge == nil {
+		return nil
+	}
+	var rec matrixCallRecord
+	known := loadJSON(p.kvstore, matrixCallKeyPrefix+event.RoomID, &rec)
+	if !known || rec.Ended {
+		rec = matrixCallRecord{ChannelID: channelID, RoomID: event.RoomID, Members: map[string]callMember{}}
+	}
+	if rec.Members == nil {
+		rec.Members = map[string]callMember{}
+	}
+	switch event.Type {
+	case "m.call.invite", "m.call.answer":
+		member := callMember{User: event.Sender}
+		if lifetime, ok := event.Content["lifetime"].(float64); ok && lifetime > 0 {
+			member.Expires = event.Timestamp + int64(lifetime)
+		}
+		rec.Members[event.Sender] = member
+		rec.SeenMembers = true
+	case "m.call.hangup", "m.call.reject":
+		rec.Members = map[string]callMember{}
+	default:
+		return nil
+	}
+	rec.LastEvent = event.Timestamp
+	rec.prune(time.Now().UnixMilli())
+	return p.updateMatrixCall(&rec, event.Sender, event.Timestamp)
+}
+
 // updateMatrixCall starts, updates or ends the card for the record.
 func (p *Plugin) updateMatrixCall(rec *matrixCallRecord, starter string, nowMs int64) error {
 	switch {
@@ -675,6 +710,7 @@ func (p *Plugin) StartCall(mattermostUserID, channelID, title string) (string, e
 	}
 	if _, err := p.matrixClient.SetRoomState(roomID, widgetStateEventType, callWidgetID(channelID), widget, ""); err != nil {
 		p.logger.LogWarn("Could not add the call widget to the room", "error", err, "room_id", roomID)
+		p.askForWidgetPower(roomID, err)
 	}
 
 	// Announce it in Matrix as the person who started it.
@@ -717,4 +753,19 @@ func (p *Plugin) StartCall(mattermostUserID, channelID, title string) (string, e
 		return "", err
 	}
 	return joinURL, nil
+}
+
+// askForWidgetPower tells a room, once, that the bridge bot cannot add the call
+// widget because it may not set room state. The call still works: the
+// announcement carries the join link, so it falls back to a link only.
+func (p *Plugin) askForWidgetPower(roomID string, cause error) {
+	if !strings.Contains(cause.Error(), "M_FORBIDDEN") && !strings.Contains(cause.Error(), "403") {
+		return
+	}
+	key := "widget_power_asked_" + roomID
+	if data, _ := p.kvstore.Get(key); len(data) > 0 {
+		return
+	}
+	_ = p.kvstore.Set(key, []byte("1"))
+	_ = p.matrixClient.SendNotice(roomID, "ℹ️ The bridge cannot show calls in this room's call panel because it is not allowed to change room settings. Calls started from Mattermost still work through the join link. To get the panel, give the bridge bot moderator rights (power level 50) in this room.")
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/matrix-org/complement/b"
 	"github.com/matrix-org/complement/client"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
@@ -98,6 +99,39 @@ func TestCalls(t *testing.T) {
 		})
 		assert.Equal(t, body.Get("url").Str, card.Props["join_url"])
 		capabilities.Verify(t, "calls.join", true)
+	})
+
+	legacyStart := time.Now().UnixMilli()
+	t.Run("the legacy one-to-one call events used in direct messages make a card too", func(t *testing.T) {
+		// Homeservers only allow these events in private rooms.
+		channel := h.CreateChannel("legacy-call", "Legacy call")
+		roomID := h.CreateMappedRoomWith(alice, channel.Id, map[string]any{"name": "Legacy call", "preset": "private_chat", "invite": []string{h.BridgeBotUserID()}})
+		alice.SendEventSynced(t, roomID, b.Event{Type: "m.call.invite", Content: map[string]any{
+			"call_id": "legacy-1", "version": "1", "lifetime": 60000,
+			"offer": map[string]any{"type": "offer", "sdp": "v=0"},
+		}})
+		var card *model.Post
+		WaitFor(t, bridgeTimeout, "the card for the legacy call", func() bool {
+			posts, _, err := h.Admin.GetPostsForChannel(ctx, channel.Id, 0, 50, "", false, false)
+			if err != nil {
+				return false
+			}
+			for _, id := range posts.Order {
+				p := posts.Posts[id]
+				if p.Type == "custom_matrix_call" && p.CreateAt > legacyStart && p.Props["end_at"] == float64(0) {
+					card = p
+					return true
+				}
+			}
+			return false
+		})
+		require.NotNil(t, card)
+
+		alice.SendEventSynced(t, roomID, b.Event{Type: "m.call.hangup", Content: map[string]any{"call_id": "legacy-1", "version": "1"}})
+		WaitFor(t, bridgeTimeout, "the card to show the end", func() bool {
+			p, _, err := h.Admin.GetPost(ctx, card.Id, "")
+			return err == nil && containsFold(p.Message, "Call ended")
+		})
 	})
 }
 

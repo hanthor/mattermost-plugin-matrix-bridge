@@ -241,6 +241,8 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		return p.matrixToMattermostBridge.syncMatrixRedactionToMattermost(event, channelID)
 	case callMemberEventLegacy, callMemberEventRTC:
 		return p.handleMatrixCallEvent(event, channelID)
+	case "m.call.invite", "m.call.answer", "m.call.hangup", "m.call.reject":
+		return p.handleLegacyCallEvent(event, channelID)
 	case pinnedEventsType:
 		if event.Sender == p.BridgeBotUserID() {
 			return nil
