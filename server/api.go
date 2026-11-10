@@ -36,6 +36,7 @@ func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Req
 	metricsRouter.Use(p.MetricsAuthorizationRequired)
 	metricsRouter.HandleFunc("", p.handlePrometheusMetrics).Methods(http.MethodGet)
 	router.HandleFunc(ssoTokenPath, p.handleSSOToken).Methods(http.MethodPost)
+	router.HandleFunc("/widget", p.handleWidget).Methods(http.MethodGet)
 	p.registerUIRoutes(router)
 
 	router.ServeHTTP(w, r)

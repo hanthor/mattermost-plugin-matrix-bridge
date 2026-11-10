@@ -29,11 +29,13 @@ func TestBridgeInfoIsSetWhenMappedAndClearedWhenUnmapped(t *testing.T) {
 	require.NoError(t, p.kvstore.Set(kvstore.BuildChannelMappingKey("ch1"), []byte("!room:example.com")))
 	p.syncBridgeInfo("ch1")
 
-	require.Len(t, hs.states, 2, "both the stable and the unstable event types are set")
+	require.Len(t, hs.states, 3, "both bridge-information event types and the widget are set")
 	assert.Contains(t, hs.states[0], "!room:example.com")
 	assert.Contains(t, hs.states[0], `"id":"mattermost"`)
 	assert.Contains(t, hs.states[0], "https://chat.example.com/main/channels/town-square")
 	assert.Contains(t, hs.states[1], "uk.half-shot.bridge")
+	assert.Contains(t, hs.states[2], "im.vector.modular.widgets")
+	assert.Contains(t, hs.states[2], "https://chat.example.com/plugins/com.mattermost.plugin-matrix-bridge/widget?channel=ch1\\u0026sig=")
 	require.Len(t, notices, 1, "the channel is told once that it is now bridged")
 	assert.Contains(t, notices[0], "now bridged to a Matrix room")
 	p.syncBridgeInfo("ch1")
@@ -42,7 +44,9 @@ func TestBridgeInfoIsSetWhenMappedAndClearedWhenUnmapped(t *testing.T) {
 	// Unmapped: the event is emptied in the room it was set in.
 	require.NoError(t, p.kvstore.Delete(kvstore.BuildChannelMappingKey("ch1")))
 	p.syncBridgeInfo("ch1")
-	require.Len(t, hs.states, 6)
-	assert.Contains(t, hs.states[4], "!room:example.com")
-	assert.Contains(t, hs.states[4], " {}")
+	require.Len(t, hs.states, 9)
+	assert.Contains(t, hs.states[6], "!room:example.com")
+	assert.Contains(t, hs.states[6], " {}")
+	assert.Contains(t, hs.states[8], "im.vector.modular.widgets")
+	assert.Contains(t, hs.states[8], " {}")
 }

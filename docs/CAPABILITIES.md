@@ -138,7 +138,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
-| Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
+| Matrix widget showing the Mattermost channel | Mattermost → Matrix | ✅ | A bridged room carries a widget (im.vector.modular.widgets) that shows the channel's name, team, purpose and member count with a button to open it in Mattermost. The page is served by the plugin and only loads with an address signed for that channel; it is removed when the channel is unmapped. Needs the bot to have power to set state in the room. |
 | Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | ✅ | In a direct message with the bot: help, whoami, link, login, logout, unlink. In a bridged or unbridged room: rooms, status, link-room <team>/<channel> and unlink-room, run as the linked Mattermost account through the same slash commands (so Mattermost's permissions apply) and needing moderator rights in the room. |
 | Channel shows the linked room in Mattermost | Mattermost → Matrix | ✅ | The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself. |
 | Post menu: Open in Matrix and Copy Matrix event ID | Mattermost → Matrix | ✅ | Both actions appear on posts that were synced to Matrix. Open in Matrix uses Element Web when its address is configured and matrix.to otherwise. The server route is tested against a real homeserver; the menu itself is covered by webapp unit tests only. |
@@ -183,7 +183,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 90
+- ✅ supported: 91
 - 🟡 partial: 4
-- ❌ gap: 6
+- ❌ gap: 5
 - — n/a: 0
