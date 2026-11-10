@@ -12,11 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 )
 
 func TestIdentityStoreLinkLifecycle(t *testing.T) {
-	store := newIdentityStore(NewMemoryKVStore())
+	store := newIdentityStore(NewMemoryKVStore(), nil)
 
 	code, err := store.CreateCode("mm-user-1")
 	require.NoError(t, err)
@@ -68,7 +69,7 @@ func TestIdentityStoreLinkLifecycle(t *testing.T) {
 }
 
 func TestIdentityStoreExpiredCode(t *testing.T) {
-	store := newIdentityStore(NewMemoryKVStore())
+	store := newIdentityStore(NewMemoryKVStore(), nil)
 	expired, _ := json.Marshal(identityCode{MattermostUserID: "mm", ExpiresAt: 1})
 	require.NoError(t, store.kv.Set(identityCodeKeyPrefix+"OLDCODE1", expired))
 	_, err := store.Redeem("OLDCODE1", "@alice:example.com")
@@ -162,4 +163,40 @@ func TestPuppetClientAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer alice-token", gotAuth)
 	assert.NotContains(t, gotQuery, "user_id=", "puppets act as themselves")
+}
+
+func TestAccessTokensAreSealedAtRest(t *testing.T) {
+	kv := NewMemoryKVStore()
+	box := func() *secretbox.Box { return secretbox.New("as-token", "identity-token") }
+	store := newIdentityStore(kv, box)
+	code, err := store.CreateCode("mm-1")
+	require.NoError(t, err)
+	_, err = store.Redeem(code, "@a:example.com")
+	require.NoError(t, err)
+	_, err = store.SetToken("@a:example.com", "syt_secret")
+	require.NoError(t, err)
+
+	raw, _ := kv.Get(identityLinkKeyPrefix + "mm-1")
+	assert.NotContains(t, string(raw), "syt_secret", "the token must not be readable in the store")
+	link, ok := store.Link("mm-1")
+	require.True(t, ok)
+	assert.Equal(t, "syt_secret", link.AccessToken)
+
+	// A different secret cannot read it; the person has to log in again.
+	other := newIdentityStore(kv, func() *secretbox.Box { return secretbox.New("rotated", "identity-token") })
+	link, ok = other.Link("mm-1")
+	require.True(t, ok)
+	assert.False(t, link.Puppeted())
+}
+
+func TestPlainTokensFromEarlierVersionsAreUpgraded(t *testing.T) {
+	kv := NewMemoryKVStore()
+	require.NoError(t, kv.Set(identityLinkKeyPrefix+"mm-1", []byte(`{"mattermost_user_id":"mm-1","matrix_user_id":"@a:example.com","access_token":"syt_old"}`)))
+	store := newIdentityStore(kv, func() *secretbox.Box { return secretbox.New("as-token", "identity-token") })
+
+	link, ok := store.Link("mm-1")
+	require.True(t, ok)
+	assert.Equal(t, "syt_old", link.AccessToken)
+	raw, _ := kv.Get(identityLinkKeyPrefix + "mm-1")
+	assert.NotContains(t, string(raw), "syt_old")
 }

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,7 +25,23 @@ const ssoTokenMaxBody = 16 << 10
 
 var ssoHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
+// ssoRequestsPerMinute limits calls per client address; MAS makes one call per
+// sign-in.
+const ssoRequestsPerMinute = 30
+
+var ssoLimiter = newAddressLimiter(ssoRequestsPerMinute, time.Minute)
+
 func (p *Plugin) handleSSOToken(w http.ResponseWriter, r *http.Request) {
+	// Only when Matrix Authentication Service is set up to use it.
+	if p.getConfiguration().MASURL == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not available"})
+		return
+	}
+	if !ssoLimiter.Allow(clientAddress(r)) {
+		w.Header().Set("Retry-After", "60")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		return
+	}
 	cfg := p.API.GetConfig()
 	if cfg == nil || cfg.ServiceSettings.SiteURL == nil || *cfg.ServiceSettings.SiteURL == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the site URL is not configured"})
@@ -80,4 +98,59 @@ func dropEmptyTokenFields(body []byte) []byte {
 		return body
 	}
 	return out
+}
+
+// clientAddress is the caller's address: the first X-Forwarded-For entry
+// Mattermost adds, else the connection's.
+func clientAddress(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return strings.TrimSpace(strings.Split(xff, ",")[0])
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// addressLimiter allows n requests per window for each address, counting in
+// fixed windows. It forgets addresses as their windows pass.
+type addressLimiter struct {
+	mu     sync.Mutex
+	n      int
+	window time.Duration
+	seen   map[string]*addressWindow
+}
+
+type addressWindow struct {
+	start time.Time
+	count int
+}
+
+func newAddressLimiter(n int, window time.Duration) *addressLimiter {
+	return &addressLimiter{n: n, window: window, seen: map[string]*addressWindow{}}
+}
+
+// Allow reports whether the address may make another request now.
+func (l *addressLimiter) Allow(addr string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	if len(l.seen) > 4096 {
+		for k, w := range l.seen {
+			if now.Sub(w.start) >= l.window {
+				delete(l.seen, k)
+			}
+		}
+	}
+	w := l.seen[addr]
+	if w == nil || now.Sub(w.start) >= l.window {
+		l.seen[addr] = &addressWindow{start: now, count: 1}
+		return true
+	}
+	if w.count >= l.n {
+		return false
+	}
+	w.count++
+	return true
 }

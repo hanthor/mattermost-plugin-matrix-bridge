@@ -515,7 +515,8 @@ untouched.
 To also have your Mattermost messages appear from your own Matrix account
 (double puppeting), send the bot `!mattermost login <access_token>` (Element:
 Settings → Help & About → Access Token). The token is verified against the
-homeserver and must belong to you. `!mattermost logout` removes it,
+homeserver and must belong to you, and is stored encrypted. The bot removes your
+message from the room where it can; otherwise delete it yourself. `!mattermost logout` removes it,
 `!mattermost whoami` shows the current state, and `/matrix unlink` (or
 `!mattermost unlink`) removes the link.
 

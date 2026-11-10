@@ -25,6 +25,7 @@ type configuration struct {
 	MatrixServerURL      string `json:"matrix_server_url"`
 	MatrixASToken        string `json:"matrix_as_token"`
 	MatrixHSToken        string `json:"matrix_hs_token"`
+	MetricsToken         string `json:"metrics_token"` // read-only credential for /metrics; falls back to the homeserver token when empty
 	EnableSync           bool   `json:"enable_sync"`
 	EnableDirectMessages bool   `json:"enable_direct_messages"` // Bridge direct and group messages whose participants all agreed
 	EnableEncryption     bool   `json:"enable_encryption"`      // Bridge end-to-end encrypted Matrix rooms (bridge bot holds the keys)

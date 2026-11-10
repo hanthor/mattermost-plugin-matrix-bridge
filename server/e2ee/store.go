@@ -20,6 +20,8 @@ import (
 	"maunium.net/go/mautrix/crypto/olm"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
+
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 )
 
 // KV is the slice of the plugin key-value store the crypto store needs.
@@ -45,6 +47,7 @@ type Store struct {
 	*crypto.MemoryStore
 
 	kv        KV
+	box       *secretbox.Box // seals the pickle key; nil stores it as is
 	pickleKey []byte
 
 	dirty    atomic.Bool
@@ -57,8 +60,8 @@ type Store struct {
 
 // NewStore loads the snapshot from kv (or starts empty) and begins flushing
 // changes in the background. Call Close to flush and stop.
-func NewStore(kv KV) (*Store, error) {
-	s := &Store{kv: kv, stop: make(chan struct{}), done: make(chan struct{})}
+func NewStore(kv KV, box *secretbox.Box) (*Store, error) {
+	s := &Store{kv: kv, box: box, stop: make(chan struct{}), done: make(chan struct{})}
 	key, err := s.loadOrCreatePickleKey()
 	if err != nil {
 		return nil, err
@@ -72,19 +75,38 @@ func NewStore(kv KV) (*Store, error) {
 	return s, nil
 }
 
+// loadOrCreatePickleKey returns the key that encrypts the pickled Olm state.
+// It is stored sealed with a key derived from a secret outside the store, so a
+// copy of the store alone cannot open the pickles. A key stored in plain by an
+// earlier version is read as is and sealed on the next start.
 func (s *Store) loadOrCreatePickleKey() ([]byte, error) {
-	key, err := s.kv.Get(pickleKeyKey)
+	stored, err := s.kv.Get(pickleKeyKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read the pickle key")
 	}
-	if len(key) == 32 {
-		return key, nil
+	if secretbox.IsSealed(string(stored)) {
+		plain, _, err := s.box.Open(string(stored))
+		if err != nil {
+			return nil, errors.Wrap(err, "could not open the pickle key; the appservice token may have changed")
+		}
+		return []byte(plain), nil
 	}
-	key = make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return nil, err
+	key := stored
+	if len(key) != 32 {
+		key = make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, err
+		}
 	}
-	if err := s.kv.Set(pickleKeyKey, key); err != nil {
+	value := key
+	if s.box != nil {
+		sealed, err := s.box.Seal(string(key))
+		if err != nil {
+			return nil, err
+		}
+		value = []byte(sealed)
+	}
+	if err := s.kv.Set(pickleKeyKey, value); err != nil {
 		return nil, errors.Wrap(err, "could not save the pickle key")
 	}
 	return key, nil

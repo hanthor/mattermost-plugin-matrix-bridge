@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/pkg/errors"
@@ -76,7 +77,9 @@ func (b *MattermostToMatrixBridge) getGhostUser(userID string) (string, bool) {
 // puppeting); otherwise the ghost (or mirror-mode account) is used through the
 // appservice token.
 func (b *MattermostToMatrixBridge) resolveSender(userID string) (matrixUserID string, client *matrix.Client, puppet bool, err error) {
-	if link, ok := newIdentityStore(b.kvstore).Link(userID); ok && link.Puppeted() {
+	if link, ok := newIdentityStore(b.kvstore, func() *secretbox.Box {
+		return secretbox.New(secretFor(b.API, b.configGetter.getConfiguration()), "identity-token")
+	}).Link(userID); ok && link.Puppeted() {
 		return link.MatrixUserID, b.matrixClient.AsPuppet(link.AccessToken), true, nil
 	}
 	matrixUserID, err = b.GetMatrixUserID(userID)

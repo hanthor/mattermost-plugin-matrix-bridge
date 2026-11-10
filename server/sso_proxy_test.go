@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,7 @@ func TestSSOTokenPassesTheExchangeToMattermost(t *testing.T) {
 
 	hs := newFakeSynapse(t)
 	p, api := newMirrorTestBridge(t, hs)
+	p.configuration.MASURL = "https://mas.example.com"
 	cfg := &model.Config{}
 	cfg.SetDefaults()
 	cfg.ServiceSettings.SiteURL = model.NewPointer(mm.URL)
@@ -58,4 +60,35 @@ func TestSSOTokenOnlyAnswersPost(t *testing.T) {
 	rec := httptest.NewRecorder()
 	p.ServeHTTP(nil, rec, httptest.NewRequest(http.MethodGet, ssoTokenPath, nil))
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+}
+
+func TestSSOTokenIsOffUnlessMASIsConfigured(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, _ := newMirrorTestBridge(t, hs)
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(nil, rec, httptest.NewRequest(http.MethodPost, ssoTokenPath, strings.NewReader("x=y")))
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestSSOTokenIsRateLimitedPerAddress(t *testing.T) {
+	limiter := newAddressLimiter(3, time.Minute)
+	for i := 0; i < 3; i++ {
+		assert.True(t, limiter.Allow("203.0.113.5"))
+	}
+	assert.False(t, limiter.Allow("203.0.113.5"), "the fourth request in the window is refused")
+	assert.True(t, limiter.Allow("203.0.113.6"), "another address is unaffected")
+
+	short := newAddressLimiter(1, 10*time.Millisecond)
+	assert.True(t, short.Allow("a"))
+	assert.False(t, short.Allow("a"))
+	time.Sleep(15 * time.Millisecond)
+	assert.True(t, short.Allow("a"), "the window passes")
+}
+
+func TestClientAddressPrefersTheForwardedHeader(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "/", nil)
+	r.RemoteAddr = "10.0.0.1:5555"
+	assert.Equal(t, "10.0.0.1", clientAddress(r))
+	r.Header.Set("X-Forwarded-For", "198.51.100.7, 10.0.0.1")
+	assert.Equal(t, "198.51.100.7", clientAddress(r))
 }

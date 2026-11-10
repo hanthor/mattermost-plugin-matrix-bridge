@@ -28,7 +28,7 @@ func (p *Plugin) UserHasBeenDeactivated(_ *plugin.Context, user *model.User) {
 }
 
 func (p *Plugin) deactivateBridgeAccount(userID string) {
-	store := newIdentityStore(p.kvstore)
+	store := p.identity()
 	link, linked := store.Link(userID)
 	if linked && link.Puppeted() {
 		// Their own account: just stop sending as them.

@@ -35,14 +35,24 @@
                 "display_name": "Matrix Application Service Token",
                 "type": "generated",
                 "help_text": "Application Service token for creating ghost users (required for proper user attribution). Copy this token to your Matrix homeserver registration file as 'as_token'.",
-                "regenerate_help_text": "Generate a new secure token (remember to update your Matrix homeserver registration file)"
+                "regenerate_help_text": "Generate a new secure token (remember to update your Matrix homeserver registration file)",
+                "secret": true
             },
             {
                 "key": "matrix_hs_token",
                 "display_name": "Matrix Homeserver Token",
                 "type": "generated",
                 "help_text": "Homeserver token for Matrix Application Service registration. Copy this token to your Matrix homeserver registration file as 'hs_token'.",
-                "regenerate_help_text": "Generate a new secure token (remember to update your Matrix homeserver registration file)"
+                "regenerate_help_text": "Generate a new secure token (remember to update your Matrix homeserver registration file)",
+                "secret": true
+            },
+            {
+                "key": "metrics_token",
+                "display_name": "Metrics Token",
+                "type": "generated",
+                "secret": true,
+                "help_text": "Bearer token for Prometheus to read /metrics. When empty, the metrics endpoint accepts the homeserver token instead, which gives whoever configures Prometheus the credential the homeserver uses; set a separate token to avoid that.",
+                "regenerate_help_text": "Generate a new token (update the Prometheus scrape configuration)"
             },
             {
                 "key": "enable_sync",
@@ -77,7 +87,7 @@
                 "key": "enable_mirror_mode",
                 "display_name": "Enable Mirror Mode (Experimental)",
                 "type": "bool",
-                "help_text": "⚠️ ADVANCED: Takes over a DEDICATED Matrix homeserver to mirror Mattermost. Creates real Matrix accounts (@username:server-name) with synced profiles so people can log in with Element. Requires the mirror-mode user namespace in the registration file.",
+                "help_text": "\u26a0\ufe0f ADVANCED: Takes over a DEDICATED Matrix homeserver to mirror Mattermost. Creates real Matrix accounts (@username:server-name) with synced profiles so people can log in with Element. Requires the mirror-mode user namespace in the registration file.",
                 "default": false
             },
             {
@@ -94,7 +104,8 @@
                 "type": "text",
                 "help_text": "Not recommended. When empty, mirrored Matrix accounts are created without any credentials and people claim them with /matrix claim or shared login. When set, every mirrored account gets this one password.",
                 "placeholder": "",
-                "default": ""
+                "default": "",
+                "secret": true
             },
             {
                 "key": "matrix_admin_token",

@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
 
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 )
 
@@ -51,10 +53,20 @@ type identityCode struct {
 // identityStore persists links and codes in the plugin KV store.
 type identityStore struct {
 	kv kvstore.KVStore
+	// box seals access tokens at rest. It is looked up only when a token is
+	// read or written; nil means tokens are stored as they are.
+	box func() *secretbox.Box
 }
 
-func newIdentityStore(kv kvstore.KVStore) *identityStore {
-	return &identityStore{kv: kv}
+func newIdentityStore(kv kvstore.KVStore, box func() *secretbox.Box) *identityStore {
+	return &identityStore{kv: kv, box: box}
+}
+
+func (s *identityStore) secretBox() *secretbox.Box {
+	if s.box == nil {
+		return nil
+	}
+	return s.box()
 }
 
 // Link returns the link for a Mattermost user, if any.
@@ -66,6 +78,19 @@ func (s *identityStore) Link(mattermostUserID string) (*IdentityLink, bool) {
 	var link IdentityLink
 	if err := json.Unmarshal(data, &link); err != nil {
 		return nil, false
+	}
+	if link.AccessToken != "" {
+		token, legacy, err := s.secretBox().Open(link.AccessToken)
+		if err != nil {
+			// The key changed (for example the System Console secret was
+			// rotated): the person must run !mattermost login again.
+			link.AccessToken = ""
+		} else {
+			link.AccessToken = token
+			if legacy && s.secretBox() != nil {
+				_ = s.save(&link) // upgrade a plain token to a sealed one
+			}
+		}
 	}
 	return &link, true
 }
@@ -86,7 +111,15 @@ func (s *identityStore) LinkForMatrixUser(matrixUserID string) (*IdentityLink, b
 // save persists a link and the Matrix→Mattermost user mapping used by the
 // inbound bridge, so the linked Matrix account posts as the real user.
 func (s *identityStore) save(link *IdentityLink) error {
-	data, err := json.Marshal(link)
+	stored := *link
+	if stored.AccessToken != "" {
+		sealed, err := s.secretBox().Seal(stored.AccessToken)
+		if err != nil {
+			return errors.Wrap(err, "seal access token")
+		}
+		stored.AccessToken = sealed
+	}
+	data, err := json.Marshal(&stored)
 	if err != nil {
 		return errors.Wrap(err, "marshal identity link")
 	}
@@ -196,7 +229,7 @@ func randomCode(n int) (string, error) {
 
 // identity returns the plugin's identity store.
 func (p *Plugin) identity() *identityStore {
-	return newIdentityStore(p.kvstore)
+	return newIdentityStore(p.kvstore, p.tokenBox)
 }
 
 // CreateIdentityLinkCode implements command.PluginAccessor.
@@ -222,4 +255,21 @@ func (p *Plugin) UnlinkIdentity(mattermostUserID string) error {
 // BridgeBotUserID is the Matrix ID of the appservice sender.
 func (p *Plugin) BridgeBotUserID() string {
 	return fmt.Sprintf("@%s:%s", bridgeBotLocalpart, p.matrixServerDomain())
+}
+
+// secretFor returns the secret that at-rest keys are derived from. It has to
+// be held outside the key-value store, and a plugin cannot read Mattermost's
+// own at-rest encryption key, so it is the appservice token from the plugin
+// settings (a different table of the database). Rotating that token makes
+// stored personal tokens unreadable; people then run !mattermost login again.
+func secretFor(_ plugin.API, cfg *configuration) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.MatrixASToken
+}
+
+// tokenBox seals the personal access tokens used for double puppeting.
+func (p *Plugin) tokenBox() *secretbox.Box {
+	return secretbox.New(secretFor(p.API, p.getConfiguration()), "identity-token")
 }

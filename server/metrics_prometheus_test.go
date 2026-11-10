@@ -53,3 +53,28 @@ func TestPrometheusSamplesAreGroupedUnderOneHeader(t *testing.T) {
 	assert.Contains(t, out, `x_total{a="1"} 1`)
 	assert.Contains(t, out, `x_total{a="2"} 2`)
 }
+
+func TestADedicatedMetricsTokenReplacesTheHomeserverToken(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, _ := newMirrorTestBridge(t, hs)
+	p.configuration.EnableSync = true
+	p.configuration.MatrixHSToken = "hs-secret"
+	p.configuration.MetricsToken = "metrics-secret"
+
+	status := func(token string) int {
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		p.ServeHTTP(nil, rec, req)
+		return rec.Code
+	}
+	assert.Equal(t, http.StatusOK, status("metrics-secret"))
+	assert.Equal(t, http.StatusForbidden, status("hs-secret"), "whoever scrapes metrics must not hold the homeserver token")
+
+	// The metrics token does not open the appservice routes either.
+	req := httptest.NewRequest(http.MethodPost, "/_matrix/app/v1/ping", nil)
+	req.Header.Set("Authorization", "Bearer metrics-secret")
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(nil, rec, req)
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+}

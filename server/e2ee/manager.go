@@ -12,6 +12,8 @@ import (
 	"maunium.net/go/mautrix/crypto"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
+
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 )
 
 const (
@@ -34,6 +36,8 @@ type Options struct {
 	// IsManaged reports whether a user is one of the bridge's own accounts
 	// (ghosts), which never have devices and need no room keys.
 	IsManaged func(id.UserID) bool
+	// Box seals the key that protects the stored Olm state; nil leaves it plain.
+	Box *secretbox.Box
 }
 
 // Manager is the bridge bot's encryption device.
@@ -55,7 +59,7 @@ func New(ctx context.Context, opts Options) (*Manager, error) {
 	if opts.ServerURL == "" || opts.ASToken == "" || opts.BotUserID == "" {
 		return nil, errors.New("homeserver URL, appservice token and bot user are required")
 	}
-	store, err := NewStore(opts.KV)
+	store, err := NewStore(opts.KV, opts.Box)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,9 @@ import (
 )
 
 // MatrixEvent represents a Matrix event received via Application Service webhook
+// maxTransactionBodyBytes bounds one appservice transaction.
+const maxTransactionBodyBytes = 8 << 20
+
 type MatrixEvent struct {
 	Type       string         `json:"type"`
 	EventID    string         `json:"event_id"`
@@ -75,15 +78,10 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Read transaction body with size limit to prevent memory exhaustion attacks
-	// Use the server's configured MaxFileSize as the limit for webhook payloads
-	// This ensures consistency with the server's file handling limits
-	config := p.API.GetConfig()
-	maxRequestBodySize := int64(10 << 20) // Default 10MB fallback
-	if config.FileSettings.MaxFileSize != nil {
-		maxRequestBodySize = *config.FileSettings.MaxFileSize
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+	// A transaction is a handful of JSON events (a few KB in practice); files
+	// travel by media URL, not inside it. A fixed cap keeps a bad caller from
+	// making the plugin buffer what the file limit would allow.
+	r.Body = http.MaxBytesReader(w, r.Body, maxTransactionBodyBytes)
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
