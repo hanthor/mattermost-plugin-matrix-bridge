@@ -139,6 +139,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
+| System Console page: health, mappings and what is waiting | Mattermost → Matrix | ✅ | System Console → Plugins → Matrix bridge starts with a status page for system administrators: the doctor's checks with what to fix, every bridged channel with its Matrix room, the mode, mirror account and claim counts, and the number of changes that could not be delivered. The registration download is on the same page. |
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ✅ | A bridged room carries a widget (im.vector.modular.widgets) that shows the channel's name, team, purpose and member count with a button to open it in Mattermost. The page is served by the plugin and only loads with an address signed for that channel; it is removed when the channel is unmapped. Needs the bot to have power to set state in the room. |
 | Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | ✅ | In a direct message with the bot: help, whoami, link, login, logout, unlink. In a bridged or unbridged room: rooms, status, link-room <team>/<channel> and unlink-room, run as the linked Mattermost account through the same slash commands (so Mattermost's permissions apply) and needing moderator rights in the room. |
 | Channel shows the linked room in Mattermost | Mattermost → Matrix | ✅ | The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself. |
@@ -184,7 +185,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 92
+- ✅ supported: 93
 - 🟡 partial: 4
 - ❌ gap: 5
 - — n/a: 0
