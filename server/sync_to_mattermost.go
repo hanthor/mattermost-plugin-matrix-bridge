@@ -274,6 +274,14 @@ func (b *MatrixToMattermostBridge) syncMatrixFileToMattermost(event MatrixEvent,
 		return errors.Wrap(err, "failed to get or create Mattermost user for file")
 	}
 
+	// A file over the limit is not copied; say so rather than drop it silently.
+	if info, ok := event.Content["info"].(map[string]any); ok {
+		if size, ok := info["size"].(float64); ok && b.maxFileSize > 0 && int64(size) > b.maxFileSize {
+			b.noticeFileNotCopied(channelID, mattermostUserID, body, int64(size))
+			return nil
+		}
+	}
+
 	// Download the file from Matrix
 	fileData, err := b.downloadMatrixFile(url)
 	if err != nil {

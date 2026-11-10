@@ -605,6 +605,8 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 			MxcURI:   file.MxcURI,
 			MimeType: file.MimeType,
 			Size:     file.Size,
+			Width:    file.Width,
+			Height:   file.Height,
 			File:     file.File,
 		})
 	}

@@ -648,6 +648,7 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 		}
 		if fi.Size > p.maxFileSize {
 			p.logger.LogWarn("Skipping attachment larger than the configured limit", "file_id", fileID, "size", fi.Size, "limit", p.maxFileSize)
+			p.noticeFileNotSent(post.ChannelId, fi.Name, fi.Size)
 			continue
 		}
 		data, appErr := p.API.GetFile(fileID)
@@ -667,6 +668,8 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 			MxcURI:   mxcURI,
 			MimeType: fi.MimeType,
 			Size:     fi.Size,
+			Width:    fi.Width,
+			Height:   fi.Height,
 			File:     encFile,
 		})
 	}

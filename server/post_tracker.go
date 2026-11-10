@@ -106,6 +106,8 @@ type PendingFile struct {
 	MxcURI     string
 	MimeType   string
 	Size       int64
+	Width      int
+	Height     int
 	UploadedAt int64
 	// File describes the encrypted upload when the room is encrypted.
 	File map[string]any

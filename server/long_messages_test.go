@@ -5,7 +5,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,4 +74,32 @@ func TestFitMatrixMessage(t *testing.T) {
 	assert.LessOrEqual(t, len(body), maxMatrixEventBytes)
 	assert.True(t, utf8.ValidString(body))
 	assert.Contains(t, body, "cut off")
+}
+
+func TestHumanSize(t *testing.T) {
+	assert.Equal(t, "512 B", humanSize(512))
+	assert.Equal(t, "1.5 KB", humanSize(1536))
+	assert.Equal(t, "48.0 MB", humanSize(48*1024*1024))
+	assert.Equal(t, "2.0 GB", humanSize(2*1024*1024*1024))
+}
+
+func TestFileNotSentText(t *testing.T) {
+	assert.Equal(t, "📎 video.mp4 (80.0 MB) was not sent to Matrix: it is larger than the 50.0 MB limit.", fileNotSentText("video.mp4", 80<<20, 50<<20, true))
+	assert.Contains(t, fileNotSentText("a.zip", 80<<20, 50<<20, false), "not sent to Mattermost")
+}
+
+func TestOversizedMatrixFileIsAnnouncedInTheChannel(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	var posted []string
+	api.On("CreatePost", mock.MatchedBy(func(post *model.Post) bool {
+		posted = append(posted, post.Message)
+		return true
+	})).Return(&model.Post{Id: "p1"}, nil)
+	p.matrixToMattermostBridge.maxFileSize = 10 << 20
+
+	p.matrixToMattermostBridge.noticeFileNotCopied("ch1", "mm-ada", "film.mkv", 30<<20)
+	require.Len(t, posted, 1)
+	assert.Contains(t, posted[0], "film.mkv")
+	assert.Contains(t, posted[0], "30.0 MB")
 }

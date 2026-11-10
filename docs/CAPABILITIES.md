@@ -157,9 +157,15 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Invite a Matrix user from Mattermost | Mattermost → Matrix | ✅ | /matrix invite @user:server (channel managers and administrators) has the bridge bot invite a Matrix user into the channel's room. Already present people and the bridge's own accounts are refused. |
 | Rooms are repaired to match channel membership | Mattermost → Matrix | ✅ | /matrix repair (and a rotating background pass, twenty channels per run) adds the bridge accounts of channel members who are missing from the room and removes the accounts of people who left the channel. Real Matrix people, claimed mirror accounts and the bot are never touched; people with their own linked account must join themselves. |
 
+## Files
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Image size is sent with the file | Mattermost → Matrix | ✅ | Width and height of images (from Mattermost's file information) are sent in the file event's info, so Matrix clients can reserve space before the picture loads. Duration, thumbnails, voice messages and streaming of large files are not done yet. A file over the size limit is announced with a short notice on the other side instead of being dropped silently; that notice is covered by unit tests only. |
+
 ## Totals
 
-- ✅ supported: 61
+- ✅ supported: 62
 - 🟡 partial: 5
 - ❌ gap: 25
 - — n/a: 0

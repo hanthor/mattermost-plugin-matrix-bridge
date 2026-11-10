@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -84,3 +85,51 @@ func fitMatrixMessage(content map[string]any) {
 }
 
 const matrixTruncatedMarker = "\n\n… (cut off: the message is longer than Matrix allows)"
+
+// humanSize writes a byte count for people ("48.3 MB").
+func humanSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
+}
+
+// fileNotSentText is the notice for a file that is over the size limit.
+func fileNotSentText(name string, size, limit int64, toMatrix bool) string {
+	side := "Mattermost"
+	if toMatrix {
+		side = "Matrix"
+	}
+	return fmt.Sprintf("📎 %s (%s) was not sent to %s: it is larger than the %s limit.", name, humanSize(size), side, humanSize(limit))
+}
+
+// noticeFileNotSent tells people in the Matrix room that a Mattermost file did
+// not cross.
+func (p *Plugin) noticeFileNotSent(channelID, name string, size int64) {
+	roomID := p.roomIDForChannel(channelID)
+	if roomID == "" || p.matrixClient == nil {
+		return
+	}
+	if err := p.matrixClient.SendNotice(roomID, fileNotSentText(name, size, p.maxFileSize, true)); err != nil {
+		p.logger.LogDebug("Could not tell the room about a file that was too large", "error", err)
+	}
+}
+
+// noticeFileNotCopied tells people in the channel that a Matrix file did not
+// cross, as a post from the person who sent it.
+func (b *MatrixToMattermostBridge) noticeFileNotCopied(channelID, userID, name string, size int64) {
+	post := &model.Post{
+		UserId: userID, ChannelId: channelID,
+		Message: fileNotSentText(name, size, b.maxFileSize, false),
+		Props:   map[string]any{"from_matrix": true},
+	}
+	if _, appErr := b.API.CreatePost(post); appErr != nil {
+		b.logger.LogWarn("Could not tell the channel about a file that was too large", "error", appErr, "file", name)
+	}
+}
