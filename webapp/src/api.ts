@@ -34,6 +34,7 @@ export type ChannelStatus = {
     encryption_works?: boolean;
 };
 
+export type RoomMember = {matrix_id: string; homeserver: string; kind: 'matrix' | 'mattermost' | 'bot'};
 export type PostMatrix = {bridged: boolean; event_id?: string; room_id?: string; permalink?: string};
 export type Claim = {matrix_user_id: string; one_time_password: string};
 export type LinkCode = {code: string; bot_user: string; command: string; expires_min: number};
@@ -69,6 +70,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
     me: () => request<Me>('GET', '/me'),
     channel: (channelId: string) => request<ChannelStatus>('GET', `/channels/${channelId}`),
+    members: (channelId: string) => request<{members: RoomMember[]}>('GET', `/channels/${channelId}/members`),
     postMatrix: (postId: string) => request<PostMatrix>('GET', `/posts/${postId}/matrix`),
     claim: () => request<Claim>('POST', '/me/claim'),
     startLink: () => request<LinkCode>('POST', '/me/link'),

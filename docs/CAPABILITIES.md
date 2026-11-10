@@ -137,6 +137,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Post menu: Open in Matrix and Copy Matrix event ID | Mattermost → Matrix | ✅ | Both actions appear on posts that were synced to Matrix. Open in Matrix uses Element Web when its address is configured and matrix.to otherwise. The server route is tested against a real homeserver; the menu itself is covered by webapp unit tests only. |
 | Matrix clients show where a room is bridged to | Mattermost → Matrix | ✅ | A mapped room carries the bridge-information state event (m.bridge and Element's uk.half-shot.bridge) naming the Mattermost team, channel and link; it is emptied when the channel is unmapped. Needs the bot to be allowed to send state events, so rooms mapped with /matrix map where the bot is not a moderator keep no event (the doctor says so). Direct messages carry none. |
 | Import a Matrix room's history into Mattermost | Matrix → Mattermost | ✅ | /matrix history from-matrix (preview, then confirm, optionally limit=N) copies the room's earlier messages into the channel as the people who wrote them, with their original times, the latest edit of each message applied, and reactions. Events already imported, the bridge's own and ones that cannot be read (encrypted without keys) are skipped and counted. Safe to repeat; each run reads up to 2,000 events. Files larger than the limit are announced. Threads follow the live path. |
+| Panel lists who is in the Matrix room | Mattermost → Matrix | ✅ | The bridge panel lists the room's members with their Matrix ID and homeserver, marking people on Matrix, accounts the bridge runs for Mattermost people, and the bridge bot. |
 | Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. |
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 | History import: attachments and reactions | Mattermost → Matrix | ✅ | Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text. |
@@ -157,6 +158,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
 | Invite a Matrix user from Mattermost | Mattermost → Matrix | ✅ | /matrix invite @user:server (channel managers and administrators) has the bridge bot invite a Matrix user into the channel's room. Already present people and the bridge's own accounts are refused. |
+| Inviting a Mattermost person's account from Matrix adds them to the channel | Matrix → Mattermost | ✅ | When a Matrix person invites the account that represents a Mattermost person (their ghost or mirror account) to a bridged room, that person is added to the channel, if they belong to its team. Direct messages and the bridge's own accounts are not affected. |
 | Rooms are repaired to match channel membership | Mattermost → Matrix | ✅ | /matrix repair (and a rotating background pass, twenty channels per run) adds the bridge accounts of channel members who are missing from the room and removes the accounts of people who left the channel. Real Matrix people, claimed mirror accounts and the bot are never touched; people with their own linked account must join themselves. |
 
 ## Files
@@ -173,7 +175,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 78
+- ✅ supported: 80
 - 🟡 partial: 6
 - ❌ gap: 11
 - — n/a: 0

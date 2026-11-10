@@ -215,6 +215,12 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		}
 	}
 
+	// A person in Matrix inviting a Mattermost person's account adds them to
+	// the channel.
+	if p.handleInviteOfBridgeAccount(event, channelID) {
+		return nil
+	}
+
 	// Skip events from accounts only the bridge drives (ghosts and unclaimed
 	// mirror accounts) to prevent loops
 	if p.isBridgeAccount(event.Sender) {

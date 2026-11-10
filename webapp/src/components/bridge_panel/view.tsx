@@ -3,11 +3,12 @@
 
 import React from 'react';
 
-import type {ChannelStatus, Claim, LinkCode, Me} from '@/api';
+import type {ChannelStatus, Claim, LinkCode, Me, RoomMember} from '@/api';
 
 export type Props = {
     me: Me | null;
     channel: ChannelStatus | null;
+    members?: RoomMember[];
     error: string;
     claim: Claim | null;
     linkCode: LinkCode | null;
@@ -31,7 +32,18 @@ const secondaryButtonStyle: React.CSSProperties = {
 };
 const codeStyle: React.CSSProperties = {fontFamily: 'monospace', background: 'rgba(var(--center-channel-color-rgb), 0.08)', borderRadius: 4, padding: '2px 6px', wordBreak: 'break-all'};
 
-export function ChannelSection({channel, callURL, busy, onStartCall, onBridge}: Pick<Props, 'channel' | 'callURL' | 'busy' | 'onStartCall' | 'onBridge'>) {
+const kindLabel = (kind: RoomMember['kind']) => {
+    switch (kind) {
+    case 'bot':
+        return 'the bridge';
+    case 'mattermost':
+        return 'from Mattermost';
+    default:
+        return 'on Matrix';
+    }
+};
+
+export function ChannelSection({channel, members = [], callURL, busy, onStartCall, onBridge}: Pick<Props, 'channel' | 'members' | 'callURL' | 'busy' | 'onStartCall' | 'onBridge'>) {
     if (!channel) {
         return null;
     }
@@ -48,6 +60,23 @@ export function ChannelSection({channel, callURL, busy, onStartCall, onBridge}: 
                         {channel.room_name ? `${channel.room_name} · ` : ''}
                         {`${channel.participants} ${channel.participants === 1 ? 'person' : 'people'} in the room`}
                     </p>
+                    {members.length > 0 && (
+                        <ul
+                            style={{listStyle: 'none', padding: 0, margin: '8px 0'}}
+                            data-testid='bridge-members'
+                        >
+                            {members.map((m) => (
+                                <li
+                                    key={m.matrix_id}
+                                    style={{margin: '2px 0'}}
+                                >
+                                    <span style={{fontWeight: 600}}>{m.matrix_id}</span>
+                                    {` · ${kindLabel(m.kind)}`}
+                                    {m.kind === 'matrix' && ` · ${m.homeserver}`}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                     {channel.encrypted && (
                         <p
                             style={mutedStyle}

@@ -169,4 +169,19 @@ describe('BridgePanelView', () => {
         render(props({me: null, channel: null, error: 'not signed in'}));
         expect(container.querySelector('[data-testid="bridge-error"]')?.textContent).toBe('not signed in');
     });
+
+    test('lists who is in the room and where they are from', () => {
+        render(props({
+            channel: channel({mapped: true, participants: 3}),
+            members: [
+                {matrix_id: '@ada:matrix.org', homeserver: 'matrix.org', kind: 'matrix'},
+                {matrix_id: '@_mattermost_bob:example.com', homeserver: 'example.com', kind: 'mattermost'},
+                {matrix_id: '@_mattermost_bridge:example.com', homeserver: 'example.com', kind: 'bot'},
+            ],
+        }));
+        const list = container.querySelector('[data-testid="bridge-members"]')?.textContent || '';
+        expect(list).toContain('@ada:matrix.org · on Matrix · matrix.org');
+        expect(list).toContain('@_mattermost_bob:example.com · from Mattermost');
+        expect(list).toContain('@_mattermost_bridge:example.com · the bridge');
+    });
 });

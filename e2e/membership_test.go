@@ -110,3 +110,25 @@ func TestInviteMatrixUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, resp.Text, "bridge's own accounts")
 }
+
+// TestInvitingAMattermostPersonFromMatrix adds a Mattermost person to a
+// channel by inviting their account in the bridged room.
+func TestInvitingAMattermostPersonFromMatrix(t *testing.T) {
+	h := NewHarness(t)
+	ctx := context.Background()
+
+	alice := h.NewMatrixUser("alice")
+	channel := h.CreateChannel("invite-in", "Invite In")
+	roomID := h.CreateMappedRoom(alice, channel.Id, "Invite In")
+	carol, _ := h.CreateMattermostUser("carol")
+
+	_, _, err := h.Admin.GetChannelMember(ctx, channel.Id, carol.Id, "")
+	require.Error(t, err, "Carol is not in the channel yet")
+
+	alice.MustInviteRoom(t, roomID, h.GhostUserID(carol.Id))
+	WaitFor(t, bridgeTimeout, "Carol to be added to the channel", func() bool {
+		_, _, err := h.Admin.GetChannelMember(ctx, channel.Id, carol.Id, "")
+		return err == nil
+	})
+	capabilities.Verify(t, "membership.invite.in", true)
+}

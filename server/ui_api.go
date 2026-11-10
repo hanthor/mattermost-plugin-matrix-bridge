@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -26,6 +27,7 @@ func (p *Plugin) registerUIRoutes(router *mux.Router) {
 	ui.HandleFunc("/me/link", p.handleUIUnlink).Methods(http.MethodDelete)
 	ui.HandleFunc("/channels/{channelId}", p.handleUIChannel).Methods(http.MethodGet)
 	ui.HandleFunc("/posts/{postId}/matrix", p.handleUIPostMatrix).Methods(http.MethodGet)
+	ui.HandleFunc("/channels/{channelId}/members", p.handleUIMembers).Methods(http.MethodGet)
 	ui.HandleFunc("/channels/{channelId}/call", p.handleUICall).Methods(http.MethodPost)
 	ui.HandleFunc("/channels/{channelId}/bridge", p.handleUIBridge).Methods(http.MethodPost)
 }
@@ -348,4 +350,48 @@ func (p *Plugin) handleUIPostMatrix(w http.ResponseWriter, r *http.Request) {
 // is configured, otherwise through matrix.to.
 func (p *Plugin) eventLink(roomID, eventID string) string {
 	return buildEventLink(p.getConfiguration().ElementURL, roomID, eventID)
+}
+
+type uiMember struct {
+	MatrixID   string `json:"matrix_id"`
+	Homeserver string `json:"homeserver"`
+	// Kind is "matrix" for a person on Matrix, "mattermost" for an account the
+	// bridge runs for a Mattermost person, and "bot" for the bridge itself.
+	Kind string `json:"kind"`
+}
+
+// handleUIMembers lists who is in the channel's Matrix room.
+func (p *Plugin) handleUIMembers(w http.ResponseWriter, r *http.Request) {
+	userID := userFromContext(r)
+	channelID := mux.Vars(r)["channelId"]
+	if !model.IsValidId(channelID) || !p.API.HasPermissionToChannel(userID, channelID, model.PermissionReadChannel) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "no access to this channel"})
+		return
+	}
+	out := []uiMember{}
+	roomID := p.roomIDForChannel(channelID)
+	if roomID == "" || p.matrixClient == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"members": out})
+		return
+	}
+	ids, err := p.matrixClient.JoinedMembers(roomID)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not read the room's members"})
+		return
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		m := uiMember{MatrixID: id, Kind: "matrix"}
+		if i := strings.Index(id, ":"); i >= 0 {
+			m.Homeserver = id[i+1:]
+		}
+		switch {
+		case id == p.BridgeBotUserID():
+			m.Kind = "bot"
+		case p.isBridgeAccount(id):
+			m.Kind = "mattermost"
+		}
+		out = append(out, m)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"members": out})
 }
