@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -44,6 +45,8 @@ type BridgeUtilsConfig struct {
 	GhostUserCache      *Cache
 	RoomMappingCache    *Cache
 	RoomMembershipCache *Cache
+	// EmojiCreator makes a custom emoji; nil when that is not possible.
+	EmojiCreator func(ctx context.Context, name string, image []byte) error
 }
 
 // BridgeUtils contains common utilities used by both bridge types
@@ -60,6 +63,7 @@ type BridgeUtils struct {
 	ghostUserCache      *Cache
 	roomMappingCache    *Cache
 	roomMembershipCache *Cache
+	emojiCreator        func(ctx context.Context, name string, image []byte) error
 }
 
 // NewBridgeUtils creates a new BridgeUtils instance
@@ -77,6 +81,7 @@ func NewBridgeUtils(config BridgeUtilsConfig) *BridgeUtils {
 		ghostUserCache:      config.GhostUserCache,
 		roomMappingCache:    config.RoomMappingCache,
 		roomMembershipCache: config.RoomMembershipCache,
+		emojiCreator:        config.EmojiCreator,
 	}
 }
 

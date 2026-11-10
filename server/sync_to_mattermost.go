@@ -409,8 +409,15 @@ func (b *MatrixToMattermostBridge) syncMatrixReactionToMattermost(event MatrixEv
 		return errors.Wrap(err, "failed to get or create Mattermost user for reaction")
 	}
 
-	// Convert Matrix emoji to Mattermost format
+	// Convert Matrix emoji to Mattermost format; an image reaction becomes a
+	// custom emoji.
 	emojiName := b.convertMatrixEmojiToMattermost(key)
+	if strings.HasPrefix(key, "mxc://") {
+		shortcode, _ := event.Content["com.beeper.reaction.shortcode"].(string)
+		if name, ok := b.emojiForImageReaction(key, shortcode); ok {
+			emojiName = name
+		}
+	}
 
 	// Create Mattermost reaction
 	reaction := &model.Reaction{

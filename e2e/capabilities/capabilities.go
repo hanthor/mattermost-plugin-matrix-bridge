@@ -79,8 +79,8 @@ var All = []Capability{
 	// Reactions
 	{ID: "reactions.add_remove", Area: "Reactions", Name: "Add and remove reactions", Direction: MattermostToMatrix, Status: Supported, Notes: "4,400+ emoji names mapped to Unicode."},
 	{ID: "reactions.add_remove.in", Area: "Reactions", Name: "Add and remove reactions", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
-	{ID: "reactions.custom_emoji", Area: "Reactions", Name: "Custom emoji reactions", Direction: MattermostToMatrix, Status: Unsupported, Notes: "Should upload the emoji image and react with an mxc:// key (MSC4027)."},
-	{ID: "reactions.custom_emoji.in", Area: "Reactions", Name: "Image reactions (MSC4027)", Direction: MatrixToMattermost, Status: Unsupported, Notes: "Should create a custom emoji on the fly."},
+	{ID: "reactions.custom_emoji", Area: "Reactions", Name: "Custom emoji reactions", Direction: MattermostToMatrix, Status: Supported, Notes: "A reaction with a Mattermost custom emoji is sent as an image reaction (MSC4027): the key is the uploaded image (kept per emoji) and the shortcode names it. Clients without support show the shortcode. MSC2545 image packs are not published yet."},
+	{ID: "reactions.custom_emoji.in", Area: "Reactions", Name: "Image reactions (MSC4027)", Direction: MatrixToMattermost, Status: Supported, Notes: "An image reaction from Matrix becomes a Mattermost custom emoji with that shortcode, created once through a small bot account and reused; if it cannot be created the reaction falls back to its text."},
 
 	// Attachments
 	{ID: "files.attachments", Area: "Attachments", Name: "Files, images, audio, video", Direction: MattermostToMatrix, Status: Supported, Notes: "One m.file/m.image/m.audio/m.video event per attachment."},

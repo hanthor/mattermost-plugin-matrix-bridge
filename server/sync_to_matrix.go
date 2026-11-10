@@ -931,11 +931,15 @@ func (b *MattermostToMatrixBridge) addReactionToMatrixAt(reaction *model.Reactio
 		return errors.Wrap(err, "failed to ensure ghost user is in room for reaction")
 	}
 
-	// Convert Mattermost emoji name to Matrix reaction format
-	emoji := b.convertEmojiForMatrix(reaction.EmojiName)
+	// A custom emoji goes as an image, anything else as its Unicode character.
+	emoji, shortcode := b.reactionKeyFor(reaction.EmojiName)
 
 	// Send reaction as ghost user
-	_, err = sender.SendReactionAsGhostAt(matrixRoomID, matrixEventID, emoji, ghostUserID, timestampMs)
+	if shortcode != "" {
+		_, err = sender.SendImageReactionAt(matrixRoomID, matrixEventID, emoji, shortcode, ghostUserID, timestampMs)
+	} else {
+		_, err = sender.SendReactionAsGhostAt(matrixRoomID, matrixEventID, emoji, ghostUserID, timestampMs)
+	}
 	if err != nil {
 		// The same reaction already exists in the room (hooks can fire more than
 		// once for one reaction); the desired state is reached.
@@ -1006,7 +1010,7 @@ func (b *MattermostToMatrixBridge) removeReactionFromMatrix(reaction *model.Reac
 	}
 
 	// Convert Mattermost emoji name to Matrix reaction format for matching
-	emoji := b.convertEmojiForMatrix(reaction.EmojiName)
+	emoji, _ := b.reactionKeyFor(reaction.EmojiName)
 
 	// Get all reactions for this message from Matrix (as the ghost user)
 	relations, err := b.matrixClient.GetEventRelationsAsUser(matrixRoomID, matrixEventID, ghostUserID)

@@ -38,8 +38,8 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Add and remove reactions | Mattermost → Matrix | ✅ | 4,400+ emoji names mapped to Unicode. |
 | Add and remove reactions | Matrix → Mattermost | ✅ |  |
-| Custom emoji reactions | Mattermost → Matrix | ❌ | Should upload the emoji image and react with an mxc:// key (MSC4027). |
-| Image reactions (MSC4027) | Matrix → Mattermost | ❌ | Should create a custom emoji on the fly. |
+| Custom emoji reactions | Mattermost → Matrix | ✅ | A reaction with a Mattermost custom emoji is sent as an image reaction (MSC4027): the key is the uploaded image (kept per emoji) and the shortcode names it. Clients without support show the shortcode. MSC2545 image packs are not published yet. |
+| Image reactions (MSC4027) | Matrix → Mattermost | ✅ | An image reaction from Matrix becomes a Mattermost custom emoji with that shortcode, created once through a small bot account and reused; if it cannot be created the reaction falls back to its text. |
 
 ## Attachments
 
@@ -176,7 +176,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 86
+- ✅ supported: 88
 - 🟡 partial: 4
-- ❌ gap: 8
+- ❌ gap: 6
 - — n/a: 0

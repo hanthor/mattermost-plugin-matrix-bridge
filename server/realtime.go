@@ -115,22 +115,25 @@ func (p *Plugin) realtimeLoop(ctx context.Context) {
 	}
 }
 
-// realtimeBot makes sure the bot account and its token exist.
+// realtimeBot makes sure the event bot account and its token exist.
 func (p *Plugin) realtimeBot() (botID, token string, err error) {
-	botID, err = p.API.EnsureBotUser(&model.Bot{
-		Username: realtimeBotUsername, DisplayName: "Matrix bridge events",
-		Description: "Reads typing events for the Matrix bridge",
-	})
+	return p.serviceBotToken(realtimeBotUsername, "Matrix bridge events", "Reads typing events for the Matrix bridge", realtimeTokenKey)
+}
+
+// serviceBotToken makes sure a small bot account and an access token for it
+// exist; the token is kept sealed in the key-value store.
+func (p *Plugin) serviceBotToken(username, displayName, description, kvKey string) (botID, token string, err error) {
+	botID, err = p.API.EnsureBotUser(&model.Bot{Username: username, DisplayName: displayName, Description: description})
 	if err != nil {
 		return "", "", err
 	}
-	box := secretbox.New(secretFor(p.API, p.getConfiguration()), "realtime-token")
-	if data, kerr := p.kvstore.Get(realtimeTokenKey); kerr == nil && len(data) > 0 {
+	box := secretbox.New(secretFor(p.API, p.getConfiguration()), "service-token-"+username)
+	if data, kerr := p.kvstore.Get(kvKey); kerr == nil && len(data) > 0 {
 		if plain, _, oerr := box.Open(string(data)); oerr == nil && plain != "" {
 			return botID, plain, nil
 		}
 	}
-	created, appErr := p.API.CreateUserAccessToken(&model.UserAccessToken{UserId: botID, Description: "Matrix bridge event stream"})
+	created, appErr := p.API.CreateUserAccessToken(&model.UserAccessToken{UserId: botID, Description: displayName})
 	if appErr != nil {
 		return "", "", appErr
 	}
@@ -138,7 +141,7 @@ func (p *Plugin) realtimeBot() (botID, token string, err error) {
 	if serr != nil {
 		return "", "", serr
 	}
-	_ = p.kvstore.Set(realtimeTokenKey, []byte(sealed))
+	_ = p.kvstore.Set(kvKey, []byte(sealed))
 	return botID, created.Token, nil
 }
 

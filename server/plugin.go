@@ -256,6 +256,7 @@ func (p *Plugin) initBridges() {
 		GhostUserCache:      p.ghostUserCache,
 		RoomMappingCache:    p.roomMappingCache,
 		RoomMembershipCache: p.roomMembershipCache,
+		EmojiCreator:        p.createEmojiAsBot,
 	})
 
 	// Create bridge instances

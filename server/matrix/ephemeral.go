@@ -85,3 +85,24 @@ func (c *Client) KickUser(roomID, userID, reason string) error {
 	}
 	return c.sendJSONAsUser(http.MethodPost, path, body, "")
 }
+
+// SendImageReactionAt reacts with an image (MSC4027): the key is the image's
+// mxc URI and the shortcode names it for clients that show text.
+func (c *Client) SendImageReactionAt(roomID, eventID, mxc, shortcode, userID string, timestampMs int64) (*SendEventResponse, error) {
+	if c.asToken == "" {
+		return nil, errors.New("application service token not configured")
+	}
+	if err := c.waitForRateLimit(c.messageLimiter, "Reaction sending"); err != nil {
+		return nil, err
+	}
+	content := map[string]any{
+		"m.relates_to": map[string]any{
+			"rel_type": "m.annotation",
+			"event_id": eventID,
+			"key":      mxc,
+		},
+		"com.beeper.reaction.shortcode":     shortcode,
+		"org.matrix.msc4027.image_reaction": true,
+	}
+	return c.sendEventAsUserAt(roomID, "m.reaction", content, userID, timestampMs)
+}
