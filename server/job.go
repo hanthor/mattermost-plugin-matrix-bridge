@@ -8,4 +8,5 @@ func (p *Plugin) runJob() {
 	p.sweepCalls()
 	p.reconcileSome()
 	p.sweepSentEvents()
+	p.sweepChannelStates()
 }

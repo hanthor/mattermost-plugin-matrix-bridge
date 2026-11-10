@@ -116,10 +116,10 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Power levels ↔ channel admin | Matrix → Mattermost | ❌ |  |
 | New channel creates a room | Mattermost → Matrix | ✅ | Public and private channels; DMs on first message. |
 | Inviting the bot creates a channel | Matrix → Mattermost | ❌ | Only /matrix join from Mattermost today. |
-| Channel name/header → room name/topic | Mattermost → Matrix | ❌ | Mattermost has no channel-updated hook; needs polling or websocket. |
+| Channel name/header → room name/topic | Mattermost → Matrix | ✅ | A rename becomes the room name and a header change becomes the topic, as soon as Mattermost's system post announces it. A sweep every 15 minutes catches anything missed. |
 | Room name/topic → channel name/header | Matrix → Mattermost | ✅ |  |
-| Archive ↔ tombstone/leave | Mattermost → Matrix | ❌ |  |
-| Tombstone ↔ archive | Matrix → Mattermost | ❌ |  |
+| Archive ↔ tombstone/leave | Mattermost → Matrix | ✅ | Archiving a channel posts a notice in the room and the bridge bot leaves; restoring the channel rejoins and says so. |
+| Tombstone ↔ archive | Matrix → Mattermost | ✅ | A tombstoned room archives its channel. |
 | Direct and group messages between Mattermost users | Mattermost → Matrix | ✅ | Opt-in: an administrator turns on Bridge Direct Messages and everyone in a conversation runs /matrix dm on; then new messages go to a private Matrix room. /matrix dm off unbridges. Earlier messages are not copied. |
 | Direct messages | Matrix → Mattermost | ❌ | Mattermost refuses direct channels with remote users ("Cannot create a direct channel with a remote user"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users. |
 | Team ↔ space | Mattermost → Matrix | 🟡 | Spaces are created and rooms added; team membership is not mirrored. |
@@ -173,7 +173,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 71
+- ✅ supported: 74
 - 🟡 partial: 6
-- ❌ gap: 18
+- ❌ gap: 15
 - — n/a: 0

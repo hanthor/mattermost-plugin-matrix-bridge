@@ -319,6 +319,7 @@ func (p *Plugin) InvalidateChannelMapping(channelID string) {
 	// bridge-information event.
 	go p.publishChannelInvalidation(channelID)
 	go p.syncBridgeInfoSafely(channelID)
+	go p.baselineChannelState(channelID)
 }
 
 // GetConfiguration returns the plugin configuration
@@ -596,6 +597,14 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 	// Join and leave notices are already mirrored as room membership; relaying
 	// the system post too would show them twice in Matrix.
 	if post.IsJoinLeaveMessage() {
+		return
+	}
+
+	// A rename, header or purpose change and archiving each leave a system
+	// post: that is the cue to bring the room's name, topic and archived notice
+	// up to date. Such posts are not relayed as messages.
+	if isChannelStatePost(post.Type) {
+		go p.syncChannelStateByID(post.ChannelId)
 		return
 	}
 

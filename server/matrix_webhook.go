@@ -246,6 +246,11 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 			return nil
 		}
 		return p.syncMatrixPins(event, channelID)
+	case "m.room.tombstone":
+		if event.Sender == p.BridgeBotUserID() {
+			return nil
+		}
+		return p.archiveChannelFromMatrix(channelID)
 	case "m.room.name":
 		return p.syncMatrixRoomNameToMattermost(event, channelID)
 	case "m.room.topic":
