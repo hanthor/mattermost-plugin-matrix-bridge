@@ -201,6 +201,9 @@ type Client struct {
 	// crypto is shared by every copy of the client (see AsPuppet): the optional
 	// encryptor for outgoing events and what is known about encrypted rooms.
 	crypto *clientCrypto
+
+	// adapter slows requests down when the homeserver answers 429.
+	adapter *rateAdapter
 }
 
 // waitForRateLimit applies rate limiting for the specified operation
@@ -294,14 +297,16 @@ func NewClientWithLoggerAndRateLimit(serverURL, asToken, remoteID string, logger
 		ForceAttemptHTTP2:   true,             // Try HTTP/2 if available
 	}
 
+	adapter := newRateAdapter()
 	client := &Client{
+		adapter:   adapter,
 		crypto:    &clientCrypto{},
 		serverURL: serverURL,
 		asToken:   asToken,
 		remoteID:  remoteID,
 		httpClient: &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: transport,
+			Transport: &rateAwareTransport{base: transport, adapter: adapter, logger: logger},
 		},
 		logger:          logger,
 		rateLimitConfig: rateLimitConfig,
@@ -321,6 +326,7 @@ func NewClientWithLoggerAndRateLimit(serverURL, asToken, remoteID string, logger
 		client.inviteLimiter = NewTokenBucket(rateLimitConfig.Invites)
 		client.registrationLimiter = NewTokenBucket(rateLimitConfig.Registration)
 		client.joinLimiter = NewTokenBucket(rateLimitConfig.Joins)
+		adapter.attach(client.roomCreationLimiter, client.messageLimiter, client.inviteLimiter, client.registrationLimiter, client.joinLimiter)
 	} else {
 		logger.LogWarn("Matrix client initialized with rate limiting DISABLED - may encounter 429 errors")
 	}
@@ -1950,9 +1956,13 @@ func (c *Client) sendTextMessage(req MessageRequest, rootEventID string) (*SendE
 
 	// Add threading if provided (takes priority over post grouping)
 	if req.ThreadEventID != "" {
+		// Clients without thread support show the message as a reply to the
+		// thread's root (the fallback in the Matrix spec).
 		content["m.relates_to"] = map[string]any{
-			"rel_type": "m.thread",
-			"event_id": req.ThreadEventID,
+			"rel_type":        "m.thread",
+			"event_id":        req.ThreadEventID,
+			"is_falling_back": true,
+			"m.in_reply_to":   map[string]any{"event_id": req.ThreadEventID},
 		}
 	} else if rootEventID != "" {
 		// Add relation to root event if no threading (for post grouping)
@@ -2003,9 +2013,13 @@ func (c *Client) sendFileMessage(req MessageRequest, file FileAttachment, rootEv
 
 	// Add threading if provided (takes priority over post grouping)
 	if req.ThreadEventID != "" {
+		// Clients without thread support show the message as a reply to the
+		// thread's root (the fallback in the Matrix spec).
 		content["m.relates_to"] = map[string]any{
-			"rel_type": "m.thread",
-			"event_id": req.ThreadEventID,
+			"rel_type":        "m.thread",
+			"event_id":        req.ThreadEventID,
+			"is_falling_back": true,
+			"m.in_reply_to":   map[string]any{"event_id": req.ThreadEventID},
 		}
 	} else if rootEventID != "" {
 		// Add relation to root event if no threading (for post grouping)

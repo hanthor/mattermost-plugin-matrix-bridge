@@ -1,9 +1,11 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/stretchr/testify/assert"
 )
@@ -175,4 +177,25 @@ func TestGetPostIDFromMatrixEvent_MatrixAPIFallback(t *testing.T) {
 	// Call function - should fall back to Matrix API and return empty (since we don't have a real Matrix server)
 	result := bridge.getPostIDFromMatrixEvent(eventID, channelID)
 	assert.Equal(t, "", result, "Should return empty when Matrix API fallback fails")
+}
+
+func TestReplyQuoteShowsAuthorAndFirstLine(t *testing.T) {
+	hs := newFakeSynapse(t)
+	p, api := newMirrorTestBridge(t, hs)
+	long := strings.Repeat("x", 300)
+	api.On("GetPost", "p-short").Return(&model.Post{Id: "p-short", UserId: "mm-ada", Message: "First line\nsecond line"}, nil)
+	api.On("GetPost", "p-long").Return(&model.Post{Id: "p-long", UserId: "mm-ada", Message: long}, nil)
+	api.On("GetPost", "p-file").Return(&model.Post{Id: "p-file", UserId: "mm-ada", FileIds: []string{"f"}}, nil)
+	api.On("GetPost", "p-empty").Return(&model.Post{Id: "p-empty", UserId: "mm-ada"}, nil)
+	api.On("GetPost", "p-gone").Return(nil, &model.AppError{Message: "not found"})
+	api.On("GetUser", "mm-ada").Return(&model.User{Id: "mm-ada", Username: "ada"}, nil)
+	b := p.matrixToMattermostBridge
+
+	assert.Equal(t, "> **@ada:** First line", b.replyQuote("p-short"))
+	got := b.replyQuote("p-long")
+	assert.True(t, strings.HasSuffix(got, "…"))
+	assert.Less(t, len([]rune(got)), 170)
+	assert.Equal(t, "> **@ada:** (attachment)", b.replyQuote("p-file"))
+	assert.Empty(t, b.replyQuote("p-empty"))
+	assert.Empty(t, b.replyQuote("p-gone"))
 }

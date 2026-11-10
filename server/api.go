@@ -29,6 +29,11 @@ func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Req
 		asRouter.HandleFunc("/ping", p.handleAppServicePing).Methods(http.MethodPost)
 	}
 
+	// Prometheus metrics, guarded like the appservice routes: the homeserver
+	// token as a bearer token (bearer_token in the scrape configuration).
+	metricsRouter := router.PathPrefix("/metrics").Subrouter()
+	metricsRouter.Use(p.MatrixAuthorizationRequired)
+	metricsRouter.HandleFunc("", p.handlePrometheusMetrics).Methods(http.MethodGet)
 	router.HandleFunc(ssoTokenPath, p.handleSSOToken).Methods(http.MethodPost)
 	p.registerUIRoutes(router)
 

@@ -48,6 +48,12 @@ func NewEventQueue(workerCount int, bufferSize int, logger Logger, metrics *Metr
 	}
 }
 
+// Depth is how many tasks are waiting for a worker.
+func (q *EventQueue) Depth() int { return len(q.taskChan) }
+
+// Capacity is how many tasks can wait.
+func (q *EventQueue) Capacity() int { return cap(q.taskChan) }
+
 // Start spawns the worker goroutines
 func (q *EventQueue) Start() {
 	for i := 0; i < q.workerCount; i++ {

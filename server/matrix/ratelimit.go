@@ -61,6 +61,7 @@ type TokenBucket struct {
 	lastRefill time.Time     // last refill time
 	interval   time.Duration // minimum interval between operations
 	lastOp     time.Time     // last operation time (for interval-based limiting)
+	factor     float64       // 0 < factor <= 1: share of the configured rate in use (adaptive back-off)
 }
 
 // NewTokenBucket creates a new token bucket with the given configuration
@@ -72,8 +73,29 @@ func NewTokenBucket(config TokenBucketConfig) *TokenBucket {
 		lastRefill: time.Now(),
 		interval:   config.Interval,
 		lastOp:     time.Time{},
+		factor:     1,
 	}
 	return tb
+}
+
+// effectiveRate is the configured rate scaled by the adaptive factor.
+// The caller holds the lock.
+func (tb *TokenBucket) effectiveRate() float64 {
+	if tb.factor <= 0 || tb.factor > 1 {
+		return tb.rate
+	}
+	return tb.rate * tb.factor
+}
+
+// SetRateFactor scales the bucket's refill rate (1 is the configured rate).
+// Values outside (0, 1] reset it.
+func (tb *TokenBucket) SetRateFactor(f float64) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if f <= 0 || f > 1 {
+		f = 1
+	}
+	tb.factor = f
 }
 
 // isDisabled checks if rate limiting is disabled
@@ -104,7 +126,7 @@ func (tb *TokenBucket) Allow() bool {
 	// Token bucket algorithm
 	// Add tokens based on time elapsed
 	elapsed := now.Sub(tb.lastRefill)
-	tb.tokens += elapsed.Seconds() * tb.rate
+	tb.tokens += elapsed.Seconds() * tb.effectiveRate()
 	if tb.tokens > float64(tb.burstSize) {
 		tb.tokens = float64(tb.burstSize)
 	}
@@ -174,7 +196,7 @@ func (tb *TokenBucket) getWaitTime() time.Duration {
 	if tb.rate <= 0 {
 		return DisabledWaitTime // Effectively disabled
 	}
-	return time.Duration(tokensNeeded / tb.rate * float64(time.Second))
+	return time.Duration(tokensNeeded / tb.effectiveRate() * float64(time.Second))
 }
 
 // DefaultRateLimitConfig returns sensible defaults for production use

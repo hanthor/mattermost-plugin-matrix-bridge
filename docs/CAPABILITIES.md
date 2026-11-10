@@ -18,6 +18,8 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Redactions | Matrix → Mattermost | ✅ |  |
 | Threads / replies | Mattermost → Matrix | ✅ | m.thread relation. |
 | Threads / replies | Matrix → Mattermost | ✅ | m.thread and m.in_reply_to land in the post's thread. |
+| Reply fallbacks keep context on both sides | Mattermost → Matrix | ✅ | Thread messages sent to Matrix also carry m.in_reply_to with is_falling_back, so clients without thread support show a reply to the thread's root. |
+| Matrix replies keep the quoted message in Mattermost | Matrix → Mattermost | ✅ | A Matrix reply to a message that is not the thread's root appears in the thread with the replied-to message quoted (author and first line), since Mattermost threads have no reply-to. |
 | User mentions | Mattermost → Matrix | ✅ | m.mentions and pills. |
 | User mentions | Matrix → Mattermost | ✅ |  |
 | @channel / @here ↔ @room | Mattermost → Matrix | ❌ | @channel should set m.mentions.room; @room should become @channel. |
@@ -131,9 +133,17 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 | History import: attachments and reactions | Mattermost → Matrix | ✅ | Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text. |
 
+## Operations
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Prometheus metrics endpoint | Mattermost → Matrix | ✅ | GET <site>/plugins/com.mattermost.plugin-matrix-bridge/metrics with the homeserver token as a bearer token: message and error counters, API latency, queue depth, accounts, rate-limit state and whether encryption is ready. |
+| Retried homeserver transactions are handled once | Matrix → Mattermost | ✅ | Handled transaction IDs are kept in the key-value store, so a retry that reaches another node or follows a restart is recognised. Two nodes receiving the same transaction at the same instant are not guarded against. |
+| Adapts to the homeserver's 429 answers | Mattermost → Matrix | ✅ | Honours retry_after_ms: requests pause until the stated time, the refused request is repeated (up to three times), and the bridge's own limiters slow down until the homeserver stops complaining. Covered by unit tests with a fake homeserver; not exercised against a real rate-limited Synapse. |
+
 ## Totals
 
-- ✅ supported: 46
+- ✅ supported: 51
 - 🟡 partial: 4
 - ❌ gap: 25
 - — n/a: 0

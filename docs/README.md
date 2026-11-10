@@ -12,6 +12,7 @@
 | [BATCH_OPERATIONS.md](BATCH_OPERATIONS.md) | Event queue and batching design | Developers |
 | [CALLS_AND_MIRROR_MODE.md](CALLS_AND_MIRROR_MODE.md) | Design: how calls are bridged, and the scenarios mirror mode must handle for a migration | Admins, developers |
 | [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md) | Experimental mirror mode on a dedicated homeserver | Admins |
+| [OPERATIONS.md](OPERATIONS.md) | Metrics for Prometheus, rate limits, retries, what is per node | Admins |
 | [ENCRYPTION.md](ENCRYPTION.md) | End-to-end encrypted rooms: turning it on, what it means, limits | Admins |
 | [MAS_SETUP.md](MAS_SETUP.md) | Shared login: Matrix Authentication Service with an OpenID Connect provider | Admins |
 | [../LOCAL_DEVELOPMENT.md](../LOCAL_DEVELOPMENT.md) | Docker Compose stack with Mattermost, Synapse and Element | Developers |

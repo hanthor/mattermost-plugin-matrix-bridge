@@ -86,6 +86,7 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 
 	// Check if this is a threaded message (reply)
 	var rootID string
+	var repliedToPostID string // the message a real (not fallback) reply points at
 	if relatesTo, exists := event.Content["m.relates_to"].(map[string]any); exists {
 		// Check for Matrix reply structure (m.in_reply_to)
 		if inReplyTo, hasInReplyTo := relatesTo["m.in_reply_to"].(map[string]any); hasInReplyTo {
@@ -93,6 +94,9 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 				// Find the Mattermost post ID for this Matrix event
 				var mattermostPostID string
 				if mattermostPostID = b.getPostIDFromMatrixEvent(parentEventID, channelID); mattermostPostID != "" {
+					if fallback, _ := relatesTo["is_falling_back"].(bool); !fallback {
+						repliedToPostID = mattermostPostID
+					}
 					// Found direct mapping, now get the actual thread root
 					rootID = b.getThreadRootFromPostID(mattermostPostID)
 					b.logger.LogDebug("Found Matrix reply to primary message", "matrix_event_id", event.EventID, "parent_event_id", parentEventID, "parent_post_id", mattermostPostID, "thread_root_id", rootID)
@@ -128,6 +132,14 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 					}
 				}
 			}
+		}
+	}
+
+	// Mattermost threads have no "reply to this message"; keep the context by
+	// quoting the message that was replied to when it is not the thread's root.
+	if repliedToPostID != "" && repliedToPostID != rootID {
+		if quote := b.replyQuote(repliedToPostID); quote != "" {
+			mattermostContent = quote + "\n\n" + mattermostContent
 		}
 	}
 
@@ -1343,4 +1355,33 @@ func (b *MatrixToMattermostBridge) removeUserFromChannel(userID, channelID strin
 
 	b.logger.LogDebug("Removed Matrix user from Mattermost channel", "user_id", userID, "channel_id", channelID)
 	return nil
+}
+
+const replyQuoteMaxRunes = 140
+
+// replyQuote renders the message a Matrix reply points at as a Markdown quote:
+// its author and the start of its first line.
+func (b *MatrixToMattermostBridge) replyQuote(postID string) string {
+	parent, appErr := b.API.GetPost(postID)
+	if appErr != nil || parent == nil {
+		return ""
+	}
+	text := strings.TrimSpace(parent.Message)
+	if i := strings.IndexAny(text, "\r\n"); i >= 0 {
+		text = strings.TrimSpace(text[:i])
+	}
+	if text == "" && len(parent.FileIds) > 0 {
+		text = "(attachment)"
+	}
+	if text == "" {
+		return ""
+	}
+	if runes := []rune(text); len(runes) > replyQuoteMaxRunes {
+		text = string(runes[:replyQuoteMaxRunes]) + "…"
+	}
+	author := ""
+	if user, appErr := b.API.GetUser(parent.UserId); appErr == nil && user != nil {
+		author = "**@" + user.Username + ":** "
+	}
+	return "> " + author + text
 }

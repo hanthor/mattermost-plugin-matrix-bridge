@@ -22,7 +22,7 @@ func TestConnectionPoolingConfiguration(t *testing.T) {
 	require.NotNil(t, client.httpClient, "HTTP client should be initialized")
 	require.NotNil(t, client.httpClient.Transport, "HTTP transport should be configured")
 
-	transport, ok := client.httpClient.Transport.(*http.Transport)
+	transport, ok := poolTransport(client)
 	require.True(t, ok, "Transport should be *http.Transport")
 
 	// Verify connection pooling settings
@@ -58,7 +58,7 @@ func TestConnectionReuseCapability(t *testing.T) {
 		TestRateLimitConfig(),
 	)
 
-	transport, ok := client.httpClient.Transport.(*http.Transport)
+	transport, ok := poolTransport(client)
 	require.True(t, ok, "Transport should be *http.Transport")
 
 	// Connection reuse is enabled when:
@@ -92,8 +92,8 @@ func TestMultipleClientsHaveIndependentPools(t *testing.T) {
 	assert.NotSame(t, client1.httpClient, client2.httpClient, "Clients should have independent HTTP clients")
 
 	// Each client should have its own transport
-	transport1, ok1 := client1.httpClient.Transport.(*http.Transport)
-	transport2, ok2 := client2.httpClient.Transport.(*http.Transport)
+	transport1, ok1 := poolTransport(client1)
+	transport2, ok2 := poolTransport(client2)
 	require.True(t, ok1 && ok2, "Both transports should be *http.Transport")
 	assert.NotSame(t, transport1, transport2, "Clients should have independent transports")
 }
@@ -113,7 +113,7 @@ func TestConnectionPoolingWithRateLimitDisabled(t *testing.T) {
 
 	require.NotNil(t, client.httpClient.Transport, "Transport should be configured even without rate limiting")
 
-	transport, ok := client.httpClient.Transport.(*http.Transport)
+	transport, ok := poolTransport(client)
 	require.True(t, ok, "Transport should be *http.Transport")
 	assert.Equal(t, 100, transport.MaxIdleConns, "Connection pooling should be configured")
 }
@@ -132,7 +132,17 @@ func TestNewClientWithRateLimitUsesPooling(t *testing.T) {
 
 	require.NotNil(t, client.httpClient.Transport, "Transport should be configured")
 
-	transport, ok := client.httpClient.Transport.(*http.Transport)
+	transport, ok := poolTransport(client)
 	require.True(t, ok, "Transport should be *http.Transport")
 	assert.Equal(t, 100, transport.MaxIdleConns, "Connection pooling should be configured")
+}
+
+// poolTransport is the connection pool underneath the rate-limit-aware wrapper.
+func poolTransport(c *Client) (*http.Transport, bool) {
+	wrapper, ok := c.httpClient.Transport.(*rateAwareTransport)
+	if !ok {
+		return nil, false
+	}
+	t, ok := wrapper.base.(*http.Transport)
+	return t, ok
 }

@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/mattermost/logr/v2"
@@ -49,40 +47,6 @@ func (t *MatrixTransaction) EphemeralEvents() []MatrixEvent {
 	return t.MSC2409Ephemeral
 }
 
-// processedTransactions stores transaction IDs to prevent duplicate processing
-var (
-	processedTransactions = make(map[string]time.Time)
-	transactionsMutex     sync.RWMutex
-)
-
-// cleanupOldTransactions removes transaction IDs older than 1 hour
-func (p *Plugin) cleanupOldTransactions() {
-	cutoff := time.Now().Add(-time.Hour)
-
-	// Create a list of transaction IDs to delete to avoid holding the lock during iteration
-	var toDelete []string
-
-	transactionsMutex.RLock()
-	for txnID, timestamp := range processedTransactions {
-		if timestamp.Before(cutoff) {
-			toDelete = append(toDelete, txnID)
-		}
-	}
-	transactionsMutex.RUnlock()
-
-	// Delete the old transactions with write lock
-	if len(toDelete) > 0 {
-		transactionsMutex.Lock()
-		for _, txnID := range toDelete {
-			// Double-check the timestamp in case it was updated between read and write lock
-			if timestamp, exists := processedTransactions[txnID]; exists && timestamp.Before(cutoff) {
-				delete(processedTransactions, txnID)
-			}
-		}
-		transactionsMutex.Unlock()
-	}
-}
-
 // handleMatrixTransaction processes a Matrix Application Service transaction
 func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request) {
 	// Verify HTTP method
@@ -104,12 +68,8 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 	// Authentication is handled by MatrixAuthorizationRequired middleware
 
 	// Check for duplicate transaction (idempotency)
-	transactionsMutex.RLock()
-	timestamp, exists := processedTransactions[txnID]
-	transactionsMutex.RUnlock()
-
-	if exists {
-		p.logger.LogDebug("Duplicate Matrix transaction ignored", "txn_id", txnID, "previous_timestamp", timestamp)
+	if p.transactionSeen(txnID) {
+		p.logger.LogDebug("Duplicate Matrix transaction ignored", "txn_id", txnID)
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("{}")); err != nil {
 			p.logger.LogWarn("Failed to write webhook response", "error", err)
@@ -146,13 +106,8 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Mark transaction as processed
-	transactionsMutex.Lock()
-	processedTransactions[txnID] = time.Now()
-	shouldCleanup := len(processedTransactions)%100 == 0
-	transactionsMutex.Unlock()
-
 	// Clean up old transactions periodically
-	if shouldCleanup {
+	if p.markTransaction(txnID) {
 		go p.cleanupOldTransactions()
 	}
 
