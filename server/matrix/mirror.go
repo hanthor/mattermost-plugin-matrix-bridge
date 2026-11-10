@@ -226,3 +226,42 @@ func (c *Client) DeactivateUserAsAdmin(adminToken, userID string) error {
 	}
 	return nil
 }
+
+// VerifiedEmailsAsAdmin returns the validated email addresses the homeserver
+// holds for an account, through the Synapse admin API.
+func (c *Client) VerifiedEmailsAsAdmin(adminToken, userID string) ([]string, error) {
+	if adminToken == "" {
+		return nil, errors.New("no admin token configured")
+	}
+	req, err := http.NewRequest(http.MethodGet, c.serverURL+"/_synapse/admin/v2/users/"+url.PathEscape(userID), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create request")
+	}
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to send request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("admin API returned %d: %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		ThreePIDs []struct {
+			Medium      string `json:"medium"`
+			Address     string `json:"address"`
+			ValidatedAt int64  `json:"validated_at"`
+		} `json:"threepids"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, errors.Wrap(err, "failed to parse the account")
+	}
+	var emails []string
+	for _, t := range out.ThreePIDs {
+		if t.Medium == "email" && t.ValidatedAt > 0 && t.Address != "" {
+			emails = append(emails, t.Address)
+		}
+	}
+	return emails, nil
+}

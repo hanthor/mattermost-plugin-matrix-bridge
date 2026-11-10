@@ -129,6 +129,13 @@
                 "secret": true
             },
             {
+                "key": "auto_link_by_email",
+                "display_name": "Link people by verified email",
+                "type": "bool",
+                "help_text": "When a Matrix person first writes in a bridged room, link them to the Mattermost account with the same verified email address instead of creating a separate account. Needs the Matrix Admin Access Token to read the Matrix account's verified email. Off by default.",
+                "default": false
+            },
+            {
                 "key": "matrix_admin_token",
                 "display_name": "Matrix Admin Access Token",
                 "type": "text",

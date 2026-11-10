@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -27,7 +28,8 @@ type fakeSynapse struct {
 	timeline     []map[string]any // room history returned by /messages, newest first
 	redactions   []string         // rooms an event was redacted in
 	redactFails  bool
-	states       []string // state events PUT: "room type/key body"
+	states       []string                    // state events PUT: "room type/key body"
+	threepids    map[string][]map[string]any // third-party identifiers by account
 	mu           sync.Mutex
 	existing     map[string]bool // accounts that already exist (natives)
 	created      []string
@@ -79,6 +81,13 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 				f.passwords[username] = pw
 			}
 			_ = json.NewEncoder(w).Encode(map[string]string{"user_id": "@" + username + ":example.com"})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_synapse/admin/v2/users/"):
+			if r.Header.Get("Authorization") != "Bearer admin-token" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			id, _ := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v2/users/"))
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": id, "threepids": f.threepids[id]})
 		case strings.HasPrefix(r.URL.Path, "/_synapse/admin/v2/users/"):
 			if r.Header.Get("Authorization") != "Bearer admin-token" {
 				w.WriteHeader(http.StatusForbidden)

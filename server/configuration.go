@@ -37,6 +37,7 @@ type configuration struct {
 	EnableMirrorMode          bool   `json:"enable_mirror_mode"`   // Hijack Matrix server to mirror Mattermost
 	MatrixServerDomain        string `json:"matrix_server_domain"` // e.g. "synapse" for @user:synapse
 	MirrorModePassword        string `json:"mirror_mode_password"` // Legacy: one shared password for every mirrored account
+	AutoLinkByEmail           bool   `json:"auto_link_by_email"`   // Link a Matrix person to the Mattermost account with the same verified email
 	MatrixAdminToken          string `json:"matrix_admin_token"`   // Synapse admin token; lets /matrix claim set a one-time password
 	// Matrix Authentication Service: when the homeserver delegates sign-in to
 	// MAS, mirror accounts are also created there and linked to the person's
