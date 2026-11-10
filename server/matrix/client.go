@@ -274,6 +274,9 @@ type MessageRequest struct {
 	Files          []FileAttachment `json:"files"`             // Optional: File attachments
 	ReplyToEventID string           `json:"reply_to_event_id"` // Optional: Event ID to reply to (for files)
 	Mentions       map[string]any   `json:"mentions"`          // Optional: Matrix mentions data (m.mentions field)
+	// ExtraContent is merged into the event content, for fields such as a
+	// per-message profile. It never replaces the fields the client sets itself.
+	ExtraContent map[string]any `json:"extra_content,omitempty"`
 	// Timestamp is the time in milliseconds the message should carry instead
 	// of now, for importing history. Only the application service honours it.
 	Timestamp int64 `json:"timestamp,omitempty"`
@@ -1951,6 +1954,12 @@ func (c *Client) sendTextMessage(req MessageRequest, rootEventID string) (*SendE
 	if req.HTMLMessage != "" {
 		content["format"] = "org.matrix.custom.html"
 		content["formatted_body"] = req.HTMLMessage
+	}
+
+	for k, v := range req.ExtraContent {
+		if _, set := content[k]; !set {
+			content[k] = v
+		}
 	}
 
 	// Add mentions if provided
