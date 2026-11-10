@@ -95,7 +95,9 @@ func (b *MattermostToMatrixBridge) ensureSenderInRoom(client *matrix.Client, mat
 	if !client.IsPuppet() {
 		return b.ensureGhostUserInRoom(matrixUserID, roomID, userID)
 	}
-	key := kvstore.BuildGhostRoomKey(userID, roomID)
+	// Kept apart from the ghost's key: unlinking must not make the ghost look
+	// as though it were still in the room the linked account joined.
+	key := "puppet:" + kvstore.BuildGhostRoomKey(userID, roomID)
 	if b.roomMembershipCache != nil {
 		if m, found := b.roomMembershipCache.Get(key); found && m == "joined" {
 			return nil

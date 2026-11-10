@@ -101,6 +101,13 @@ func TestIdentityLinking(t *testing.T) {
 		capabilities.Verify(t, "users.puppeting", true)
 	})
 
+	t.Run("after login the ghost has left and no shadow stays active", func(t *testing.T) {
+		require.Eventually(t, func() bool {
+			return !strings.Contains(h.JoinedMembers(roomID), h.GhostUserID(carol.Id))
+		}, 30*time.Second, time.Second, "carol's ghost must leave once alice sends as herself")
+		assert.Contains(t, h.JoinedMembers(roomID), alice.UserID)
+	})
+
 	t.Run("puppeted messages are not echoed back", func(t *testing.T) {
 		time.Sleep(3 * time.Second)
 		assert.Equal(t, 1, CountPostsWithMessage(t, h.Admin, channel.Id, "Carol as alice"))
