@@ -120,6 +120,10 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 	}
 }
 
+// bridgeNoticePostType marks the bridge's own notices: they are not relayed to
+// Matrix and not counted as history.
+const bridgeNoticePostType = "custom_matrix_bridge_notice"
+
 // announceBridging tells a channel's members that it is now connected to a
 // Matrix room, because they are otherwise not asked and what they write here
 // becomes readable there.
@@ -132,6 +136,7 @@ func (p *Plugin) announceBridging(channelID string) {
 	if _, appErr := p.API.CreatePost(&model.Post{
 		UserId:    botID,
 		ChannelId: channelID,
+		Type:      bridgeNoticePostType,
 		Message:   "🔗 This channel is now bridged to a Matrix room. Messages, edits, reactions and files posted here are copied there and can be read by everyone in that room, including people on other servers. Use `/matrix status` to see who is in it.",
 	}); appErr != nil {
 		p.logger.LogDebug("Could not post the bridging notice", "error", appErr, "channel_id", channelID)

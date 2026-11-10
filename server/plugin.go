@@ -616,6 +616,10 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 		return
 	}
 
+	if post.Type == bridgeNoticePostType {
+		return
+	}
+
 	// A rename, header or purpose change and archiving each leave a system
 	// post: that is the cue to bring the room's name, topic and archived notice
 	// up to date. Such posts are not relayed as messages.

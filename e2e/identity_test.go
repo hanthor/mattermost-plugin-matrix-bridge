@@ -106,6 +106,7 @@ func TestIdentityLinking(t *testing.T) {
 			return !strings.Contains(h.JoinedMembers(roomID), h.GhostUserID(carol.Id))
 		}, 30*time.Second, time.Second, "carol's ghost must leave once alice sends as herself")
 		assert.Contains(t, h.JoinedMembers(roomID), alice.UserID)
+		capabilities.Verify(t, "identity.link_retire_ghost", true)
 	})
 
 	t.Run("puppeted messages are not echoed back", func(t *testing.T) {

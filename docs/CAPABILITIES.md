@@ -103,9 +103,14 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Shared login with Mattermost as the identity provider | Matrix → Mattermost | ✅ | Mattermost is an OAuth 2.0 provider, not OpenID Connect, so MAS is configured without discovery and reads the person from /api/v4/users/me (docs/MAS_SETUP.md). Tested against a real Mattermost and MAS. |
 | Ghosts to mirror accounts migration | Mattermost → Matrix | ✅ | /matrix migrate ghosts-to-mirror (dry run first, then confirm) creates each mirror account, moves the room memberships, retires the ghost and switches the mode; it can be repeated after a failure. Covered by unit tests against a fake homeserver. |
 | Cut-over mode | Mattermost → Matrix | ✅ | Freezes accounts and rooms: nothing new is created, everything that exists keeps syncing. |
-| Linking retires the ghost and any Matrix-side shadow user | Mattermost → Matrix | ✅ | When a person enables double puppeting, their ghost leaves the bridged rooms, their own Matrix account takes its place (also in mention pills), and the remote shadow user that stood for them in Mattermost is deactivated. Unlinking brings the ghost back. |
 | Linking a native account retires the mirror account | Mattermost → Matrix | ✅ | When a person enables double puppeting with a native Matrix account, their mirror account leaves the bridged rooms, the native account is invited, and the old name stays reserved. A claimed mirror account is not made to leave. |
 | Team cut-over: read-only channels, pinned link, report, archive | Mattermost → Matrix | ✅ | /matrix migrate-team report | readonly | writable | archive (each changing step needs confirm). Read-only channels still receive what arrives from Matrix; the report compares members and messages not yet in each room. |
+
+## Identity
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Linking retires the ghost and any Matrix-side shadow user | Mattermost → Matrix | ✅ | When a person enables double puppeting, their ghost leaves the bridged rooms, their own Matrix account takes its place (also in mention pills), and the remote shadow user that stood for them in Mattermost is deactivated. Unlinking brings the ghost back. |
 
 ## Rooms
 
@@ -177,7 +182,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 88
+- ✅ supported: 89
 - 🟡 partial: 4
 - ❌ gap: 6
 - — n/a: 0
