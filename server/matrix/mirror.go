@@ -24,6 +24,15 @@ const sentEventTTL = 10 * time.Minute
 type sentEvents struct {
 	mu     sync.Mutex
 	events map[string]time.Time
+	shared SharedSentStore
+}
+
+// SharedSentStore keeps the record of sent events where every node of a
+// cluster can see it, so an echo that reaches another node than the one that
+// sent the event is still recognised.
+type SharedSentStore interface {
+	MarkSent(eventID string)
+	WasSent(eventID string) bool
 }
 
 func newSentEvents() *sentEvents {
@@ -37,6 +46,9 @@ func (s *sentEvents) record(eventID string) {
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.shared != nil {
+		go s.shared.MarkSent(eventID)
+	}
 	s.events[eventID] = now.Add(sentEventTTL)
 	if len(s.events) > 4096 {
 		for id, expires := range s.events {
@@ -52,13 +64,27 @@ func (s *sentEvents) has(eventID string) bool {
 		return false
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	expires, ok := s.events[eventID]
 	if ok && time.Now().After(expires) {
 		delete(s.events, eventID)
-		return false
+		ok = false
+	}
+	shared := s.shared
+	s.mu.Unlock()
+	if !ok && shared != nil {
+		return shared.WasSent(eventID)
 	}
 	return ok
+}
+
+// SetSharedSentStore makes the record of sent events visible to other nodes.
+func (c *Client) SetSharedSentStore(store SharedSentStore) {
+	if c.sent == nil {
+		return
+	}
+	c.sent.mu.Lock()
+	c.sent.shared = store
+	c.sent.mu.Unlock()
 }
 
 // RecordSentEvent notes an event ID that the bridge sent.

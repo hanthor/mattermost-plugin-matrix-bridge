@@ -8,8 +8,12 @@ The plugin serves Prometheus metrics at
 https://<mattermost>/plugins/com.mattermost.plugin-matrix-bridge/metrics
 ```
 
-It is guarded with the **homeserver token** (the `hs_token` in the appservice
-registration, shown in the plugin settings) as a bearer token:
+It is guarded with a bearer token. Set a dedicated **Metrics Token** in the
+plugin settings and use it for Prometheus; it opens `/metrics` and nothing else.
+Without one the **homeserver token** (`hs_token`) is accepted, as in earlier
+versions, which gives whoever runs Prometheus the credential the homeserver
+uses to post transactions to the bridge. Once a metrics token is set the
+homeserver token is no longer accepted on `/metrics`.
 
 ```yaml
 scrape_configs:
@@ -17,7 +21,7 @@ scrape_configs:
     metrics_path: /plugins/com.mattermost.plugin-matrix-bridge/metrics
     scheme: https
     authorization:
-      credentials: "<hs_token>"
+      credentials: "<metrics token>"
     static_configs:
       - targets: ["mattermost.example.com"]
 ```
@@ -88,10 +92,59 @@ recognised and not handled twice. Two nodes receiving the same transaction at
 the very same instant are not guarded against; a homeserver sends one
 transaction at a time to an appservice, so that does not happen in practice.
 
-## What is still per node
+## Running on several nodes
 
+Shared between nodes (key-value store or cluster events):
+
+- Transaction IDs, the inbound journal and the outbox.
+- The record of events the bridge sent, used to recognise their echo, so an
+  echo that reaches another node is still ignored.
+- The history-import lock: two nodes cannot import the same channel at once.
+- Mapping changes: `/matrix map`, `unmap`, `join`, `create` and DM changes tell
+  the other nodes to drop their cached mapping for the channel at once.
+
+Still per node:
+
+- Other caches (ghost accounts, room membership) expire on their own after
+  their time to live; a change on one node can take up to that long to show on
+  another.
 - The websocket-based extras (typing, presence) have no single-consumer
   election yet (#35).
-- The record of events the bridge sent itself (used to ignore their echo) is in
-  memory on each node.
+- The event queue and the reaction batcher are in memory; what they hold is
+  journaled, so a restart replays it.
 - Encryption needs a single node (see [ENCRYPTION.md](ENCRYPTION.md)).
+- A Mattermost server configuration change that does not touch the bridge's
+  settings no longer rebuilds the Matrix client, the bridges or the encryption
+  device.
+
+Not covered by an automated test: a real two-node Mattermost needs a license.
+The behaviours above are covered by unit tests that simulate a second node.
+
+## Secrets and what protects them
+
+| Secret | Where it lives | Protection |
+|---|---|---|
+| Personal Matrix access tokens (`!mattermost login`) | Key-value store | Sealed with AES-256-GCM; the key is derived from the appservice token in the plugin settings, which is kept apart from the key-value store. Tokens from earlier versions are sealed the next time they are read. |
+| Encryption key for the bot's Olm/Megolm state | Key-value store | Sealed in the same way. The state itself is encrypted with that key. |
+| Appservice, homeserver, metrics, admin and MAS secrets | Plugin settings | Declared secret, so the System Console masks them. |
+
+A copy of the key-value store alone (a database dump of that table, a support
+packet) therefore does not reveal tokens or encryption keys. Someone who also
+holds the plugin settings does, and so does anyone with the appservice token.
+
+**Rotating the appservice token** makes the sealed values unreadable. People
+with a personal token then fall back to a ghost until they send
+`!mattermost login` again, and the encryption state cannot be opened: the bridge
+refuses to start encryption rather than create a new device silently. Plan a
+rotation for a quiet time, and see [ENCRYPTION.md](ENCRYPTION.md) before
+rotating when encrypted rooms are bridged.
+
+## Public routes
+
+- `/sso/mattermost/token` is only served when **Matrix Authentication Service
+  URL** is set, and allows 30 requests a minute per client address.
+- A Matrix transaction larger than 8 MB is refused; real transactions are a few
+  kilobytes, because files travel as media links.
+- `!mattermost login <token>` messages are removed from the room by the bot
+  where it has the power to do so; otherwise the bot asks the person to delete
+  the message and to sign out of that session to get a new token.

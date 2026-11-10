@@ -14,6 +14,7 @@ import (
 	"maunium.net/go/mautrix/id"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/e2ee"
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 )
 
 // encryptionState holds the bridge bot's encryption device while encryption
@@ -74,6 +75,7 @@ func (p *Plugin) startEncryption() {
 				ASToken:   cfg.MatrixASToken,
 				BotUserID: id.UserID(p.BridgeBotUserID()),
 				KV:        p.kvstore,
+				Box:       secretbox.New(secretFor(p.API, cfg), "e2ee-pickle-key"),
 				Log:       zerolog.New(pluginLogWriter{p.logger}).Level(zerolog.InfoLevel),
 				IsManaged: func(u id.UserID) bool { return p.isBridgeAccount(string(u)) },
 			})

@@ -208,6 +208,9 @@ func (p *Plugin) doctorChannel(channelID string) []doctorCheck {
 	if encrypted, err := p.matrixClient.IsRoomEncrypted(roomID); err == nil && encrypted && !p.EncryptionSupported() {
 		add(doctorFail, "This room is encrypted", "and encrypted rooms are not switched on, so its messages are not bridged. See docs/ENCRYPTION.md.")
 	}
+	if channel, appErr := p.API.GetChannel(channelID); appErr == nil && channel != nil && channel.IsShared() {
+		add(doctorWarn, "Delivery path", "this channel is shared through Connected Workspaces, so its messages take the Shared Channels path. That path is not covered by the automated tests (they need a licensed server); every other channel uses the plugin-hook path. See docs/ARCHITECTURE.md, \"Two delivery paths\".")
+	}
 	if p.channelReadOnly(channelID) {
 		add(doctorWarn, "This channel is read-only", "from a cut-over: people cannot post here. `/matrix migrate-team writable confirm` undoes it.")
 	}

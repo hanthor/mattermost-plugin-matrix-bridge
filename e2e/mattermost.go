@@ -72,6 +72,9 @@ type BridgeConfig struct {
 	Encryption bool
 	// DirectMessages allows opt-in bridging of direct and group messages.
 	DirectMessages bool
+	// MASURL is the Matrix Authentication Service address; the SSO token
+	// route is only served when it is set.
+	MASURL string
 }
 
 // StartMattermost starts Postgres and Mattermost on the given network.
@@ -215,7 +218,7 @@ func (m *MattermostServer) InstallBridge(t *testing.T, ctx context.Context, admi
 
 // settings is the plugin's configuration as Mattermost stores it.
 func (cfg BridgeConfig) settings() map[string]any {
-	return map[string]any{
+	settings := map[string]any{
 		"matrix_server_url":      cfg.MatrixServerURL,
 		"matrix_server_domain":   cfg.MatrixServerDomain,
 		"matrix_as_token":        cfg.ASToken,
@@ -230,6 +233,10 @@ func (cfg BridgeConfig) settings() map[string]any {
 		"calls_mode":             cfg.CallsMode,
 		"element_call_url":       cfg.ElementCallURL,
 	}
+	if cfg.MASURL != "" {
+		settings["mas_url"] = cfg.MASURL
+	}
+	return settings
 }
 
 func envOr(key, fallback string) string {

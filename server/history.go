@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -31,8 +30,6 @@ const (
 	// historyStopAfter failures in a row end a run; the rest can be resumed.
 	historyStopAfter = 3
 )
-
-var historyRuns sync.Map // channel ID -> struct{}: imports in progress
 
 type historyPlan struct {
 	posts     []*model.Post
@@ -152,7 +149,8 @@ func (p *Plugin) ChannelHistoryStatus(channelID string) command.HistoryReport {
 	if data, err := p.kvstore.Get(historyReportKeyPrefix + channelID); err == nil && len(data) > 0 {
 		_ = json.Unmarshal(data, &r)
 	}
-	_, running := historyRuns.Load(channelID)
+	_, running := p.historyRuns.Load(channelID)
+	running = running || p.historyLockHeld(channelID)
 	r.Running = running
 	return r
 }
@@ -170,16 +168,22 @@ func (p *Plugin) StartChannelHistory(channelID string, limit int) error {
 	if err != nil {
 		return err
 	}
-	if _, busy := historyRuns.LoadOrStore(channelID, struct{}{}); busy {
+	if _, busy := p.historyRuns.LoadOrStore(channelID, struct{}{}); busy {
 		return errors.New("an import is already running for this channel")
+	}
+	if !p.acquireHistoryLock(channelID) {
+		p.historyRuns.Delete(channelID)
+		return errors.New("an import is already running for this channel (on another server)")
 	}
 	plan, err := p.planHistory(channelID, limit)
 	if err != nil {
-		historyRuns.Delete(channelID)
+		p.historyRuns.Delete(channelID)
+		p.releaseHistoryLock(channelID)
 		return err
 	}
 	go func() {
-		defer historyRuns.Delete(channelID)
+		defer p.historyRuns.Delete(channelID)
+		defer p.releaseHistoryLock(channelID)
 		p.runHistoryImport(channelID, roomID, plan)
 	}()
 	return nil
@@ -219,6 +223,7 @@ func (p *Plugin) runHistoryImport(channelID, roomID string, plan *historyPlan) {
 		}
 		if (i+1)%25 == 0 {
 			p.saveHistoryReport(channelID, report)
+			p.refreshHistoryLock(channelID)
 		}
 	}
 	report.Pending = 0

@@ -64,6 +64,12 @@ type Plugin struct {
 	// inbox journals Matrix events until their handlers finish.
 	inbox inboxState
 
+	// recentTransactions is the in-memory part of transaction deduplication
+	// (transaction ID -> time handled); historyRuns marks channels whose history
+	// import is running on this node.
+	recentTransactions sync.Map
+	historyRuns        sync.Map
+
 	// outbox journals Mattermost changes until the homeserver has them.
 	outbox outboxState
 
@@ -221,6 +227,7 @@ func (p *Plugin) initMatrixClient() {
 	rateLimitMode := matrix.ParseRateLimitingMode(config.RateLimitingMode)
 	rateLimitConfig := matrix.GetRateLimitConfigByMode(rateLimitMode)
 	p.matrixClient = matrix.NewClientWithRateLimit(config.MatrixServerURL, config.MatrixASToken, p.remoteID, p.API, rateLimitConfig)
+	p.matrixClient.SetSharedSentStore(sharedSentStore{p})
 	if mgr := p.cryptoManager(); mgr != nil {
 		p.matrixClient.SetRoomCrypto(mgr)
 	}
@@ -308,7 +315,9 @@ func (p *Plugin) InvalidateChannelMapping(channelID string) {
 	if p.roomMappingCache != nil {
 		p.roomMappingCache.Delete(kvstore.BuildChannelMappingKey(channelID))
 	}
-	// A mapping changed: refresh the room's bridge-information event.
+	// A mapping changed: tell the other nodes, and refresh the room's
+	// bridge-information event.
+	go p.publishChannelInvalidation(channelID)
 	go p.syncBridgeInfoSafely(channelID)
 }
 
@@ -648,6 +657,7 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 		}
 		if fi.Size > p.maxFileSize {
 			p.logger.LogWarn("Skipping attachment larger than the configured limit", "file_id", fileID, "size", fi.Size, "limit", p.maxFileSize)
+			p.noticeFileNotSent(post.ChannelId, fi.Name, fi.Size)
 			continue
 		}
 		data, appErr := p.API.GetFile(fileID)
@@ -667,6 +677,8 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 			MxcURI:   mxcURI,
 			MimeType: fi.MimeType,
 			Size:     fi.Size,
+			Width:    fi.Width,
+			Height:   fi.Height,
 			File:     encFile,
 		})
 	}

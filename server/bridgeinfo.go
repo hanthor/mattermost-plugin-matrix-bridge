@@ -89,12 +89,7 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 		return firstErr
 	}
 
-	roomID := ""
-	if identifier, err := p.mattermostToMatrixBridge.GetMatrixRoomID(channelID); err == nil && identifier != "" {
-		if resolved, err := p.matrixClient.ResolveRoomAlias(identifier); err == nil {
-			roomID = resolved
-		}
-	}
+	roomID := p.roomIDForChannel(channelID)
 
 	if previous != "" && previous != roomID {
 		if err := setEverywhere(previous, map[string]any{}); err != nil {
@@ -121,4 +116,21 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 func (p *Plugin) setBridgeState(roomID, eventType, key string, content map[string]any) error {
 	_, err := p.matrixClient.SetRoomState(roomID, eventType, key, content, p.BridgeBotUserID())
 	return err
+}
+
+// roomIDForChannel returns the Matrix room ID a channel is mapped to, or ""
+// when it is not mapped or the homeserver cannot say.
+func (p *Plugin) roomIDForChannel(channelID string) string {
+	if p.matrixClient == nil || p.mattermostToMatrixBridge == nil {
+		return ""
+	}
+	identifier, err := p.mattermostToMatrixBridge.GetMatrixRoomID(channelID)
+	if err != nil || identifier == "" {
+		return ""
+	}
+	roomID, err := p.matrixClient.ResolveRoomAlias(identifier)
+	if err != nil {
+		return ""
+	}
+	return roomID
 }

@@ -220,6 +220,14 @@ Map to room ID:
 
 ---
 
+### `/matrix invite`
+
+Invites a Matrix user into the room this channel is mapped to, as the bridge bot. Use it to bring in a colleague or guest who works in Matrix without leaving Mattermost.
+
+**Usage:** `/matrix invite @ada:example.org`
+
+Channel managers and system administrators can run it. It refuses the bridge's own accounts and people already in the room. The bridge bot needs permission to invite in the room: rooms the bridge creates allow it; in a room you mapped with `/matrix map`, give the bot moderator rights (power level 50).
+
 ### `/matrix unmap`
 
 Removes the mapping between the current channel and its Matrix room. Stops message synchronization.
@@ -515,7 +523,8 @@ untouched.
 To also have your Mattermost messages appear from your own Matrix account
 (double puppeting), send the bot `!mattermost login <access_token>` (Element:
 Settings → Help & About → Access Token). The token is verified against the
-homeserver and must belong to you. `!mattermost logout` removes it,
+homeserver and must belong to you, and is stored encrypted. The bot removes your
+message from the room where it can; otherwise delete it yourself. `!mattermost logout` removes it,
 `!mattermost whoami` shows the current state, and `/matrix unlink` (or
 `!mattermost unlink`) removes the link.
 

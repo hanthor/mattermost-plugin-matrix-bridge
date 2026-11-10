@@ -60,6 +60,9 @@ func (p *Plugin) handleBotCommand(event MatrixEvent) {
 	if reply == "" || p.matrixClient == nil {
 		return
 	}
+	if fields := strings.Fields(body); len(fields) >= 2 && strings.EqualFold(fields[1], "login") && event.EventID != "" {
+		reply += p.redactLoginMessage(event)
+	}
 	err := p.matrixClient.SendNotice(event.RoomID, reply)
 	if err != nil && strings.Contains(err.Error(), "M_FORBIDDEN") {
 		// The command can arrive in the same transaction as the invite,
@@ -164,4 +167,16 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 	default:
 		return fmt.Sprintf("Unknown command %q.\n\n%s", fields[1], botHelpText)
 	}
+}
+
+// redactLoginMessage removes a message that contains an access token from the
+// room's history and returns a sentence for the reply. The bot can only do it
+// where it has the power to redact other people's messages (a room it created
+// or moderates); otherwise the person is asked to delete it themselves.
+func (p *Plugin) redactLoginMessage(event MatrixEvent) string {
+	if _, err := p.matrixClient.RedactEventAsGhost(event.RoomID, event.EventID, p.BridgeBotUserID()); err != nil {
+		p.logger.LogDebug("Could not redact a login message", "error", err, "room_id", event.RoomID)
+		return "\n\n⚠️ I could not remove your message, which contains the token. Please delete it yourself, and consider signing out of that session to get a new token."
+	}
+	return "\n\nI removed your message that contained the token."
 }

@@ -112,6 +112,15 @@ func TestOperations(t *testing.T) {
 		assert.Equal(t, 1, CountPostsWithMessage(t, h.Admin, channel.Id, "Delivered twice"))
 		capabilities.Verify(t, "ops.txn_dedup", CountPostsWithMessage(t, h.Admin, channel.Id, "Delivered twice") == 1)
 	})
+	t.Run("a dedicated metrics token replaces the homeserver token", func(t *testing.T) {
+		h.SetBridgeSetting("metrics_token", "metrics-only-token")
+		WaitFor(t, bridgeTimeout, "the metrics token to apply", func() bool {
+			status, _ := call(http.MethodGet, "/metrics", "metrics-only-token", "")
+			return status == http.StatusOK
+		})
+		status, _ := call(http.MethodGet, "/metrics", h.HSToken, "")
+		assert.Equal(t, http.StatusForbidden, status, "whoever scrapes metrics does not need the homeserver token")
+	})
 }
 
 // TestHomeserverRateLimitIsHonoured points the bridge's Matrix client at a

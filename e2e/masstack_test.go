@@ -201,6 +201,7 @@ CREATE DATABASE mas ENCODING 'UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=templat
 		// The bridge plugin serves the token endpoint MAS uses for Mattermost.
 		stack.mm.InstallBridge(t, ctx, stack.MMAdmin, BridgeConfig{
 			MatrixServerURL: stack.SynapseBase, MatrixServerDomain: masServerName, ASToken: asToken, HSToken: hsToken,
+			MASURL: stack.MASBase,
 		})
 	}
 	return stack

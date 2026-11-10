@@ -26,6 +26,11 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | @room ↔ @channel | Matrix → Mattermost | ❌ |  |
 | Pinned messages | Mattermost → Matrix | ❌ | m.room.pinned_events. |
 | Pinned messages | Matrix → Mattermost | ❌ |  |
+| Integration posts (webhooks, bots) keep their content | Mattermost → Matrix | 🟡 | The text of Slack-style attachments (pretext, title and link, text, fields, image link, footer) is sent as the message, and an overridden sender name is written as a bold prefix. Not yet: a per-message profile (name and icon) in Matrix, image attachments as files, and bot authors in history import. |
+| Long Mattermost posts fit a Matrix event | Mattermost → Matrix | ✅ | A post whose text and HTML copy would exceed Matrix's event size loses the HTML copy first, then is cut and marked. Ordinary long posts (up to Mattermost's 16,383 characters) arrive whole. |
+| Long Matrix messages are split into several posts | Matrix → Mattermost | ✅ | A Matrix message longer than Mattermost's 16,383 characters becomes consecutive posts, cut at paragraph breaks and marked as continued; an edit that is too long is cut with a marker instead of failing. Edits and reactions refer to the first post. |
+| Mattermost permalinks and ~channel mentions work in Matrix | Mattermost → Matrix | ✅ | A permalink to a bridged post becomes a link to its Matrix event (Element Web when its address is set, otherwise matrix.to), and ~channel becomes a link to the channel's room. Links to posts and channels that are not bridged are left as they are. History import applies the same rewriting, so old permalinks keep working after a cut-over. |
+| Matrix event and room links work in Mattermost | Matrix → Mattermost | ✅ | A matrix.to or Element link to a bridged event becomes a Mattermost permalink, and a link to a bridged room becomes ~channel. Links to rooms and events that are not bridged, and user links, are left as they are. |
 
 ## Reactions
 
@@ -149,11 +154,18 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
+| Invite a Matrix user from Mattermost | Mattermost → Matrix | ✅ | /matrix invite @user:server (channel managers and administrators) has the bridge bot invite a Matrix user into the channel's room. Already present people and the bridge's own accounts are refused. |
 | Rooms are repaired to match channel membership | Mattermost → Matrix | ✅ | /matrix repair (and a rotating background pass, twenty channels per run) adds the bridge accounts of channel members who are missing from the room and removes the accounts of people who left the channel. Real Matrix people, claimed mirror accounts and the bot are never touched; people with their own linked account must join themselves. |
+
+## Files
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Image size is sent with the file | Mattermost → Matrix | ✅ | Width and height of images (from Mattermost's file information) are sent in the file event's info, so Matrix clients can reserve space before the picture loads. Duration, thumbnails, voice messages and streaming of large files are not done yet. A file over the size limit is announced with a short notice on the other side instead of being dropped silently; that notice is covered by unit tests only. |
 
 ## Totals
 
-- ✅ supported: 56
-- 🟡 partial: 4
+- ✅ supported: 62
+- 🟡 partial: 5
 - ❌ gap: 25
 - — n/a: 0

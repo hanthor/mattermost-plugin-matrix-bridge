@@ -76,3 +76,37 @@ func TestMembershipRepair(t *testing.T) {
 		assert.Contains(t, resp.Text, "same people")
 	})
 }
+
+// TestInviteMatrixUser brings a Matrix user into a bridged channel's room from
+// Mattermost.
+func TestInviteMatrixUser(t *testing.T) {
+	h := NewHarness(t)
+	ctx := context.Background()
+
+	alice := h.NewMatrixUser("alice")
+	bob := h.NewMatrixUser("bob")
+	channel := h.CreateChannel("invite", "Invite")
+	roomID := h.CreateMappedRoom(alice, channel.Id, "Invite")
+
+	// In a room the bot cannot moderate, the answer says what to do.
+	resp, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix invite "+bob.UserID)
+	require.NoError(t, err)
+	assert.Contains(t, resp.Text, "moderator rights")
+
+	h.GrantBridgePower(alice, roomID, 50)
+	resp, _, err = h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix invite "+bob.UserID)
+	require.NoError(t, err)
+	assert.Contains(t, resp.Text, "Invited "+bob.UserID)
+
+	bob.MustSyncUntil(t, client.SyncReq{}, client.SyncInvitedTo(bob.UserID, roomID))
+	bob.MustJoinRoom(t, roomID, nil)
+	capabilities.Verify(t, "membership.invite", true)
+
+	resp, _, err = h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix invite "+bob.UserID)
+	require.NoError(t, err)
+	assert.Contains(t, resp.Text, "already in the room")
+
+	resp, _, err = h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix invite "+h.BridgeBotUserID())
+	require.NoError(t, err)
+	assert.Contains(t, resp.Text, "bridge's own accounts")
+}

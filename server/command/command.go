@@ -215,6 +215,8 @@ type PluginAccessor interface {
 	// RepairMembership makes the channel's room match the channel's members
 	// (for the bridge's own accounts) and describes what it changed.
 	RepairMembership(channelID string) (string, error)
+	// InviteMatrixUser invites a Matrix user to the channel's room.
+	InviteMatrixUser(channelID, matrixUserID string) (string, error)
 
 	// Doctor runs the setup checks (and the channel's checks) and returns the report.
 	Doctor(channelID string) string
@@ -392,7 +394,7 @@ const (
 
 	// Error messages
 	matrixClientNotConfigured = "❌ Matrix client not configured. Please configure Matrix settings in System Console."
-	unknownSubcommandError    = "Unknown subcommand. Use: test, create, map, unmap, list, status, or migrate"
+	unknownSubcommandError    = "Unknown subcommand. Use: test, create, map, unmap, invite, list, status, or migrate"
 
 	// Status messages
 	autoJoinSuccess     = "\n\n✅ **Auto-joined** Matrix room successfully!"
@@ -496,6 +498,9 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("repair", "", "Make this channel's room match the channel's members"))
+	invite := model.NewAutocompleteData("invite", "@user:server", "Invite a Matrix user to this channel's room")
+	invite.AddTextArgument("The Matrix user ID, for example @ada:example.org", "@user:server", "")
+	matrixData.AddCommand(invite)
 	matrixData.AddCommand(model.NewAutocompleteData("doctor", "", "Check the bridge setup and this channel, with what to fix"))
 	matrixData.AddCommand(model.NewAutocompleteData("retry", "", "Replay changes that could not be delivered across the bridge"))
 	dmCmd := model.NewAutocompleteData("dm", "[on|off|status]", "Allow your direct messages to be bridged to Matrix (only if everyone in the conversation agrees)")
@@ -1376,6 +1381,15 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
 		}
 		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	case "invite":
+		if len(fields) < 3 {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "Usage: `/matrix invite @user:server`"}
+		}
+		text, err := c.plugin.InviteMatrixUser(args.ChannelId, fields[2])
+		if err != nil {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+		}
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	case "doctor":
 		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: c.plugin.Doctor(args.ChannelId)}
 	case "retry":
@@ -1431,7 +1445,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
-	case "create", "map", "unmap", "join", "repair":
+	case "create", "map", "unmap", "join", "repair", "invite":
 		if isSystemAdmin() {
 			return nil
 		}

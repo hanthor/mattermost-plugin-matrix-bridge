@@ -253,6 +253,10 @@ type FileAttachment struct {
 	MxcURI   string `json:"mxc_uri"`
 	MimeType string `json:"mimetype"`
 	Size     int64  `json:"size"`
+	// Width and Height of an image or video, when known; clients use them to
+	// reserve space before the media loads.
+	Width  int `json:"w,omitempty"`
+	Height int `json:"h,omitempty"`
 	// File is set instead of MxcURI semantics when the room is encrypted: the
 	// encrypted file description (url, key, iv, hashes) that goes in the
 	// message's "file" field.
@@ -2006,10 +2010,15 @@ func (c *Client) sendFileMessage(req MessageRequest, file FileAttachment, rootEv
 	} else {
 		content["url"] = file.MxcURI
 	}
-	content["info"] = map[string]any{
+	info := map[string]any{
 		"size":     file.Size,
 		"mimetype": file.MimeType,
 	}
+	if file.Width > 0 && file.Height > 0 {
+		info["w"] = file.Width
+		info["h"] = file.Height
+	}
+	content["info"] = info
 
 	// Add threading if provided (takes priority over post grouping)
 	if req.ThreadEventID != "" {

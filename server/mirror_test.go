@@ -22,6 +22,8 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
+	redactions   []string // rooms an event was redacted in
+	redactFails  bool
 	states       []string // state events PUT: "room type/key body"
 	mu           sync.Mutex
 	existing     map[string]bool // accounts that already exist (natives)
@@ -141,6 +143,14 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/state/") && !strings.Contains(r.URL.Path, "power_levels"):
 			f.states = append(f.states, roomFromPath(r.URL.Path)+" "+r.URL.Path[strings.Index(r.URL.Path, "/state/")+7:]+" "+string(body))
 			_, _ = w.Write([]byte(`{"event_id":"$state"}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/redact/"):
+			if f.redactFails {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"errcode":"M_FORBIDDEN","error":"no power"}`))
+				return
+			}
+			f.redactions = append(f.redactions, roomFromPath(r.URL.Path))
+			_, _ = w.Write([]byte(`{"event_id":"$redaction"}`))
 		case strings.HasSuffix(r.URL.Path, "/invite"):
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)

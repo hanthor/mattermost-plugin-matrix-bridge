@@ -70,7 +70,8 @@ func (m *mockPlugin) ChannelHistoryStatus(_ string) HistoryReport { return Histo
 
 func (m *mockPlugin) EncryptionSupported() bool { return false }
 
-func (m *mockPlugin) RepairMembership(string) (string, error) { return "", nil }
+func (m *mockPlugin) RepairMembership(string) (string, error)         { return "", nil }
+func (m *mockPlugin) InviteMatrixUser(string, string) (string, error) { return "", nil }
 
 func (m *mockPlugin) Doctor(string) string { return "" }
 

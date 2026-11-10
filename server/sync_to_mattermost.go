@@ -89,7 +89,7 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 	}
 
 	// Convert Matrix content to Mattermost format
-	mattermostContent := b.convertMatrixToMattermost(content)
+	mattermostContent := b.rewriteLinksToMattermost(b.convertMatrixToMattermost(content))
 
 	// Check if this is a threaded message (reply)
 	var rootID string
@@ -150,6 +150,11 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 		}
 	}
 
+	// Mattermost refuses posts above its limit: a long message becomes a few
+	// consecutive posts instead of being lost.
+	parts := splitLongMessage(mattermostContent, maxPostRunes)
+	mattermostContent = parts[0]
+
 	// Create Mattermost post
 	post := &model.Post{
 		UserId:    mattermostUserID,
@@ -176,6 +181,20 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 
 	// Store Matrix event ID to Mattermost post ID mapping for efficient reverse lookups
 	b.storeMatrixEventPostMapping(event.EventID, createdPost.Id)
+
+	// The rest of a long message follows as plain posts. Edits and reactions
+	// refer to the first one.
+	for i, part := range parts[1:] {
+		next := &model.Post{
+			UserId: mattermostUserID, ChannelId: channelID, Message: part, RootId: rootID,
+			CreateAt: event.Timestamp + int64(i+1), RemoteId: &b.remoteID,
+			Props: map[string]any{"from_matrix": true},
+		}
+		if _, appErr := b.API.CreatePost(next); appErr != nil {
+			b.logger.LogWarn("Could not post the rest of a long Matrix message", "error", appErr, "matrix_event_id", event.EventID, "part", i+2)
+			break
+		}
+	}
 
 	b.logger.LogDebug("Successfully synced Matrix message to Mattermost", "matrix_event_id", event.EventID, "mattermost_post_id", createdPost.Id, "sender", event.Sender, "channel_id", channelID)
 
@@ -214,7 +233,7 @@ func (b *MatrixToMattermostBridge) handleMatrixMessageEdit(event MatrixEvent, ch
 	}
 
 	// Update the post content (allow empty content - user may have deleted all text)
-	post.Message = b.convertMatrixToMattermost(newContent)
+	post.Message = truncateForMattermost(b.convertMatrixToMattermost(newContent), maxPostRunes)
 	post.EditAt = event.Timestamp
 
 	// Update the post
@@ -253,6 +272,14 @@ func (b *MatrixToMattermostBridge) syncMatrixFileToMattermost(event MatrixEvent,
 	mattermostUserID, err := b.getOrCreateMattermostUser(event.Sender, channelID)
 	if err != nil {
 		return errors.Wrap(err, "failed to get or create Mattermost user for file")
+	}
+
+	// A file over the limit is not copied; say so rather than drop it silently.
+	if info, ok := event.Content["info"].(map[string]any); ok {
+		if size, ok := info["size"].(float64); ok && b.maxFileSize > 0 && int64(size) > b.maxFileSize {
+			b.noticeFileNotCopied(channelID, mattermostUserID, body, int64(size))
+			return nil
+		}
 	}
 
 	// Download the file from Matrix

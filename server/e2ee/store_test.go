@@ -1,6 +1,7 @@
 package e2ee
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"maunium.net/go/mautrix/crypto"
 	"maunium.net/go/mautrix/id"
+
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 )
 
 type memKV struct {
@@ -41,7 +44,7 @@ func (k *memKV) Delete(key string) error {
 func TestStoreSurvivesRestart(t *testing.T) {
 	ctx := context.Background()
 	kv := newMemKV()
-	s, err := NewStore(kv)
+	s, err := NewStore(kv, nil)
 	require.NoError(t, err)
 
 	acct := crypto.NewOlmAccount()
@@ -73,7 +76,7 @@ func TestStoreSurvivesRestart(t *testing.T) {
 	s.Close()
 	assert.Greater(t, len(kv.m), 3, "the snapshot was split into pieces")
 
-	again, err := NewStore(kv)
+	again, err := NewStore(kv, nil)
 	require.NoError(t, err)
 	defer again.Close()
 
@@ -102,15 +105,40 @@ func TestStoreSurvivesRestart(t *testing.T) {
 
 func TestStoreFlushesInTheBackground(t *testing.T) {
 	kv := newMemKV()
-	s, err := NewStore(kv)
+	s, err := NewStore(kv, nil)
 	require.NoError(t, err)
 	require.NoError(t, s.PutAccount(context.Background(), crypto.NewOlmAccount()))
 	s.Close() // Close flushes pending changes.
 
-	again, err := NewStore(kv)
+	again, err := NewStore(kv, nil)
 	require.NoError(t, err)
 	defer again.Close()
 	acct, err := again.GetAccount(context.Background())
 	require.NoError(t, err)
 	assert.NotNil(t, acct)
+}
+
+func TestPickleKeyIsSealedAndLegacyKeysAreUpgraded(t *testing.T) {
+	kv := newMemKV()
+	box := secretbox.New("appservice-token", "e2ee-pickle-key")
+
+	// An earlier version stored the key as is.
+	legacy := bytes.Repeat([]byte{7}, 32)
+	require.NoError(t, kv.Set(pickleKeyKey, legacy))
+	s, err := NewStore(kv, box)
+	require.NoError(t, err)
+	assert.Equal(t, legacy, s.pickleKey, "the existing key keeps working so existing pickles still open")
+	s.Close()
+
+	stored, _ := kv.Get(pickleKeyKey)
+	assert.True(t, secretbox.IsSealed(string(stored)))
+	assert.NotContains(t, string(stored), string(legacy))
+
+	again, err := NewStore(kv, box)
+	require.NoError(t, err)
+	assert.Equal(t, legacy, again.pickleKey)
+	again.Close()
+
+	_, err = NewStore(kv, secretbox.New("another-token", "e2ee-pickle-key"))
+	assert.Error(t, err, "a changed secret must not silently start with a new key")
 }

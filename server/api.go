@@ -29,10 +29,11 @@ func (p *Plugin) ServeHTTP(_ *plugin.Context, w http.ResponseWriter, r *http.Req
 		asRouter.HandleFunc("/ping", p.handleAppServicePing).Methods(http.MethodPost)
 	}
 
-	// Prometheus metrics, guarded like the appservice routes: the homeserver
-	// token as a bearer token (bearer_token in the scrape configuration).
+	// Prometheus metrics: a bearer token (bearer_token in the scrape
+	// configuration). A dedicated metrics token is preferred; without one the
+	// homeserver token is accepted, as in earlier versions.
 	metricsRouter := router.PathPrefix("/metrics").Subrouter()
-	metricsRouter.Use(p.MatrixAuthorizationRequired)
+	metricsRouter.Use(p.MetricsAuthorizationRequired)
 	metricsRouter.HandleFunc("", p.handlePrometheusMetrics).Methods(http.MethodGet)
 	router.HandleFunc(ssoTokenPath, p.handleSSOToken).Methods(http.MethodPost)
 	p.registerUIRoutes(router)
@@ -100,6 +101,33 @@ func (p *Plugin) MatrixAuthorizationRequired(next http.Handler) http.Handler {
 			return
 		}
 
+		next.ServeHTTP(w, r)
+	})
+}
+
+// MetricsAuthorizationRequired guards /metrics. When a metrics token is set
+// only that token is accepted, so the homeserver token (which can post
+// transactions to the bridge) is not needed by whoever runs Prometheus.
+func (p *Plugin) MetricsAuthorizationRequired(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		config := p.getConfiguration()
+		want := config.MetricsToken
+		if want == "" {
+			want = config.MatrixHSToken
+		}
+		if want == "" {
+			writeMatrixError(w, http.StatusServiceUnavailable, "M_UNKNOWN", "No metrics token or homeserver token is configured")
+			return
+		}
+		token := extractMatrixAccessToken(r)
+		if token == "" {
+			writeMatrixError(w, http.StatusUnauthorized, "M_UNAUTHORIZED", "Missing access token")
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
+			writeMatrixError(w, http.StatusForbidden, "M_FORBIDDEN", "Invalid access token")
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

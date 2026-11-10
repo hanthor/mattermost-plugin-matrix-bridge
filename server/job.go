@@ -7,4 +7,5 @@ func (p *Plugin) runJob() {
 	p.sweepProfiles()
 	p.sweepCalls()
 	p.reconcileSome()
+	p.sweepSentEvents()
 }

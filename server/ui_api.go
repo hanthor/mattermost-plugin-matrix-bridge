@@ -347,8 +347,5 @@ func (p *Plugin) handleUIPostMatrix(w http.ResponseWriter, r *http.Request) {
 // eventLink is a link that opens one event: in Element Web when its address
 // is configured, otherwise through matrix.to.
 func (p *Plugin) eventLink(roomID, eventID string) string {
-	if base := strings.TrimRight(p.getConfiguration().ElementURL, "/"); base != "" {
-		return base + "/#/room/" + roomID + "/" + eventID
-	}
-	return "https://matrix.to/#/" + roomID + "/" + eventID
+	return buildEventLink(p.getConfiguration().ElementURL, roomID, eventID)
 }
