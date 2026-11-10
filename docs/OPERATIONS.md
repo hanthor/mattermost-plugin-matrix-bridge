@@ -92,6 +92,26 @@ recognised and not handled twice. Two nodes receiving the same transaction at
 the very same instant are not guarded against; a homeserver sends one
 transaction at a time to an appservice, so that does not happen in practice.
 
+## Typing, status and read receipts
+
+Off by default; switch on **Send Typing, Presence and Read Receipts** in the
+plugin settings. Mattermost has no plugin hook for these, so:
+
+- **Typing** is read from the server's own event stream. Typing events only
+  reach channel members, so a small bot account, `matrix-bridge-events`, joins
+  every bridged channel (its join appears once in each channel, and the bot also
+  joins the channel's team). Its access token is kept sealed like the other
+  secrets.
+- **Status, custom status and read state** are checked every 30 seconds
+  (**Status Check Interval** changes that; the minimum is 2). Online, away and
+  do-not-disturb become online, unavailable and unavailable. A custom status
+  becomes the status message. A person who viewed a recently active channel
+  after its latest bridged message gets a read receipt on that message.
+- **In a cluster** one server holds a cluster lock and does all of this; if it
+  stops, another takes over.
+- **Matrix → Mattermost read receipts** cannot be done: Mattermost has no plugin
+  API to mark a channel viewed for another person.
+
 ## Running on several nodes
 
 Shared between nodes (key-value store or cluster events):

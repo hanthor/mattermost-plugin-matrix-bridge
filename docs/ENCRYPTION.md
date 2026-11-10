@@ -50,6 +50,9 @@ is accurate: the sender is the bridge, not the person's own device.
 - Attachments (tested): files are encrypted before upload, so the media repository holds
   ciphertext; encrypted files from Matrix are decrypted before they are posted.
 - Encrypted rooms can be mapped with `/matrix map` and joined with `/matrix join`.
+- Edits, reactions, replies and attachments work in encrypted rooms in both
+  directions, and the bridge keeps reading a room's keys across a plugin
+  restart. All of this is tested against a real homeserver.
 
 ## Limits
 
@@ -59,6 +62,9 @@ is accurate: the sender is the bridge, not the person's own device.
   single node when encryption is on.
 - **Messages sent before the bridge joined** an encrypted room cannot be read:
   the bridge never had the keys, and it does not ask other devices for them.
+  Instead of nothing, the channel gets a short notice from the sender, once per
+  message, saying a message could not be decrypted. `/matrix history
+  from-matrix` counts such events in its preview.
 - **Key backup and verification** are not implemented; the bridge device is not
   cross-signed. Losing the stored keys means starting a new device, after which
   older messages stay unreadable to the bridge.

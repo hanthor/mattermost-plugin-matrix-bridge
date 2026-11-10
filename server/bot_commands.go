@@ -19,7 +19,8 @@ const botHelpText = `Mattermost bridge commands:
 • !mattermost link <code> — link this Matrix account to a Mattermost account (get the code with /matrix link in Mattermost)
 • !mattermost login <access_token> — let the bridge post as this Matrix account instead of a ghost (double puppeting)
 • !mattermost logout — stop using this account's token
-• !mattermost unlink — remove the link`
+• !mattermost unlink — remove the link
+• !mattermost rooms, status, link-room, unlink-room — manage bridged rooms (send "!mattermost help rooms" in a room)`
 
 // isBridgeBotEvent reports whether a member event concerns the bridge bot.
 func (p *Plugin) isBridgeBotEvent(event MatrixEvent) bool {
@@ -37,6 +38,9 @@ func (p *Plugin) handleBridgeBotMembership(event MatrixEvent) {
 		return
 	}
 	p.logger.LogInfo("Bridge bot accepted an invite", "room_id", event.RoomID, "inviter", event.Sender)
+	if p.createChannelForRoom(event) {
+		return
+	}
 	if strings.HasPrefix(event.Sender, "@") {
 		_ = p.matrixClient.SendNotice(event.RoomID, "Hi! I'm the Mattermost bridge.\n\n"+botHelpText)
 	}
@@ -56,7 +60,12 @@ func isBotCommand(event MatrixEvent) bool {
 // same room as the bot.
 func (p *Plugin) handleBotCommand(event MatrixEvent) {
 	body, _ := event.Content["body"].(string)
-	reply := p.executeBotCommand(event.Sender, body)
+	var reply string
+	if fields := strings.Fields(body); isRoomBotCommand(fields) {
+		reply = p.executeRoomBotCommand(event, fields)
+	} else {
+		reply = p.executeBotCommand(event.Sender, body)
+	}
 	if reply == "" || p.matrixClient == nil {
 		return
 	}
@@ -86,6 +95,9 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 
 	switch strings.ToLower(fields[1]) {
 	case "help":
+		if len(fields) > 2 && strings.EqualFold(fields[2], "rooms") {
+			return botRoomsHelp
+		}
 		return botHelpText
 
 	case "whoami":
@@ -107,10 +119,14 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		if len(fields) < 3 {
 			return "Usage: `!mattermost link <code>` — get a code with `/matrix link` in Mattermost."
 		}
+		// Before linking, the person may have posted from Matrix as a shadow
+		// account of their own; it is retired once they are their real self.
+		shadow := p.lookupMattermostUserForMatrixUser(sender)
 		link, err := store.Redeem(fields[2], sender)
 		if err != nil {
 			return "❌ " + err.Error()
 		}
+		p.retireShadowAccount(shadow, link.MattermostUserID)
 		username := link.MattermostUserID
 		if user, appErr := p.API.GetUser(link.MattermostUserID); appErr == nil {
 			username = "@" + user.Username
@@ -139,6 +155,7 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		// From now on the person sends as this account, so a mirror account
 		// they were using is retired.
 		p.retireMirrorAccount(link.MattermostUserID, link.MatrixUserID)
+		p.retireGhost(link.MattermostUserID, link.MatrixUserID)
 		return "✅ Double puppeting enabled: your Mattermost messages will now appear from this Matrix account."
 
 	case "logout":

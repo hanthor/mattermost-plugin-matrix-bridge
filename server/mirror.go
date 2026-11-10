@@ -15,6 +15,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/command"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/mas"
+	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/secretbox"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/store/kvstore"
 )
 
@@ -275,6 +276,13 @@ func recordAccountMode(kv kvstore.KVStore, mode string) {
 // Mattermost user, creating it (a ghost, or a mirror account in mirror
 // mode) when it does not exist.
 func (b *MattermostToMatrixBridge) ensureAccount(userID string) (string, error) {
+	// A person who has given the bridge their own Matrix account's token is
+	// that account everywhere; no ghost or mirror account is made for them.
+	if link, ok := newIdentityStore(b.kvstore, func() *secretbox.Box {
+		return secretbox.New(secretFor(b.API, b.configGetter.getConfiguration()), "identity-token")
+	}).Link(userID); ok && link.Puppeted() {
+		return link.MatrixUserID, nil
+	}
 	// In cut-over mode the set of accounts is frozen: existing ones keep
 	// working, no new ones appear.
 	if b.configGetter.getConfiguration().CutoverMode {

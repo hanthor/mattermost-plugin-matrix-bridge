@@ -69,11 +69,32 @@
                 "default": false
             },
             {
+                "key": "invite_creates_channels_team",
+                "display_name": "Create Channels for Invited Rooms (team name)",
+                "type": "text",
+                "default": "",
+                "help_text": "Team name (as in the team's address). When set, a moderator of a Matrix room who invites the bridge bot gets a new public channel in this team, bridged to the room. When their Matrix account is linked, they become its admin. Empty turns this off."
+            },
+            {
                 "key": "enable_encryption",
                 "display_name": "Bridge Encrypted Rooms",
                 "type": "bool",
                 "help_text": "Let the bridge read and write messages in end-to-end encrypted Matrix rooms. The bridge bot holds the room keys, so messages are readable by the bridge and by Mattermost. Requires org.matrix.msc3202 in the registration file (the downloadable file includes it) and the matching homeserver setting (see docs/ENCRYPTION.md).",
                 "default": false
+            },
+            {
+                "key": "enable_realtime",
+                "display_name": "Send Typing, Presence and Read Receipts",
+                "type": "bool",
+                "default": false,
+                "help_text": "Show who is typing, who is online and what they have read to people in Matrix. Typing events only reach channel members, so a small bot account (matrix-bridge-events) joins every bridged channel. Status and read state are checked every 30 seconds. In a cluster one server does this work."
+            },
+            {
+                "key": "realtime_poll_seconds",
+                "display_name": "Status Check Interval (seconds)",
+                "type": "number",
+                "default": 30,
+                "help_text": "How often status, custom status and read state are checked when typing, presence and read receipts are on. The minimum is 2."
             },
             {
                 "key": "matrix_username_prefix",

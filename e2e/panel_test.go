@@ -80,6 +80,20 @@ func TestBridgePanelAPI(t *testing.T) {
 		capabilities.Verify(t, "integration.channel_header", ch["room_id"] == roomID && ch["element_url"] != "")
 	})
 
+	t.Run("the panel lists who is in the room and where they are from", func(t *testing.T) {
+		status, body := pluginAPI(t, h, carolClient, http.MethodGet, "/channels/"+channel.Id+"/members")
+		require.Equal(t, http.StatusOK, status, body)
+		members, _ := body["members"].([]any)
+		kinds := map[string]string{}
+		for _, m := range members {
+			entry := m.(map[string]any)
+			kinds[entry["matrix_id"].(string)] = entry["kind"].(string)
+		}
+		assert.Equal(t, "matrix", kinds[alice.UserID])
+		assert.Equal(t, "bot", kinds[h.BridgeBotUserID()])
+		capabilities.Verify(t, "integration.panel_members", kinds[alice.UserID] == "matrix")
+	})
+
 	t.Run("a post knows its Matrix event, for Open in Matrix and Copy event ID", func(t *testing.T) {
 		post, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "Find me in Matrix"})
 		require.NoError(t, err)

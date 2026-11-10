@@ -21,9 +21,11 @@ func (p *Plugin) syncMatrixRoomNameToMattermost(event MatrixEvent, channelID str
 	}
 
 	channel.DisplayName = name
-	if _, appErr := p.API.UpdateChannel(channel); appErr != nil {
+	updated, appErr := p.API.UpdateChannel(channel)
+	if appErr != nil {
 		return errors.Wrap(appErr, "failed to update channel display name")
 	}
+	p.noteChannelStateFromMatrix(updated)
 	p.logger.LogDebug("Synced Matrix room name to channel", "channel_id", channelID, "name", name)
 	return nil
 }
@@ -42,9 +44,11 @@ func (p *Plugin) syncMatrixRoomTopicToMattermost(event MatrixEvent, channelID st
 	}
 
 	channel.Header = topic
-	if _, appErr := p.API.UpdateChannel(channel); appErr != nil {
+	updated, appErr := p.API.UpdateChannel(channel)
+	if appErr != nil {
 		return errors.Wrap(appErr, "failed to update channel header")
 	}
+	p.noteChannelStateFromMatrix(updated)
 	p.logger.LogDebug("Synced Matrix room topic to channel header", "channel_id", channelID)
 	return nil
 }

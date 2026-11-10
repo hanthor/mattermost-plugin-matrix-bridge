@@ -95,7 +95,9 @@ func (b *MattermostToMatrixBridge) ensureSenderInRoom(client *matrix.Client, mat
 	if !client.IsPuppet() {
 		return b.ensureGhostUserInRoom(matrixUserID, roomID, userID)
 	}
-	key := kvstore.BuildGhostRoomKey(userID, roomID)
+	// Kept apart from the ghost's key: unlinking must not make the ghost look
+	// as though it were still in the room the linked account joined.
+	key := "puppet:" + kvstore.BuildGhostRoomKey(userID, roomID)
 	if b.roomMembershipCache != nil {
 		if m, found := b.roomMembershipCache.Get(key); found && m == "joined" {
 			return nil
@@ -931,11 +933,15 @@ func (b *MattermostToMatrixBridge) addReactionToMatrixAt(reaction *model.Reactio
 		return errors.Wrap(err, "failed to ensure ghost user is in room for reaction")
 	}
 
-	// Convert Mattermost emoji name to Matrix reaction format
-	emoji := b.convertEmojiForMatrix(reaction.EmojiName)
+	// A custom emoji goes as an image, anything else as its Unicode character.
+	emoji, shortcode := b.reactionKeyFor(reaction.EmojiName)
 
 	// Send reaction as ghost user
-	_, err = sender.SendReactionAsGhostAt(matrixRoomID, matrixEventID, emoji, ghostUserID, timestampMs)
+	if shortcode != "" {
+		_, err = sender.SendImageReactionAt(matrixRoomID, matrixEventID, emoji, shortcode, ghostUserID, timestampMs)
+	} else {
+		_, err = sender.SendReactionAsGhostAt(matrixRoomID, matrixEventID, emoji, ghostUserID, timestampMs)
+	}
 	if err != nil {
 		// The same reaction already exists in the room (hooks can fire more than
 		// once for one reaction); the desired state is reached.
@@ -1006,7 +1012,7 @@ func (b *MattermostToMatrixBridge) removeReactionFromMatrix(reaction *model.Reac
 	}
 
 	// Convert Mattermost emoji name to Matrix reaction format for matching
-	emoji := b.convertEmojiForMatrix(reaction.EmojiName)
+	emoji, _ := b.reactionKeyFor(reaction.EmojiName)
 
 	// Get all reactions for this message from Matrix (as the ghost user)
 	relations, err := b.matrixClient.GetEventRelationsAsUser(matrixRoomID, matrixEventID, ghostUserID)
@@ -1098,6 +1104,20 @@ func (b *MattermostToMatrixBridge) extractMattermostMentions(post *model.Post) *
 
 // addMatrixMentionsWithData converts Mattermost mentions to Matrix format using pre-extracted mention data
 func (b *MattermostToMatrixBridge) addMatrixMentionsWithData(content map[string]any, post *model.Post, mentions *MattermostMentionResults) {
+	b.addMatrixUserMentions(content, post, mentions)
+	// @channel, @all and @here notify everyone: in Matrix that is a room mention.
+	if hasChannelMention(post.Message) {
+		m, _ := content["m.mentions"].(map[string]any)
+		if m == nil {
+			m = map[string]any{}
+			content["m.mentions"] = m
+		}
+		m["room"] = true
+	}
+}
+
+// addMatrixUserMentions turns @username mentions into Matrix user mentions.
+func (b *MattermostToMatrixBridge) addMatrixUserMentions(content map[string]any, post *model.Post, mentions *MattermostMentionResults) {
 	b.logger.LogDebug("Processing mentions for Matrix", "post_id", post.Id, "user_mentions_count", len(mentions.UserMentions), "user_mentions", mentions.UserMentions)
 
 	// Only process if we have user mentions (ignore channel mentions for now)

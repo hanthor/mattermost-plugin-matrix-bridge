@@ -179,6 +179,9 @@ func (p *Plugin) onOutboundFailed(job outboxJob, cause error) {
 		p.logger.LogError("Could not keep an outgoing change for a later retry", "op", e.Op, "error", err)
 		return
 	}
+	if e.Attempts == outboxTellAuthorAt && e.Op == outboxOpPost && e.Post != nil {
+		p.tellAuthorNotDelivered(e.Post)
+	}
 	p.logger.LogWarn("Could not reach Matrix; the change stays in the outbox", "op", e.Op, "channel_id", e.ChannelID, "attempts", e.Attempts, "retry_in", delay.String(), "error", cause)
 }
 
@@ -334,4 +337,18 @@ func sortOutboxJobs(jobs []outboxJob) {
 			jobs[j], jobs[j-1] = jobs[j-1], jobs[j]
 		}
 	}
+}
+
+// outboxTellAuthorAt is the failed attempt after which the author is told their
+// message has not reached Matrix yet.
+const outboxTellAuthorAt = 3
+
+// tellAuthorNotDelivered tells the person who wrote a post, privately, that it
+// has not reached Matrix yet and that the bridge keeps trying.
+func (p *Plugin) tellAuthorNotDelivered(post *model.Post) {
+	defer func() { _ = recover() }()
+	p.API.SendEphemeralPost(post.UserId, &model.Post{
+		UserId: post.UserId, ChannelId: post.ChannelId, RootId: post.RootId,
+		Message: "⚠️ Your message has not reached Matrix yet. The bridge keeps trying and sends it when Matrix answers; you do not need to post it again.",
+	})
 }

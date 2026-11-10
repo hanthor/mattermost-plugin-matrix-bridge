@@ -215,6 +215,18 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		}
 	}
 
+	// A moderator in Matrix kicking or banning someone removes them from the
+	// channel.
+	if p.handleMatrixRemoval(event, channelID) {
+		return nil
+	}
+
+	// A person in Matrix inviting a Mattermost person's account adds them to
+	// the channel.
+	if p.handleInviteOfBridgeAccount(event, channelID) {
+		return nil
+	}
+
 	// Skip events from accounts only the bridge drives (ghosts and unclaimed
 	// mirror accounts) to prevent loops
 	if p.isBridgeAccount(event.Sender) {
@@ -228,6 +240,11 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 	switch event.Type {
 	case "m.room.message":
 		return p.matrixToMattermostBridge.syncMatrixMessageToMattermost(event, channelID)
+	case "m.sticker":
+		return p.matrixToMattermostBridge.syncMatrixFileToMattermost(stickerAsImage(event), channelID)
+	case pollStartStable, pollStartUnstable:
+		event.Type = "m.room.message"
+		return p.matrixToMattermostBridge.syncMatrixMessageToMattermost(event, channelID)
 	case "m.reaction":
 		return p.matrixToMattermostBridge.syncMatrixReactionToMattermost(event, channelID)
 	case "m.room.member":
@@ -236,6 +253,23 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		return p.matrixToMattermostBridge.syncMatrixRedactionToMattermost(event, channelID)
 	case callMemberEventLegacy, callMemberEventRTC:
 		return p.handleMatrixCallEvent(event, channelID)
+	case "m.call.invite", "m.call.answer", "m.call.hangup", "m.call.reject":
+		return p.handleLegacyCallEvent(event, channelID)
+	case "m.room.power_levels":
+		if event.Sender == p.BridgeBotUserID() || p.isBridgeAccount(event.Sender) {
+			return nil
+		}
+		return p.syncMatrixPowerLevels(event, channelID)
+	case pinnedEventsType:
+		if event.Sender == p.BridgeBotUserID() {
+			return nil
+		}
+		return p.syncMatrixPins(event, channelID)
+	case "m.room.tombstone":
+		if event.Sender == p.BridgeBotUserID() {
+			return nil
+		}
+		return p.archiveChannelFromMatrix(channelID)
 	case "m.room.name":
 		return p.syncMatrixRoomNameToMattermost(event, channelID)
 	case "m.room.topic":

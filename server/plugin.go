@@ -58,11 +58,16 @@ type Plugin struct {
 	roomMappingCache    *Cache
 	roomMembershipCache *Cache
 
+	// bridgeInfoMu serialises bridge-information updates.
+	bridgeInfoMu sync.Mutex
+
 	// Event queue for asynchronous task processing
 	eventQueue *EventQueue
 
 	// inbox journals Matrix events until their handlers finish.
 	inbox inboxState
+	// realtime is the typing/presence/receipt event client (see realtime.go).
+	realtime realtimeState
 
 	// recentTransactions is the in-memory part of transaction deduplication
 	// (transaction ID -> time handled); historyRuns marks channels whose history
@@ -174,6 +179,7 @@ func (p *Plugin) OnActivate() error {
 	// Initialize bridge components after getting remote ID
 	p.initBridges()
 	p.startEncryption()
+	p.startRealtime()
 	p.startInbox()
 	p.startOutbox()
 
@@ -197,6 +203,7 @@ func (p *Plugin) OnActivate() error {
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
 	p.stopEncryption()
+	p.stopRealtime()
 	p.stopInbox()
 	p.stopOutbox()
 	if p.reactionBatcher != nil {
@@ -252,6 +259,7 @@ func (p *Plugin) initBridges() {
 		GhostUserCache:      p.ghostUserCache,
 		RoomMappingCache:    p.roomMappingCache,
 		RoomMembershipCache: p.roomMembershipCache,
+		EmojiCreator:        p.createEmojiAsBot,
 	})
 
 	// Create bridge instances
@@ -319,6 +327,7 @@ func (p *Plugin) InvalidateChannelMapping(channelID string) {
 	// bridge-information event.
 	go p.publishChannelInvalidation(channelID)
 	go p.syncBridgeInfoSafely(channelID)
+	go p.baselineChannelState(channelID)
 }
 
 // GetConfiguration returns the plugin configuration
@@ -452,6 +461,14 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 		resolvedRoomID, err := p.matrixClient.ResolveRoomAlias(matrixRoomID)
 		if err != nil {
 			p.logger.LogError("Failed to resolve Matrix room identifier", "error", err, "room_identifier", matrixRoomID)
+			return
+		}
+
+		// A person who sends as their own Matrix account joins with it.
+		if link, linked := p.identity().Link(user.Id); linked && link.Puppeted() && link.MatrixUserID == matrixUserID {
+			if err := p.mattermostToMatrixBridge.ensureSenderInRoom(p.matrixClient.AsPuppet(link.AccessToken), matrixUserID, resolvedRoomID, user.Id); err != nil {
+				p.logger.LogWarn("The person's own Matrix account could not join the room", "error", err, "matrix_user_id", matrixUserID, "room_id", resolvedRoomID)
+			}
 			return
 		}
 
@@ -599,6 +616,18 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 		return
 	}
 
+	if post.Type == bridgeNoticePostType {
+		return
+	}
+
+	// A rename, header or purpose change and archiving each leave a system
+	// post: that is the cue to bring the room's name, topic and archived notice
+	// up to date. Such posts are not relayed as messages.
+	if isChannelStatePost(post.Type) {
+		go p.syncChannelStateByID(post.ChannelId)
+		return
+	}
+
 	// Check if this channel is mapped to a Matrix room
 	mappingKey := kvstore.BuildChannelMappingKey(post.ChannelId)
 	roomIDBytes, err := p.kvstore.Get(mappingKey)
@@ -686,10 +715,15 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 
 // UserHasLeftChannel is called when a user leaves or is removed from a channel.
 // The user's ghost leaves the mapped Matrix room so membership stays in sync.
-func (p *Plugin) UserHasLeftChannel(_ *plugin.Context, channelMember *model.ChannelMember, _ *model.User) {
+func (p *Plugin) UserHasLeftChannel(_ *plugin.Context, channelMember *model.ChannelMember, actor *model.User) {
 	config := p.getConfiguration()
 	if !config.EnableSync || p.matrixClient == nil || p.mattermostToMatrixBridge == nil {
 		return
+	}
+
+	// Someone else removing a person is a kick in the room.
+	if actor != nil && actor.Id != channelMember.UserId {
+		p.kickIfRemoved(channelMember, actor)
 	}
 
 	roomIdentifier, err := p.mattermostToMatrixBridge.GetMatrixRoomID(channelMember.ChannelId)

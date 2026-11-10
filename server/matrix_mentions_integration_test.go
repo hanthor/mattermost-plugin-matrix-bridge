@@ -169,11 +169,12 @@ func TestMatrixMentionEdgeCases(t *testing.T) {
 	setup := setupTestPlugin(t, matrixContainer)
 
 	testCases := []struct {
-		name             string
-		message          string
-		setupMocks       func(api *plugintest.API)
-		expectedMentions int
-		shouldHaveHTML   bool
+		name              string
+		message           string
+		setupMocks        func(api *plugintest.API)
+		expectedMentions  int
+		expectRoomMention bool
+		shouldHaveHTML    bool
 	}{
 		{
 			name:    "mention_nonexistent_user",
@@ -199,10 +200,11 @@ func TestMatrixMentionEdgeCases(t *testing.T) {
 			name:    "channel_mentions",
 			message: "Attention @channel and @here everyone!",
 			setupMocks: func(_ *plugintest.API) {
-				// No setup needed - channel mentions are ignored
+				// No setup needed - a channel mention is a room mention
 			},
-			expectedMentions: 0,
-			shouldHaveHTML:   false,
+			expectedMentions:  0,
+			expectRoomMention: true,
+			shouldHaveHTML:    false,
 		},
 		{
 			name:    "email_like_pattern",
@@ -331,6 +333,11 @@ func TestMatrixMentionEdgeCases(t *testing.T) {
 
 				userIDs := mentions["user_ids"].([]any)
 				assert.Len(t, userIDs, tc.expectedMentions, "Should have expected mention count")
+			} else if tc.expectRoomMention {
+				// @channel and @here notify the whole room
+				mentions, hasMentions := messageEvent.Content["m.mentions"].(map[string]any)
+				require.True(t, hasMentions, "Should have m.mentions field")
+				assert.Equal(t, true, mentions["room"], "Should mention the room")
 			} else {
 				// Should not have mentions
 				_, hasMentions := messageEvent.Content["m.mentions"]

@@ -22,10 +22,10 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Matrix replies keep the quoted message in Mattermost | Matrix → Mattermost | ✅ | A Matrix reply to a message that is not the thread's root appears in the thread with the replied-to message quoted (author and first line), since Mattermost threads have no reply-to. |
 | User mentions | Mattermost → Matrix | ✅ | m.mentions and pills. |
 | User mentions | Matrix → Mattermost | ✅ |  |
-| @channel / @here ↔ @room | Mattermost → Matrix | ❌ | @channel should set m.mentions.room; @room should become @channel. |
-| @room ↔ @channel | Matrix → Mattermost | ❌ |  |
-| Pinned messages | Mattermost → Matrix | ❌ | m.room.pinned_events. |
-| Pinned messages | Matrix → Mattermost | ❌ |  |
+| @channel / @here ↔ @room | Mattermost → Matrix | ✅ | @channel, @all and @here in a Mattermost post set m.mentions.room on the Matrix message, so room-wide notifications fire. |
+| @room ↔ @channel | Matrix → Mattermost | ✅ | A Matrix room mention (m.mentions.room, or the text @room) becomes @channel in the Mattermost post. |
+| Pinned messages | Mattermost → Matrix | ✅ | Pinning or unpinning a post updates the room's m.room.pinned_events with the events of the pinned posts that were synced. In a room mapped with /matrix map the bot needs moderator rights (power level 50) to set it. |
+| Pinned messages | Matrix → Mattermost | ✅ | Pinning an event in Matrix pins its post and unpinning unpins it; only events that have a post are affected. |
 | Integration posts (webhooks, bots) keep their content | Mattermost → Matrix | 🟡 | The text of Slack-style attachments (pretext, title and link, text, fields, image link, footer) is sent as the message, and an overridden sender name is written as a bold prefix. Not yet: a per-message profile (name and icon) in Matrix, image attachments as files, and bot authors in history import. |
 | Long Mattermost posts fit a Matrix event | Mattermost → Matrix | ✅ | A post whose text and HTML copy would exceed Matrix's event size loses the HTML copy first, then is cut and marked. Ordinary long posts (up to Mattermost's 16,383 characters) arrive whole. |
 | Long Matrix messages are split into several posts | Matrix → Mattermost | ✅ | A Matrix message longer than Mattermost's 16,383 characters becomes consecutive posts, cut at paragraph breaks and marked as continued; an edit that is too long is cut with a marker instead of failing. Edits and reactions refer to the first post. |
@@ -38,8 +38,8 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Add and remove reactions | Mattermost → Matrix | ✅ | 4,400+ emoji names mapped to Unicode. |
 | Add and remove reactions | Matrix → Mattermost | ✅ |  |
-| Custom emoji reactions | Mattermost → Matrix | ❌ | Should upload the emoji image and react with an mxc:// key (MSC4027). |
-| Image reactions (MSC4027) | Matrix → Mattermost | ❌ | Should create a custom emoji on the fly. |
+| Custom emoji reactions | Mattermost → Matrix | ✅ | A reaction with a Mattermost custom emoji is sent as an image reaction (MSC4027): the key is the uploaded image (kept per emoji) and the shortcode names it. Clients without support show the shortcode. MSC2545 image packs are not published yet. |
+| Image reactions (MSC4027) | Matrix → Mattermost | ✅ | An image reaction from Matrix becomes a Mattermost custom emoji with that shortcode, created once through a small bot account and reused; if it cannot be created the reaction falls back to its text. |
 
 ## Attachments
 
@@ -47,20 +47,20 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Files, images, audio, video | Mattermost → Matrix | ✅ | One m.file/m.image/m.audio/m.video event per attachment. |
 | Files, images, audio, video | Matrix → Mattermost | ✅ | Downloaded through authenticated media endpoints. |
-| Stickers (m.sticker) | Matrix → Mattermost | ❌ | Should be posted as an image attachment. |
-| Location (m.location) | Matrix → Mattermost | ❌ | Should be posted as a map link. |
-| Polls (MSC3381) | Matrix → Mattermost | ❌ | Could map to interactive message attachments. |
+| Stickers (m.sticker) | Matrix → Mattermost | ✅ | A sticker is posted as an image attachment. |
+| Location (m.location) | Matrix → Mattermost | ✅ | A location is posted as a link to OpenStreetMap with the shared label. |
+| Polls (MSC3381) | Matrix → Mattermost | 🟡 | A poll start is posted as its question and numbered options. Votes are not relayed. |
 
 ## Ephemeral
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
-| Typing notifications | Mattermost → Matrix | ❌ | Mattermost exposes no plugin hook for typing; a websocket listener in the plugin could provide it. |
+| Typing notifications | Mattermost → Matrix | ✅ | Needs Send Typing, Presence and Read Receipts to be on. A small bot (matrix-bridge-events) joins bridged channels, reads the server's typing events and shows the person typing in the room. In a cluster one server does it. |
 | Typing notifications | Matrix → Mattermost | ✅ | Requires receive_ephemeral in the registration. |
-| Presence / status | Mattermost → Matrix | ❌ | Ghosts should mirror online/away/offline. |
+| Presence / status | Mattermost → Matrix | ✅ | Needs the same setting. Online, away and do-not-disturb become online, unavailable and unavailable; checked every 30 seconds (adjustable). |
 | Presence / status | Matrix → Mattermost | ✅ |  |
-| Custom status ↔ presence status_msg | Mattermost → Matrix | ❌ |  |
-| Read receipts | Mattermost → Matrix | ❌ | Channel views could become m.read receipts from the ghost. |
+| Custom status ↔ presence status_msg | Mattermost → Matrix | ✅ | Needs the same setting. The custom status (emoji and text) becomes the presence status message; expired ones are cleared. |
+| Read receipts | Mattermost → Matrix | ✅ | Needs the same setting. People who viewed a recently active channel after the latest bridged message get a read receipt on it, checked every 30 seconds. The other direction needs a Mattermost API that does not exist. |
 | Read receipts | Matrix → Mattermost | ❌ | Mattermost has no plugin API to mark a channel viewed for another user. |
 
 ## Users
@@ -106,36 +106,44 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Linking a native account retires the mirror account | Mattermost → Matrix | ✅ | When a person enables double puppeting with a native Matrix account, their mirror account leaves the bridged rooms, the native account is invited, and the old name stays reserved. A claimed mirror account is not made to leave. |
 | Team cut-over: read-only channels, pinned link, report, archive | Mattermost → Matrix | ✅ | /matrix migrate-team report | readonly | writable | archive (each changing step needs confirm). Read-only channels still receive what arrives from Matrix; the report compares members and messages not yet in each room. |
 
+## Identity
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Linking retires the ghost and any Matrix-side shadow user | Mattermost → Matrix | ✅ | When a person enables double puppeting, their ghost leaves the bridged rooms, their own Matrix account takes its place (also in mention pills), and the remote shadow user that stood for them in Mattermost is deactivated. Unlinking brings the ghost back. |
+
 ## Rooms
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
 | Join and leave | Mattermost → Matrix | ✅ |  |
 | Join and leave | Matrix → Mattermost | ✅ |  |
-| Channel admin ↔ power levels | Mattermost → Matrix | ❌ |  |
-| Power levels ↔ channel admin | Matrix → Mattermost | ❌ |  |
+| Channel admin ↔ power levels | Mattermost → Matrix | ✅ | Channel admins get power level 50 (moderator) in the room, and lose it when they stop being admins. Checked every 15 minutes, on /matrix repair, and every few seconds when real-time events are on. The bridge bot needs power level 100 in the room to change power levels, which rooms it creates give it. |
+| Power levels ↔ channel admin | Matrix → Mattermost | ✅ | A Matrix person at power level 50 or more becomes a channel admin, and one below it an ordinary member. Applies to people on Matrix and linked accounts, not to accounts the bridge runs for Mattermost people. |
 | New channel creates a room | Mattermost → Matrix | ✅ | Public and private channels; DMs on first message. |
-| Inviting the bot creates a channel | Matrix → Mattermost | ❌ | Only /matrix join from Mattermost today. |
-| Channel name/header → room name/topic | Mattermost → Matrix | ❌ | Mattermost has no channel-updated hook; needs polling or websocket. |
+| Inviting the bot creates a channel | Matrix → Mattermost | ✅ | With a team named in Create Channels for Invited Rooms, a moderator of a Matrix room who invites the bridge bot gets a new public channel in that team, bridged to the room; when their Matrix account is linked they become its admin. Off by default. |
+| Channel name/header → room name/topic | Mattermost → Matrix | ✅ | A rename becomes the room name and a header change becomes the topic, as soon as Mattermost's system post announces it. A sweep every 15 minutes catches anything missed. |
 | Room name/topic → channel name/header | Matrix → Mattermost | ✅ |  |
-| Archive ↔ tombstone/leave | Mattermost → Matrix | ❌ |  |
-| Tombstone ↔ archive | Matrix → Mattermost | ❌ |  |
+| Archive ↔ tombstone/leave | Mattermost → Matrix | ✅ | Archiving a channel posts a notice in the room and the bridge bot leaves; restoring the channel rejoins and says so. |
+| Tombstone ↔ archive | Matrix → Mattermost | ✅ | A tombstoned room archives its channel. |
 | Direct and group messages between Mattermost users | Mattermost → Matrix | ✅ | Opt-in: an administrator turns on Bridge Direct Messages and everyone in a conversation runs /matrix dm on; then new messages go to a private Matrix room. /matrix dm off unbridges. Earlier messages are not copied. |
 | Direct messages | Matrix → Mattermost | ❌ | Mattermost refuses direct channels with remote users ("Cannot create a direct channel with a remote user"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users. |
-| Team ↔ space | Mattermost → Matrix | 🟡 | Spaces are created and rooms added; team membership is not mirrored. |
+| Team ↔ space | Mattermost → Matrix | ✅ | Spaces are created by /matrix backfill and rooms are added to them; a person who joins or leaves the team has their account join or leave the space. |
 | End-to-end encrypted rooms: reading | Matrix → Mattermost | ✅ | With "Bridge Encrypted Rooms" on, the bridge bot holds a device and the room keys, decrypts what Matrix people send, and posts it. Encryption ends at the bridge (docs/ENCRYPTION.md). Off by default; with it off, encrypted rooms are refused instead. |
 | End-to-end encrypted rooms: writing | Mattermost → Matrix | ✅ | Mattermost posts are encrypted with the bot's room key before they leave, so the homeserver only holds ciphertext. Messages, reactions and attachments; Matrix clients show the sender as the bridge's device, not as verified. |
+| A message the bridge cannot decrypt is announced | Matrix → Mattermost | ✅ | When an encrypted message cannot be read (the bridge was not given its key, for example because it was sent before the bridge joined), the channel gets a short notice from the sender instead of nothing, once per message. |
 
 ## Integration
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
-| Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
+| Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | ✅ | In a direct message with the bot: help, whoami, link, login, logout, unlink. In a bridged or unbridged room: rooms, status, link-room <team>/<channel> and unlink-room, run as the linked Mattermost account through the same slash commands (so Mattermost's permissions apply) and needing moderator rights in the room. |
 | Channel shows the linked room in Mattermost | Mattermost → Matrix | ✅ | The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself. |
 | Post menu: Open in Matrix and Copy Matrix event ID | Mattermost → Matrix | ✅ | Both actions appear on posts that were synced to Matrix. Open in Matrix uses Element Web when its address is configured and matrix.to otherwise. The server route is tested against a real homeserver; the menu itself is covered by webapp unit tests only. |
 | Matrix clients show where a room is bridged to | Mattermost → Matrix | ✅ | A mapped room carries the bridge-information state event (m.bridge and Element's uk.half-shot.bridge) naming the Mattermost team, channel and link; it is emptied when the channel is unmapped. Needs the bot to be allowed to send state events, so rooms mapped with /matrix map where the bot is not a moderator keep no event (the doctor says so). Direct messages carry none. |
 | Import a Matrix room's history into Mattermost | Matrix → Mattermost | ✅ | /matrix history from-matrix (preview, then confirm, optionally limit=N) copies the room's earlier messages into the channel as the people who wrote them, with their original times, the latest edit of each message applied, and reactions. Events already imported, the bridge's own and ones that cannot be read (encrypted without keys) are skipped and counted. Safe to repeat; each run reads up to 2,000 events. Files larger than the limit are announced. Threads follow the live path. |
+| Panel lists who is in the Matrix room | Mattermost → Matrix | ✅ | The bridge panel lists the room's members with their Matrix ID and homeserver, marking people on Matrix, accounts the bridge runs for Mattermost people, and the bridge bot. |
 | Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. |
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 | History import: attachments and reactions | Mattermost → Matrix | ✅ | Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text. |
@@ -156,6 +164,8 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
 | Invite a Matrix user from Mattermost | Mattermost → Matrix | ✅ | /matrix invite @user:server (channel managers and administrators) has the bridge bot invite a Matrix user into the channel's room. Already present people and the bridge's own accounts are refused. |
+| Inviting a Mattermost person's account from Matrix adds them to the channel | Matrix → Mattermost | ✅ | When a Matrix person invites the account that represents a Mattermost person (their ghost or mirror account) to a bridged room, that person is added to the channel, if they belong to its team. Direct messages and the bridge's own accounts are not affected. |
+| Removing someone is carried across (kicks) | Matrix → Mattermost | ✅ | Removing a person from a channel takes their account out of the room (as a kick with the reason when Mattermost reports who removed them); a Matrix moderator's kick or ban of a Mattermost person's account, or of a Matrix person, removes them from the channel. Each side's own permissions decide who may. Mattermost has no channel bans, so a Matrix ban removes the person but does not stop Mattermost from adding them again; reports are not carried. |
 | Rooms are repaired to match channel membership | Mattermost → Matrix | ✅ | /matrix repair (and a rotating background pass, twenty channels per run) adds the bridge accounts of channel members who are missing from the room and removes the accounts of people who left the channel. Real Matrix people, claimed mirror accounts and the bot are never touched; people with their own linked account must join themselves. |
 
 ## Files
@@ -172,7 +182,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 64
-- 🟡 partial: 5
-- ❌ gap: 25
+- ✅ supported: 89
+- 🟡 partial: 4
+- ❌ gap: 6
 - — n/a: 0

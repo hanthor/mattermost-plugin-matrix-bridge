@@ -154,6 +154,9 @@ func (p *Plugin) reconcileChannel(channelID string, apply bool) (reconcileResult
 
 // RepairMembership implements command.PluginAccessor for /matrix repair.
 func (p *Plugin) RepairMembership(channelID string) (string, error) {
+	// A repair also brings the room's name, topic and archived notice up to date.
+	p.syncChannelStateByID(channelID)
+	p.syncChannelRoles(channelID)
 	res, err := p.reconcileChannel(channelID, true)
 	if err != nil {
 		return "", err

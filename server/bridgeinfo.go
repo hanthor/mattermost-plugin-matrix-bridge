@@ -68,6 +68,10 @@ func (p *Plugin) syncBridgeInfoSafely(channelID string) {
 // syncBridgeInfo makes the room's bridge-information event match the
 // channel's mapping: set when mapped, cleared when not.
 func (p *Plugin) syncBridgeInfo(channelID string) {
+	// Updates triggered by quick successive mapping changes run in their own
+	// goroutines; taken one at a time, each sees the state the last left.
+	p.bridgeInfoMu.Lock()
+	defer p.bridgeInfoMu.Unlock()
 	if p.matrixClient == nil || p.mattermostToMatrixBridge == nil || p.kvstore == nil || !p.getConfiguration().EnableSync {
 		return
 	}
@@ -111,6 +115,32 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 		return
 	}
 	_ = p.kvstore.Set(bridgeInfoRoomKeyPrefix+channelID, []byte(roomID))
+	if previous != roomID {
+		p.announceBridging(channelID)
+	}
+}
+
+// bridgeNoticePostType marks the bridge's own notices: they are not relayed to
+// Matrix and not counted as history.
+const bridgeNoticePostType = "custom_matrix_bridge_notice"
+
+// announceBridging tells a channel's members that it is now connected to a
+// Matrix room, because they are otherwise not asked and what they write here
+// becomes readable there.
+func (p *Plugin) announceBridging(channelID string) {
+	botID, err := p.API.EnsureBotUser(&model.Bot{Username: "matrixbridge", DisplayName: "Matrix bridge", Description: "Notices from the Matrix bridge"})
+	if err != nil {
+		p.logger.LogDebug("Could not set up the bridge notice account", "error", err)
+		return
+	}
+	if _, appErr := p.API.CreatePost(&model.Post{
+		UserId:    botID,
+		ChannelId: channelID,
+		Type:      bridgeNoticePostType,
+		Message:   "🔗 This channel is now bridged to a Matrix room. Messages, edits, reactions and files posted here are copied there and can be read by everyone in that room, including people on other servers. Use `/matrix status` to see who is in it.",
+	}); appErr != nil {
+		p.logger.LogDebug("Could not post the bridging notice", "error", appErr, "channel_id", channelID)
+	}
 }
 
 func (p *Plugin) setBridgeState(roomID, eventType, key string, content map[string]any) error {

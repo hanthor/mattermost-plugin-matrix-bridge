@@ -75,12 +75,21 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 
 	// Extract message content (smart format detection: prefer formatted text, fallback to plain text)
 	content := b.extractMatrixMessageContent(event)
+	if loc, ok := locationText(event.Content); ok {
+		content = loc
+	}
+	if poll, ok := pollText(event.Content); ok {
+		content = poll
+	}
 
 	// For new messages (not edits), skip if content is empty
 	if content == "" {
 		b.logger.LogDebug("Matrix message has no body content, skipping new message", "event_id", event.EventID, "content", event.Content)
 		return nil // Empty new messages don't need to be synced
 	}
+
+	// A room mention notifies everyone: in Mattermost that is @channel.
+	content = roomMentionToChannel(event.Content, content)
 
 	// Get or create Mattermost user for the Matrix sender
 	mattermostUserID, err := b.getOrCreateMattermostUser(event.Sender, channelID)
@@ -400,8 +409,15 @@ func (b *MatrixToMattermostBridge) syncMatrixReactionToMattermost(event MatrixEv
 		return errors.Wrap(err, "failed to get or create Mattermost user for reaction")
 	}
 
-	// Convert Matrix emoji to Mattermost format
+	// Convert Matrix emoji to Mattermost format; an image reaction becomes a
+	// custom emoji.
 	emojiName := b.convertMatrixEmojiToMattermost(key)
+	if strings.HasPrefix(key, "mxc://") {
+		shortcode, _ := event.Content["com.beeper.reaction.shortcode"].(string)
+		if name, ok := b.emojiForImageReaction(key, shortcode); ok {
+			emojiName = name
+		}
+	}
 
 	// Create Mattermost reaction
 	reaction := &model.Reaction{

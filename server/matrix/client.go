@@ -2824,6 +2824,13 @@ func (c *Client) RemoveMattermostChannelID(roomID string) error {
 
 	url := c.serverURL + "/_matrix/client/v3/rooms/" + url.PathEscape(roomID) + "/state/com.mattermost.bridge.channel/"
 
+	// A room the bridge did not create (one mapped with /matrix map) carries no
+	// such state, and the bot may not be allowed to write it: nothing to clear.
+	var current map[string]any
+	if status, err := c.getJSON(url, &current); err == nil && (status == http.StatusNotFound || (status == http.StatusOK && len(current) == 0)) {
+		return nil
+	}
+
 	// Send an empty object to clear the state
 	body := strings.NewReader("{}")
 	req, err := http.NewRequest("PUT", url, body)

@@ -86,6 +86,14 @@ func (p *Plugin) MessageHasBeenUpdated(_ *plugin.Context, newPost, oldPost *mode
 		return
 	}
 
+	// Pinning or unpinning changes the room's pinned events, not the message.
+	if pinChanged(newPost, oldPost) {
+		go p.syncPinsToMatrix(newPost.ChannelId)
+		if newPost.Message == oldPost.Message {
+			return
+		}
+	}
+
 	p.sendOutbound(outboxOpPost, newPost, nil, newPost.ChannelId)
 }
 

@@ -55,6 +55,22 @@ func (m *MattermostServer) ExecSQL(t *testing.T, statement string) {
 	require.Zero(t, code, "SQL failed: %s", data)
 }
 
+// QuerySQL runs a query and returns its single value, for reading what the
+// plugin stored in the key-value table.
+func (m *MattermostServer) QuerySQL(t *testing.T, query string) string {
+	t.Helper()
+	code, out, err := m.pg.Exec(context.Background(), []string{"psql", "-U", "mmuser", "-d", "mattermost", "-v", "ON_ERROR_STOP=1", "-t", "-A", "-c", query})
+	require.NoError(t, err, "run SQL")
+	data, _ := io.ReadAll(out)
+	require.Zero(t, code, "SQL failed: %s", data)
+	// The stream carries a small header before the text.
+	text := string(data)
+	if i := strings.LastIndex(strings.TrimSpace(text), "\n"); i >= 0 {
+		text = text[i+1:]
+	}
+	return strings.TrimSpace(strings.Trim(text, "\x00\x01\x02\x03\x04\x05\x06\x07\x08"))
+}
+
 // BridgeConfig is the plugin configuration applied after installation.
 type BridgeConfig struct {
 	MatrixServerURL    string

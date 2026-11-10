@@ -22,19 +22,22 @@ const DefaultMatrixUsernamePrefix = "matrix"
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
-	MatrixServerURL      string `json:"matrix_server_url"`
-	MatrixASToken        string `json:"matrix_as_token"`
-	MatrixHSToken        string `json:"matrix_hs_token"`
-	MetricsToken         string `json:"metrics_token"` // read-only credential for /metrics; falls back to the homeserver token when empty
-	EnableSync           bool   `json:"enable_sync"`
-	EnableDirectMessages bool   `json:"enable_direct_messages"` // Bridge direct and group messages whose participants all agreed
-	EnableEncryption     bool   `json:"enable_encryption"`      // Bridge end-to-end encrypted Matrix rooms (bridge bot holds the keys)
-	MatrixUsernamePrefix string `json:"matrix_username_prefix"`
-	RateLimitingMode     string `json:"rate_limiting_mode"`
-	EnableMirrorMode     bool   `json:"enable_mirror_mode"`   // Hijack Matrix server to mirror Mattermost
-	MatrixServerDomain   string `json:"matrix_server_domain"` // e.g. "synapse" for @user:synapse
-	MirrorModePassword   string `json:"mirror_mode_password"` // Legacy: one shared password for every mirrored account
-	MatrixAdminToken     string `json:"matrix_admin_token"`   // Synapse admin token; lets /matrix claim set a one-time password
+	MatrixServerURL           string `json:"matrix_server_url"`
+	MatrixASToken             string `json:"matrix_as_token"`
+	MatrixHSToken             string `json:"matrix_hs_token"`
+	MetricsToken              string `json:"metrics_token"` // read-only credential for /metrics; falls back to the homeserver token when empty
+	EnableSync                bool   `json:"enable_sync"`
+	EnableDirectMessages      bool   `json:"enable_direct_messages"`       // Bridge direct and group messages whose participants all agreed
+	EnableEncryption          bool   `json:"enable_encryption"`            // Bridge end-to-end encrypted Matrix rooms (bridge bot holds the keys)
+	EnableRealtime            bool   `json:"enable_realtime"`              // Send typing, presence, custom status and read receipts to Matrix
+	InviteCreatesChannelsTeam string `json:"invite_creates_channels_team"` // Team in which inviting the bot to a room creates a channel; empty = off
+	RealtimePollSeconds       int    `json:"realtime_poll_seconds"`        // How often status and read state are checked (default 30)
+	MatrixUsernamePrefix      string `json:"matrix_username_prefix"`
+	RateLimitingMode          string `json:"rate_limiting_mode"`
+	EnableMirrorMode          bool   `json:"enable_mirror_mode"`   // Hijack Matrix server to mirror Mattermost
+	MatrixServerDomain        string `json:"matrix_server_domain"` // e.g. "synapse" for @user:synapse
+	MirrorModePassword        string `json:"mirror_mode_password"` // Legacy: one shared password for every mirrored account
+	MatrixAdminToken          string `json:"matrix_admin_token"`   // Synapse admin token; lets /matrix claim set a one-time password
 	// Matrix Authentication Service: when the homeserver delegates sign-in to
 	// MAS, mirror accounts are also created there and linked to the person's
 	// identity at the shared OpenID Connect provider.
@@ -158,6 +161,7 @@ func (p *Plugin) OnConfigurationChange() error {
 	if p.mattermostToMatrixBridge != nil {
 		p.initBridges()
 		p.startEncryption()
+		p.startRealtime()
 	}
 
 	return nil

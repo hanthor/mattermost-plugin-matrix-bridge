@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/matrix-org/complement/b"
 	"github.com/matrix-org/complement/client"
@@ -29,10 +30,17 @@ func TestCapabilityGaps(t *testing.T) {
 	h := NewHarness(t)
 	ctx := context.Background()
 
+	// Typing, status and read receipts are opt-in; check often so the probes are quick.
+	h.SetBridgeSetting("realtime_poll_seconds", 2)
+	h.SetBridgeSetting("enable_realtime", true)
+
 	alice := h.NewMatrixUser("alice")
 	channel := h.CreateChannel("gaps", "Gaps")
 	roomID := h.CreateMappedRoom(alice, channel.Id, "Gaps")
 	adminGhost := h.GhostUserID(h.AdminUser.Id)
+
+	// The event bot joins the bridged channel on its next check.
+	time.Sleep(6 * time.Second)
 
 	// Seed one message in each direction so both users exist on both sides.
 	seedPost, _, err := h.Admin.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: "seed from mattermost"})
@@ -75,6 +83,8 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("pinned post becomes m.room.pinned_events", func(t *testing.T) {
+		// The bot must be allowed to set room state, as in a room it created.
+		h.GrantBridgePower(alice, roomID, 50)
 		_, err := h.Admin.PinPost(ctx, seedPost.Id)
 		require.NoError(t, err)
 		works := TryFor(probeTimeout, func() bool {
@@ -305,6 +315,8 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("channel admin becomes a moderator power level", func(t *testing.T) {
+		// Changing power levels needs a power level of 100: given by whoever set up the room.
+		h.GrantBridgePower(alice, roomID, 100)
 		_, err := h.Admin.UpdateChannelMemberSchemeRoles(ctx, channel.Id, h.AdminUser.Id, &model.SchemeRoles{SchemeUser: true, SchemeAdmin: true})
 		require.NoError(t, err)
 		works := TryFor(probeTimeout, func() bool {
@@ -340,9 +352,10 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("inviting the bot to a new room creates a channel", func(t *testing.T) {
+		h.SetBridgeSetting("invite_creates_channels_team", h.Team.Name)
 		newRoom := alice.MustCreateRoom(t, map[string]interface{}{"preset": "public_chat", "name": "Born in Matrix", "invite": []string{h.BridgeBotUserID()}})
 		works := TryFor(probeTimeout, func() bool {
-			channels, _, err := h.Admin.GetChannelsForTeamForUser(ctx, h.Team.Id, h.AdminUser.Id, false, "")
+			channels, _, err := h.Admin.GetPublicChannelsForTeam(ctx, h.Team.Id, 0, 200, "")
 			if err != nil {
 				return false
 			}
