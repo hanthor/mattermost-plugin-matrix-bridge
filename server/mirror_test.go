@@ -30,6 +30,7 @@ type fakeSynapse struct {
 	redactFails  bool
 	states       []string                    // state events PUT: "room type/key body"
 	threepids    map[string][]map[string]any // third-party identifiers by account
+	accountData  []string                    // account data and room tags PUT: "user path body"
 	mu           sync.Mutex
 	existing     map[string]bool // accounts that already exist (natives)
 	created      []string
@@ -120,6 +121,9 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 				Body: fmt.Sprint(relates["key"]), Content: content,
 			})
 			_ = json.NewEncoder(w).Encode(map[string]string{"event_id": fmt.Sprintf("$re%d", len(f.reactions))})
+		case r.Method == http.MethodPut && (strings.Contains(r.URL.Path, "/account_data/") || strings.Contains(r.URL.Path, "/tags/")):
+			f.accountData = append(f.accountData, r.URL.Query().Get("user_id")+" "+r.URL.Path+" "+string(body))
+			_, _ = w.Write([]byte(`{}`))
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
 			_, _ = w.Write([]byte(`{}`))

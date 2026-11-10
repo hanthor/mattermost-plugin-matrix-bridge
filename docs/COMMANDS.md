@@ -843,3 +843,13 @@ ADVANCED COMMANDS
 /matrix unmap                          Remove mapping
 /matrix migrate                        Fix mappings
 ```
+
+## `/matrix welcome [confirm]`
+
+System administrators, mirror mode. For every mirror account nobody has claimed
+yet, tells the person (in a direct message from the bridge) their Matrix ID and
+how to claim it, and brings their bridged direct-message rooms (`m.direct`) and
+favourite channels (`m.favourite`) into the Matrix account, so their sidebar
+looks the same. Without `confirm` it only says how many people would be
+welcomed. It is safe to repeat and never messages a person twice; claimed
+accounts are left alone.

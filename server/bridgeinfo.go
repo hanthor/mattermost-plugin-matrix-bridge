@@ -133,7 +133,7 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 
 // bridgeNoticePostType marks the bridge's own notices: they are not relayed to
 // Matrix and not counted as history.
-const bridgeNoticePostType = "custom_matrix_bridge_notice"
+const bridgeNoticePostType = "custom_matrix_notice" // post types are at most 26 characters
 
 // announceBridging tells a channel's members that it is now connected to a
 // Matrix room, because they are otherwise not asked and what they write here
