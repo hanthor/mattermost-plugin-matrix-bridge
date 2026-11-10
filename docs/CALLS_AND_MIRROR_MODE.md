@@ -3,8 +3,8 @@
 Two questions came up once the bridge did the everyday things: what happens
 when someone starts a **call** on either side, and what exactly **mirror
 mode** promises when a community uses it to move from Mattermost to Matrix.
-This document settles the design for both so the work in
-[PLAN.md](PLAN.md) can proceed in order.
+This document settles the design for both so the work in the
+issues can proceed in order.
 
 **Status.** Implemented: mirror mode hygiene (credential-less accounts, the
 account resolver, collisions, pinned mode, `/matrix claim` with an admin

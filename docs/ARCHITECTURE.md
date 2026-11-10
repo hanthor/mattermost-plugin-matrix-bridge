@@ -786,6 +786,32 @@ on more than one node. The first step then is a secondary index per account
 mautrix-go's SQL crypto store, is the step after that. The key-value
 migrations in `server/migrations.go` are the migration path.
 
+### Two Matrix clients: keep the split, with a documented boundary (#76)
+
+The plugin has a hand-written Matrix client (`server/matrix/client.go`: requests,
+retry, rate limiting, media, room creation, application-service masquerading)
+and links mautrix-go for end-to-end encryption (`server/e2ee`).
+
+**Decision.** Keep both, and keep the boundary where it is:
+
+- `server/matrix` is the only client the bridge's features use. It is built
+  around the appservice's needs (acting as any ghost with `user_id`, `ts`
+  timestamps, per-user rate limiting, the plugin's retry and outbox
+  semantics), which mautrix's `Client` does not offer in this shape.
+- mautrix-go is used for what it is best at and what is hardest to write
+  correctly: Olm/Megolm sessions, device keys and their storage. Nothing else
+  imports it, and `server/encryption.go` is the single place that converts
+  between the two clients' event types.
+
+**Why not move everything onto mautrix's client.** It would trade a stable,
+fully tested client for a rewrite of every call site (and its tests), to gain
+typed events we do not currently need. The costs of the split are real but
+small and contained to one file.
+
+**Revisit when** a feature needs something mautrix gives for free and the
+hand-written client lacks (for example sliding sync or a new room version
+handling): move that area onto mautrix then, not the whole client.
+
 ## Future Enhancements
 
 ### Features (Implementation Status)
