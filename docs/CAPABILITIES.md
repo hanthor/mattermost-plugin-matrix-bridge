@@ -159,6 +159,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Invite a Matrix user from Mattermost | Mattermost → Matrix | ✅ | /matrix invite @user:server (channel managers and administrators) has the bridge bot invite a Matrix user into the channel's room. Already present people and the bridge's own accounts are refused. |
 | Inviting a Mattermost person's account from Matrix adds them to the channel | Matrix → Mattermost | ✅ | When a Matrix person invites the account that represents a Mattermost person (their ghost or mirror account) to a bridged room, that person is added to the channel, if they belong to its team. Direct messages and the bridge's own accounts are not affected. |
+| Removing someone is carried across (kicks) | Matrix → Mattermost | ✅ | Removing a person from a channel takes their account out of the room (as a kick with the reason when Mattermost reports who removed them); a Matrix moderator's kick or ban of a Mattermost person's account, or of a Matrix person, removes them from the channel. Each side's own permissions decide who may. Mattermost has no channel bans, so a Matrix ban removes the person but does not stop Mattermost from adding them again; reports are not carried. |
 | Rooms are repaired to match channel membership | Mattermost → Matrix | ✅ | /matrix repair (and a rotating background pass, twenty channels per run) adds the bridge accounts of channel members who are missing from the room and removes the accounts of people who left the channel. Real Matrix people, claimed mirror accounts and the bot are never touched; people with their own linked account must join themselves. |
 
 ## Files
@@ -175,7 +176,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 85
+- ✅ supported: 86
 - 🟡 partial: 4
 - ❌ gap: 8
 - — n/a: 0

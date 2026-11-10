@@ -215,6 +215,12 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		}
 	}
 
+	// A moderator in Matrix kicking or banning someone removes them from the
+	// channel.
+	if p.handleMatrixRemoval(event, channelID) {
+		return nil
+	}
+
 	// A person in Matrix inviting a Mattermost person's account adds them to
 	// the channel.
 	if p.handleInviteOfBridgeAccount(event, channelID) {

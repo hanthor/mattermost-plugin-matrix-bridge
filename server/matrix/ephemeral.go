@@ -72,3 +72,16 @@ func (c *Client) SendReadReceipt(roomID, eventID, userID string) error {
 	}
 	return c.sendJSONAsUser(http.MethodPost, path, map[string]any{}, userID)
 }
+
+// KickUser removes a user from a room as the bridge bot, with a reason.
+func (c *Client) KickUser(roomID, userID, reason string) error {
+	path, err := BuildSecureURL("/_matrix/client/v3/rooms/", roomID, "kick")
+	if err != nil {
+		return errors.Wrap(err, "invalid room ID")
+	}
+	body := map[string]any{"user_id": userID}
+	if reason != "" {
+		body["reason"] = reason
+	}
+	return c.sendJSONAsUser(http.MethodPost, path, body, "")
+}

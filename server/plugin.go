@@ -699,10 +699,15 @@ func (p *Plugin) stageAttachmentsForPost(post *model.Post) {
 
 // UserHasLeftChannel is called when a user leaves or is removed from a channel.
 // The user's ghost leaves the mapped Matrix room so membership stays in sync.
-func (p *Plugin) UserHasLeftChannel(_ *plugin.Context, channelMember *model.ChannelMember, _ *model.User) {
+func (p *Plugin) UserHasLeftChannel(_ *plugin.Context, channelMember *model.ChannelMember, actor *model.User) {
 	config := p.getConfiguration()
 	if !config.EnableSync || p.matrixClient == nil || p.mattermostToMatrixBridge == nil {
 		return
+	}
+
+	// Someone else removing a person is a kick in the room.
+	if actor != nil && actor.Id != channelMember.UserId {
+		p.kickIfRemoved(channelMember, actor)
 	}
 
 	roomIdentifier, err := p.mattermostToMatrixBridge.GetMatrixRoomID(channelMember.ChannelId)
