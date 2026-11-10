@@ -554,7 +554,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	mentionData := b.extractMattermostMentions(post)
 
 	// Convert post content to Matrix format
-	plainText, htmlContent := convertMattermostToMatrix(post.Message)
+	plainText, htmlContent := convertMattermostToMatrix(postMessageText(post))
 
 	// Create Matrix message content structure
 	messageContent := map[string]any{
@@ -567,6 +567,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		messageContent["format"] = "org.matrix.custom.html"
 		messageContent["formatted_body"] = htmlContent
 	}
+	fitMatrixMessage(messageContent)
 
 	// Add Matrix mentions if any @mentions exist in the post
 	b.addMatrixMentionsWithData(messageContent, post, mentionData)
@@ -691,7 +692,7 @@ func (b *MattermostToMatrixBridge) updatePostInMatrix(post *model.Post, matrixRo
 	mentionData := b.extractMattermostMentions(post)
 
 	// Convert post content to Matrix format
-	plainText, htmlContent := convertMattermostToMatrix(post.Message)
+	plainText, htmlContent := convertMattermostToMatrix(postMessageText(post))
 
 	// Create Matrix message content structure
 	messageContent := map[string]any{
@@ -704,6 +705,7 @@ func (b *MattermostToMatrixBridge) updatePostInMatrix(post *model.Post, matrixRo
 		messageContent["format"] = "org.matrix.custom.html"
 		messageContent["formatted_body"] = htmlContent
 	}
+	fitMatrixMessage(messageContent)
 
 	// Add Matrix mentions if any @mentions exist in the post
 	b.addMatrixMentionsWithData(messageContent, post, mentionData)

@@ -26,6 +26,9 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | @room ↔ @channel | Matrix → Mattermost | ❌ |  |
 | Pinned messages | Mattermost → Matrix | ❌ | m.room.pinned_events. |
 | Pinned messages | Matrix → Mattermost | ❌ |  |
+| Integration posts (webhooks, bots) keep their content | Mattermost → Matrix | 🟡 | The text of Slack-style attachments (pretext, title and link, text, fields, image link, footer) is sent as the message, and an overridden sender name is written as a bold prefix. Not yet: a per-message profile (name and icon) in Matrix, image attachments as files, and bot authors in history import. |
+| Long Mattermost posts fit a Matrix event | Mattermost → Matrix | ✅ | A post whose text and HTML copy would exceed Matrix's event size loses the HTML copy first, then is cut and marked. Ordinary long posts (up to Mattermost's 16,383 characters) arrive whole. |
+| Long Matrix messages are split into several posts | Matrix → Mattermost | ✅ | A Matrix message longer than Mattermost's 16,383 characters becomes consecutive posts, cut at paragraph breaks and marked as continued; an edit that is too long is cut with a marker instead of failing. Edits and reactions refer to the first post. |
 
 ## Reactions
 
@@ -154,7 +157,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 57
-- 🟡 partial: 4
+- ✅ supported: 59
+- 🟡 partial: 5
 - ❌ gap: 25
 - — n/a: 0
