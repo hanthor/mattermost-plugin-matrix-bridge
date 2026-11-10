@@ -207,6 +207,11 @@ type PluginAccessor interface {
 	// DirectMessages handles /matrix dm: action is on, off or status.
 	DirectMessages(userID, action string) (string, error)
 
+	// DeadLetters is how many Matrix events failed delivery and were set
+	// aside; RetryDeadLetters queues them again and returns how many.
+	DeadLetters() int
+	RetryDeadLetters() (int, error)
+
 	// Identity linking (one person on both networks)
 	CreateIdentityLinkCode(mattermostUserID string) (string, error)
 	GetIdentityLink(mattermostUserID string) (matrixUserID string, puppeted bool, ok bool)
@@ -483,6 +488,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("retry", "", "Replay changes that could not be delivered across the bridge"))
 	dmCmd := model.NewAutocompleteData("dm", "[on|off|status]", "Allow your direct messages to be bridged to Matrix (only if everyone in the conversation agrees)")
 	dmCmd.AddStaticListArgument("action", false, []model.AutocompleteListItem{
 		{Item: "on", HelpText: "Agree to bridge your direct and group messages"},
@@ -1333,7 +1339,7 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 	case "status":
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         statusCommandResponse + c.accountModeStatus() + c.channelEncryptionStatus(args.ChannelId),
+			Text:         statusCommandResponse + c.accountModeStatus() + c.channelEncryptionStatus(args.ChannelId) + c.deliveryStatus(),
 		}
 	case "claim":
 		return c.executeClaimCommand(args)
@@ -1355,6 +1361,15 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeHistoryCommand(args)
 	case "migrate-team":
 		return c.executeMigrateTeamCommand(args)
+	case "retry":
+		n, err := c.plugin.RetryDeadLetters()
+		if err != nil {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+		}
+		if n == 0 {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "Nothing is waiting to be retried."}
+		}
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: fmt.Sprintf("🔁 %d changes were queued again. They are posted in the background; run `/matrix status` to see whether any remain.", n)}
 	case "dm":
 		fields := strings.Fields(args.Command)
 		action := ""
@@ -1395,7 +1410,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team":
+	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "retry":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
@@ -2084,4 +2099,13 @@ func (c *Handler) executeMigrateTeamCommand(args *model.CommandArgs) *model.Comm
 		return reply("❌ " + err.Error())
 	}
 	return reply(text)
+}
+
+// deliveryStatus warns when Matrix events were set aside after every retry.
+func (c *Handler) deliveryStatus() string {
+	n := c.plugin.DeadLetters()
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n- ⚠️ **%d changes could not be delivered across the bridge** and were set aside. Run `/matrix retry` to try them again; the log says why they failed.", n)
 }

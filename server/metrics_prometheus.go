@@ -89,6 +89,10 @@ func (p *Plugin) prometheusSamples() []promSample {
 		gauge("queue_capacity", "How many events can wait.", float64(p.eventQueue.Capacity()))
 	}
 	if p.kvstore != nil {
+		gauge("inbox_pending", "Matrix events journaled and not yet handled.", float64(p.pendingInbound()))
+		gauge("dead_letters", "Matrix events set aside after every retry failed.", float64(p.inboundDeadLetters()))
+		gauge("outbox_pending", "Mattermost changes waiting to reach Matrix.", float64(p.OutboundPending()))
+		gauge("outbox_failed", "Mattermost changes set aside after a day without reaching Matrix.", float64(p.OutboundFailed()))
 		st := p.MirrorStatus()
 		gauge("mirror_accounts", "Mirror accounts.", float64(st.Accounts))
 		gauge("mirror_accounts_claimed", "Mirror accounts their people have claimed.", float64(st.Claimed))

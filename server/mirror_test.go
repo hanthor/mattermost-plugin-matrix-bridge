@@ -32,6 +32,7 @@ type fakeSynapse struct {
 	invites      []string
 	uploads      []string
 	createdRooms []map[string]any
+	down         bool // the homeserver answers 503 to message sends
 	reactions    []fakeSent
 	deactivated  []string
 	// sent records the messages sent to rooms, in order.
@@ -75,6 +76,9 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 			_ = json.Unmarshal(body, &req)
 			f.passwords[strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v2/users/")], _ = req["password"].(string)
 			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/send/m.room.message/") && f.down:
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"errcode":"M_UNKNOWN","error":"down"}`))
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/send/m.room.message/"):
 			var content map[string]any
 			_ = json.Unmarshal(body, &content)
@@ -486,4 +490,10 @@ func TestCutoverFreezesAccounts(t *testing.T) {
 	assert.Contains(t, err.Error(), "cut-over")
 	assert.Equal(t, []string{"ada"}, hs.created)
 	assert.True(t, p.MirrorStatus().Cutover)
+}
+
+func (f *fakeSynapse) setDown(down bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.down = down
 }

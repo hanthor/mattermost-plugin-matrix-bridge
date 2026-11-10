@@ -139,11 +139,13 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Prometheus metrics endpoint | Mattermost → Matrix | ✅ | GET <site>/plugins/com.mattermost.plugin-matrix-bridge/metrics with the homeserver token as a bearer token: message and error counters, API latency, queue depth, accounts, rate-limit state and whether encryption is ready. |
 | Retried homeserver transactions are handled once | Matrix → Mattermost | ✅ | Handled transaction IDs are kept in the key-value store, so a retry that reaches another node or follows a restart is recognised. Two nodes receiving the same transaction at the same instant are not guarded against. |
+| Matrix events survive a restart and are delivered in order per room | Matrix → Mattermost | ✅ | Each event is written to the key-value store before the homeserver is told it arrived and removed when handled; what a crash leaves behind is replayed on start. Events of one room are handled by one worker in order, failures are retried three times, then set aside (/matrix retry replays them). |
+| Mattermost changes reach Matrix after an outage, in order | Mattermost → Matrix | ✅ | Posts, edits, deletes and reactions are written to the key-value store before they are sent and removed once Matrix has them. While the homeserver is down they wait and are sent again with a growing delay (up to five minutes), channel by channel in order; after a day they are set aside for /matrix retry. A sent-again message carries the time it was sent again, not the time it was written. |
 | Adapts to the homeserver's 429 answers | Mattermost → Matrix | ✅ | Honours retry_after_ms: requests pause until the stated time, the refused request is repeated (up to three times), and the bridge's own limiters slow down until the homeserver stops complaining. Covered by unit tests with a fake homeserver; not exercised against a real rate-limited Synapse. |
 
 ## Totals
 
-- ✅ supported: 51
+- ✅ supported: 53
 - 🟡 partial: 4
 - ❌ gap: 25
 - — n/a: 0

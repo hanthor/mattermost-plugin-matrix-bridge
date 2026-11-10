@@ -28,6 +28,13 @@ func NewMatrixToMattermostBridge(utils *BridgeUtils) *MatrixToMattermostBridge {
 func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEvent, channelID string) error {
 	b.logger.LogDebug("Syncing Matrix message to Mattermost", "event_id", event.EventID, "sender", event.Sender, "channel_id", channelID)
 
+	// A replayed event (after a restart, or when a transaction was retried)
+	// must not become a second post.
+	if existing, err := b.kvstore.Get(kvstore.BuildMatrixEventPostKey(event.EventID)); err == nil && len(existing) > 0 {
+		b.logger.LogDebug("Matrix event already has a post; skipping", "event_id", event.EventID, "post_id", string(existing))
+		return nil
+	}
+
 	// Extract Mattermost metadata if present
 	mattermostPostID, mattermostRemoteID := b.extractMattermostMetadata(event)
 	if mattermostPostID != "" || mattermostRemoteID != "" {

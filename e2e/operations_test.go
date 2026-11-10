@@ -6,13 +6,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/matrix-org/complement/client"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/e2e/capabilities"
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/server/matrix"
@@ -63,6 +66,23 @@ func TestOperations(t *testing.T) {
 		assert.Regexp(t, `matrix_bridge_messages_to_matrix_total [1-9]`, body)
 		assert.Contains(t, body, "matrix_bridge_rate_limit_factor 1")
 		capabilities.Verify(t, "ops.metrics", strings.Contains(body, "matrix_bridge_messages_to_matrix_total"))
+	})
+
+	t.Run("an event left in the journal by a crashed run is delivered after a restart", func(t *testing.T) {
+		// The state a crash leaves: acknowledged by the bridge, written to the
+		// journal, never handled. Put it there directly, then restart the plugin.
+		entry := fmt.Sprintf(`{"event":{"type":"m.room.message","event_id":"$left-behind","sender":%q,"room_id":%q,"origin_server_ts":%d,"content":{"msgtype":"m.text","body":"Survived the crash"}},"received":%d}`,
+			alice.UserID, roomID, time.Now().UnixMilli(), time.Now().Add(-time.Minute).Unix())
+		h.Mattermost.ExecSQL(t, fmt.Sprintf(`INSERT INTO pluginkeyvaluestore (pluginid, pkey, pvalue, expireat) VALUES ('%s', 'inbox_$left-behind', convert_to('%s', 'UTF8'), 0)`, PluginID, entry))
+
+		_, err := h.Admin.DisablePlugin(ctx, PluginID)
+		require.NoError(t, err)
+		_, err = h.Admin.EnablePlugin(ctx, PluginID)
+		require.NoError(t, err)
+
+		post := WaitForPostWithMessage(t, h.Admin, channel.Id, "Survived the crash")
+		assert.NotEmpty(t, post.Id)
+		capabilities.Verify(t, "ops.inbound_journal", post.Id != "")
 	})
 
 	t.Run("a retried transaction is handled once, also after the plugin restarts", func(t *testing.T) {
@@ -122,4 +142,53 @@ func TestHomeserverRateLimitIsHonoured(t *testing.T) {
 	assert.Equal(t, uint64(1), client.RateLimitHits())
 	assert.Less(t, client.RateLimitFactor(), 1.0, "and slowed down")
 	capabilities.Verify(t, "ops.rate_limit_adapt", resp.EventID == "$delivered")
+}
+
+// TestMattermostChangesSurviveAHomeserverOutage stops the homeserver, posts in
+// Mattermost, starts it again, and expects the posts to arrive in order
+// without anyone running a command.
+func TestMattermostChangesSurviveAHomeserverOutage(t *testing.T) {
+	h := NewHarness(t)
+	ctx := context.Background()
+
+	alice := h.NewMatrixUser("alice")
+	channel := h.CreateChannel("outage", "Outage")
+	roomID := h.CreateMappedRoom(alice, channel.Id, "Outage")
+	carol, carolClient := h.CreateMattermostUser("carol")
+	_, _, err := h.Admin.AddChannelMember(ctx, channel.Id, carol.Id)
+	require.NoError(t, err)
+	aliceID, aliceToken := alice.UserID, alice.AccessToken
+
+	h.Deployment.StopServer(t, HSName)
+	for _, text := range []string{"first post during the outage", "second post during the outage"} {
+		_, _, err := carolClient.CreatePost(ctx, &model.Post{ChannelId: channel.Id, Message: text})
+		require.NoError(t, err, "Mattermost itself keeps working while Matrix is down")
+		time.Sleep(time.Second)
+	}
+	time.Sleep(5 * time.Second)
+	h.Deployment.StartServer(t, HSName)
+
+	// The homeserver is on a new port now; Alice's session is the same.
+	back := h.Deployment.UnauthenticatedClient(t, HSName)
+	back.UserID, back.AccessToken = aliceID, aliceToken
+
+	var order []string
+	WaitFor(t, 3*time.Minute, "both posts to reach the room", func() bool {
+		res := back.Do(t, http.MethodGet, []string{"_matrix", "client", "v3", "rooms", roomID, "messages"},
+			client.WithQueries(url.Values{"dir": {"f"}, "limit": {"100"}, "from": {"s0"}}))
+		defer func() { _ = res.Body.Close() }()
+		if res.StatusCode != http.StatusOK {
+			return false
+		}
+		order = order[:0]
+		gjson.GetBytes(client.ParseJSON(t, res), "chunk").ForEach(func(_, ev gjson.Result) bool {
+			if ev.Get("type").Str == "m.room.message" {
+				order = append(order, ev.Get("content.body").Str)
+			}
+			return true
+		})
+		return len(order) >= 2
+	})
+	assert.Equal(t, []string{"first post during the outage", "second post during the outage"}, order)
+	capabilities.Verify(t, "ops.outbox", len(order) == 2)
 }

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -105,37 +103,29 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Mark transaction as processed
-	// Clean up old transactions periodically
-	if p.markTransaction(txnID) {
-		go p.cleanupOldTransactions()
-	}
-
 	// Room keys and key counts arrive here too when encryption is on; they
 	// must be in place before the encrypted events are handled.
 	p.handleEncryptionExtras(body)
 
 	p.logger.LogDebug("Processing Matrix transaction", "txn_id", txnID, "event_count", len(transaction.Events))
 
-	// Process each event in the transaction asynchronously via the queue
+	// Each event is journaled and queued before the homeserver is told the
+	// transaction arrived, so nothing acknowledged can be lost. Events of one
+	// room go to one worker, in order. An event that could be neither
+	// journaled nor queued makes the homeserver send the transaction again.
 	for _, event := range transaction.Events {
-		e := event // local copy for closure
-		if err := p.eventQueue.Enqueue(Task{
-			ID:   fmt.Sprintf("matrix-event-%s", e.EventID),
-			Type: "matrix-event-" + e.Type,
-			Execute: func(ctx context.Context) error {
-				if processErr := p.processMatrixEvent(e); processErr != nil {
-					p.logger.LogError("Failed to process Matrix event in worker", "error", processErr, "event_id", e.EventID)
-					return processErr
-				}
-				return nil
-			},
-		}); err != nil {
-			p.logger.LogWarn("Event queue full, processing Matrix event synchronously", "event_id", e.EventID)
-			if processErr := p.processMatrixEvent(e); processErr != nil {
-				p.logger.LogError("Failed to process Matrix event synchronously", "error", processErr, "event_id", e.EventID)
-			}
+		if journaled, err := p.dispatchInbound(event, true); err != nil && !journaled {
+			p.logger.LogError("Could not accept a Matrix event; asking the homeserver to retry", "error", err, "event_id", event.EventID, "txn_id", txnID)
+			writeMatrixError(w, http.StatusServiceUnavailable, "M_UNKNOWN", "bridge is busy; retry the transaction")
+			return
+		} else if err != nil {
+			p.logger.LogWarn("Event queue full; the event stays in the journal and is replayed shortly", "event_id", event.EventID)
 		}
+	}
+
+	// Clean up old transactions periodically
+	if p.markTransaction(txnID) {
+		go p.cleanupOldTransactions()
 	}
 
 	// Ephemeral events are cheap and time-sensitive, so handle them inline.

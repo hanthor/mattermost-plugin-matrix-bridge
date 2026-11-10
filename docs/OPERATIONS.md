@@ -49,6 +49,36 @@ run of successful requests they speed back up. Watch
 limits for the appservice (`rate_limited: false` in the registration, which the
 downloadable file sets) or choose a slower mode.
 
+## Delivery guarantees
+
+Nothing the bridge has accepted is lost to a restart or an outage on either side.
+
+**Matrix → Mattermost.** Each event is written to the key-value store before
+the homeserver is told its transaction arrived, and removed when its handler
+has finished. A crash leaves the entry behind and it is replayed when the
+plugin starts (and every half minute if the queue was full). Events of one
+room are handled by one worker, in order; rooms run in parallel. A handler that
+fails is tried three times (half a second, then two seconds apart); after that
+the event is set aside. If the bridge is too busy to accept an event at all, it
+answers the transaction with 503 and the homeserver sends it again.
+
+**Mattermost → Matrix.** Posts, edits, deletes and reactions are written to the
+key-value store before they are sent and removed when Matrix has them. They go
+through the same queue, one lane per channel, so a channel's changes arrive in
+the order they were made. While the homeserver is down an entry waits and is
+tried again with a growing delay (5 s, 10 s … up to 5 minutes) by a pass that
+runs every 15 seconds; entries older than a day are set aside. A message that
+had to wait carries the time it was finally sent.
+
+**Set-aside changes.** `/matrix status` shows how many there are, `/matrix
+retry` (system administrators) queues them again, and the metrics
+`matrix_bridge_dead_letters`, `matrix_bridge_outbox_pending`,
+`matrix_bridge_outbox_failed` and `matrix_bridge_inbox_pending` track them.
+
+A replayed event is delivered at least once, not exactly once: a Matrix
+message that already has a post is skipped; an edit or reaction replayed twice
+has the same result twice.
+
 ## Retried transactions
 
 The homeserver retries a transaction until the bridge acknowledges it. Handled

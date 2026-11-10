@@ -70,6 +70,10 @@ func (m *mockPlugin) ChannelHistoryStatus(_ string) HistoryReport { return Histo
 
 func (m *mockPlugin) EncryptionSupported() bool { return false }
 
+func (m *mockPlugin) DeadLetters() int { return 0 }
+
+func (m *mockPlugin) RetryDeadLetters() (int, error) { return 0, nil }
+
 func (m *mockPlugin) DirectMessages(_, _ string) (string, error) { return "", nil }
 
 func (m *mockPlugin) MigrateTeam(_, _, _ string, _ bool) (string, error) { return "", nil }
