@@ -111,6 +111,27 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 		return
 	}
 	_ = p.kvstore.Set(bridgeInfoRoomKeyPrefix+channelID, []byte(roomID))
+	if previous != roomID {
+		p.announceBridging(channelID)
+	}
+}
+
+// announceBridging tells a channel's members that it is now connected to a
+// Matrix room, because they are otherwise not asked and what they write here
+// becomes readable there.
+func (p *Plugin) announceBridging(channelID string) {
+	botID, err := p.API.EnsureBotUser(&model.Bot{Username: "matrixbridge", DisplayName: "Matrix bridge", Description: "Notices from the Matrix bridge"})
+	if err != nil {
+		p.logger.LogDebug("Could not set up the bridge notice account", "error", err)
+		return
+	}
+	if _, appErr := p.API.CreatePost(&model.Post{
+		UserId:    botID,
+		ChannelId: channelID,
+		Message:   "🔗 This channel is now bridged to a Matrix room. Messages, edits, reactions and files posted here are copied there and can be read by everyone in that room, including people on other servers. Use `/matrix status` to see who is in it.",
+	}); appErr != nil {
+		p.logger.LogDebug("Could not post the bridging notice", "error", appErr, "channel_id", channelID)
+	}
 }
 
 func (p *Plugin) setBridgeState(roomID, eventType, key string, content map[string]any) error {

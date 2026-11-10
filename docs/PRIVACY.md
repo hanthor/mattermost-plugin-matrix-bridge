@@ -86,3 +86,10 @@ bot's state are sealed. Metrics contain counts only, never message content.
 3. Federation is off, or you accept that copies leave your organisation.
 4. You know who administers the homeserver, and that they can read the room.
 5. For direct messages: everyone ran `/matrix dm` after reading its text.
+
+## Members are told when a channel is bridged
+
+When a channel is mapped to a Matrix room (or its mapping changes), the bridge
+posts one notice in the channel, as the "Matrix bridge" bot, saying that what is
+written there is now copied to that room and readable by everyone in it. It is
+not repeated while the mapping stays the same.
