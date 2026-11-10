@@ -853,3 +853,13 @@ favourite channels (`m.favourite`) into the Matrix account, so their sidebar
 looks the same. Without `confirm` it only says how many people would be
 welcomed. It is safe to repeat and never messages a person twice; claimed
 accounts are left alone.
+
+## `/matrix erase <username> [confirm]`
+
+System administrators. Erases a person from the Matrix side for a
+data-protection request: redacts the messages their bridge account sent in
+bridged rooms, takes the account out of the rooms and, for a mirror account
+(with the Matrix admin token set), deactivates and erases it on the homeserver.
+Without `confirm` it only says how many messages and rooms are affected. It
+cannot be undone, does not touch Mattermost's own data, and cannot redact
+messages sent as the person's own linked Matrix account.

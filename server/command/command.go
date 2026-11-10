@@ -208,6 +208,10 @@ type PluginAccessor interface {
 	// returned text is shown to the administrator.
 	MigrateTeam(userID, teamID, action string, confirm bool) (string, error)
 
+	// EraseUser previews, or with confirm carries out, redacting a person's
+	// bridged messages and removing their bridge account.
+	EraseUser(adminID, username string, confirm bool) (string, error)
+
 	// WelcomeAccounts tells people with an unclaimed mirror account their
 	// Matrix ID and brings their direct-message and favourite rooms over.
 	WelcomeAccounts(userID string, confirm bool) (string, error)
@@ -522,6 +526,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 		{Item: "status", HelpText: "Show your setting"},
 	})
 	matrixData.AddCommand(dmCmd)
+	matrixData.AddCommand(model.NewAutocompleteData("erase", "<username> [confirm]", "Redact a person's bridged messages in Matrix and remove their bridge account"))
 	matrixData.AddCommand(model.NewAutocompleteData("welcome", "[confirm]", "Tell people with an unclaimed Matrix account their Matrix ID and bring over their direct messages and favourites"))
 	teamCmd := model.NewAutocompleteData("migrate-team", "report|readonly|writable|archive [confirm]", "Cut a team over to Matrix: report, make channels read-only, archive")
 	teamCmd.AddStaticListArgument("action", true, []model.AutocompleteListItem{
@@ -1388,6 +1393,16 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeHistoryCommand(args)
 	case "migrate-team":
 		return c.executeMigrateTeamCommand(args)
+	case "erase":
+		fields := strings.Fields(args.Command)
+		if len(fields) < 3 {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "Usage: `/matrix erase <username> [confirm]`"}
+		}
+		text, err := c.plugin.EraseUser(args.UserId, fields[2], len(fields) > 3 && fields[3] == "confirm")
+		if err != nil {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+		}
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	case "welcome":
 		text, err := c.plugin.WelcomeAccounts(args.UserId, strings.HasSuffix(strings.TrimSpace(args.Command), " confirm"))
 		if err != nil {
@@ -1460,7 +1475,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "welcome", "retry", "doctor":
+	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "welcome", "erase", "retry", "doctor":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
