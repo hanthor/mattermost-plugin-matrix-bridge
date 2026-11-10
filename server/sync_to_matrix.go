@@ -570,6 +570,10 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		messageContent["formatted_body"] = htmlContent
 	}
 	fitMatrixMessage(messageContent)
+	var extra map[string]any
+	if profile := perMessageProfile(post); profile != nil {
+		extra = map[string]any{"com.beeper.per_message_profile": profile}
+	}
 
 	// Add Matrix mentions if any @mentions exist in the post
 	b.addMatrixMentionsWithData(messageContent, post, mentionData)
@@ -628,6 +632,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 		PostID:        post.Id,
 		Files:         fileAttachments,
 		Mentions:      finalMentions,
+		ExtraContent:  extra,
 		Timestamp:     timestampMs,
 	}
 

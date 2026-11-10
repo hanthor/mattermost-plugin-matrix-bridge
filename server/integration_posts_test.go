@@ -47,3 +47,13 @@ func TestAttachmentsWithOnlyAFallbackStillCarryText(t *testing.T) {
 	post.AddProp("attachments", []any{map[string]any{"fallback": "Alert: disk full"}})
 	assert.Equal(t, "Alert: disk full", postMessageText(post))
 }
+
+func TestOverriddenSenderCarriesAPerMessageProfile(t *testing.T) {
+	post := &model.Post{Message: "deploy done"}
+	assert.Nil(t, perMessageProfile(post))
+
+	post.AddProp("override_username", " Deploy Bot ")
+	profile := perMessageProfile(post)
+	assert.Equal(t, "Deploy Bot", profile["displayname"])
+	assert.Equal(t, "mattermost-integration-deploy-bot", profile["id"])
+}

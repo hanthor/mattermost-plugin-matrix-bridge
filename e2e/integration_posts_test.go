@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -38,4 +39,24 @@ func TestIntegrationPostsKeepTheirContent(t *testing.T) {
 	require.Contains(t, body, "Build 42 passed")
 	require.Contains(t, body, "Branch")
 	capabilities.Verify(t, "messages.integrations", true)
+
+	// An integration that overrides the sender's name (an incoming webhook
+	// with a username) carries it as a per-message profile (MSC4144) as well as
+	// in the text.
+	patch := &model.Config{}
+	patch.ServiceSettings.EnableIncomingWebhooks = model.NewPointer(true)
+	patch.ServiceSettings.EnablePostUsernameOverride = model.NewPointer(true)
+	_, _, err = h.Admin.PatchConfig(ctx, patch)
+	require.NoError(t, err)
+	hook, _, err := h.Admin.CreateIncomingWebhook(ctx, &model.IncomingWebhook{ChannelId: channel.Id, DisplayName: "deploys", ChannelLocked: false})
+	require.NoError(t, err)
+	res, err := http.Post(h.Mattermost.URL+"/hooks/"+hook.Id, "application/json", strings.NewReader(`{"text":"deploy finished","username":"Deploy Bot"}`))
+	require.NoError(t, err)
+	_ = res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	ev = WaitForMatrixEvent(t, alice, roomID, func(ev gjson.Result) bool {
+		return ev.Get("type").Str == "m.room.message" && strings.Contains(ev.Get("content.body").Str, "deploy finished")
+	})
+	require.Contains(t, ev.Get("content.body").Str, "Deploy Bot")
+	require.Equal(t, "Deploy Bot", ev.Get(`content.com\.beeper\.per_message_profile.displayname`).Str)
 }

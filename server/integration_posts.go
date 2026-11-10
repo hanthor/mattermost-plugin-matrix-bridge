@@ -117,3 +117,22 @@ func renderAttachment(att map[string]any) string {
 func escapeMarkdown(s string) string {
 	return strings.NewReplacer("*", `\*`, "_", `\_`, "[", `\[`, "]", `\]`, "`", "\\`").Replace(s)
 }
+
+// perMessageProfile is the sender profile (MSC4144) an integration post
+// carries when it overrides the sender's name, so clients that understand it
+// show "Jenkins" rather than the person who owns the webhook. The name also
+// stays in the text for clients that do not.
+func perMessageProfile(post *model.Post) map[string]any {
+	name, _ := post.GetProp("override_username").(string)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	id := strings.ToLower(strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, name))
+	return map[string]any{"id": "mattermost-integration-" + id, "displayname": name}
+}
