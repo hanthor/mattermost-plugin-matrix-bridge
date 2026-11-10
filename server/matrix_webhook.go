@@ -13,10 +13,10 @@ import (
 	"maunium.net/go/mautrix/id"
 )
 
-// MatrixEvent represents a Matrix event received via Application Service webhook
 // maxTransactionBodyBytes bounds one appservice transaction.
 const maxTransactionBodyBytes = 8 << 20
 
+// MatrixEvent represents a Matrix event received via Application Service webhook
 type MatrixEvent struct {
 	Type       string         `json:"type"`
 	EventID    string         `json:"event_id"`
