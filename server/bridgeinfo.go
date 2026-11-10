@@ -99,6 +99,9 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 		if err := setEverywhere(previous, map[string]any{}); err != nil {
 			p.logger.LogDebug("Could not clear the bridge information in the old room", "error", err, "room_id", previous)
 		}
+		if err := p.setBridgeState(previous, widgetStateEventType, widgetStateKey, map[string]any{}); err != nil {
+			p.logger.LogDebug("Could not clear the widget in the old room", "error", err, "room_id", previous)
+		}
 		_ = p.kvstore.Delete(bridgeInfoRoomKeyPrefix + channelID)
 	}
 	if roomID == "" {
@@ -115,6 +118,14 @@ func (p *Plugin) syncBridgeInfo(channelID string) {
 		return
 	}
 	_ = p.kvstore.Set(bridgeInfoRoomKeyPrefix+channelID, []byte(roomID))
+	{
+		name, _ := content["channel"].(map[string]any)["displayname"].(string)
+		if widget := p.widgetContent(channelID, name); widget != nil {
+			if err := p.setBridgeState(roomID, widgetStateEventType, widgetStateKey, widget); err != nil {
+				p.logger.LogDebug("Could not set the widget in the room", "error", err, "room_id", roomID)
+			}
+		}
+	}
 	if previous != roomID {
 		p.announceBridging(channelID)
 	}

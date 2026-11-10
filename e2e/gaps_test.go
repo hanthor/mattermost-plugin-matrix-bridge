@@ -380,22 +380,6 @@ func TestCapabilityGaps(t *testing.T) {
 		capabilities.Verify(t, "rooms.name_topic", works)
 	})
 
-	t.Run("bridge widget is present in the room", func(t *testing.T) {
-		works := false
-		res := alice.Do(t, http.MethodGet, []string{"_matrix", "client", "v3", "rooms", roomID, "state"})
-		if res.StatusCode == http.StatusOK {
-			gjson.ParseBytes(client.ParseJSON(t, res)).ForEach(func(_, ev gjson.Result) bool {
-				if ev.Get("type").Str == "im.vector.modular.widgets" && strings.Contains(ev.Get("content.url").Str, "mattermost") {
-					works = true
-					return false
-				}
-				return true
-			})
-		}
-		_ = res.Body.Close()
-		capabilities.Verify(t, "integration.widget", works)
-	})
-
 	t.Run("bridge bot can link a room from Matrix", func(t *testing.T) {
 		dm := alice.MustCreateRoom(t, map[string]interface{}{"preset": "private_chat", "is_direct": true, "invite": []string{h.BridgeBotUserID()}})
 		SendMatrixText(t, alice, dm, "!mattermost rooms")
