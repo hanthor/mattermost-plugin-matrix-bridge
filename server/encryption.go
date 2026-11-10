@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"maunium.net/go/mautrix/crypto/attachment"
@@ -171,6 +172,7 @@ func (p *Plugin) decryptMatrixEvent(ev MatrixEvent) (MatrixEvent, bool) {
 	dec, err := mgr.Decrypt(ctx, in)
 	if err != nil {
 		p.logger.LogWarn("Could not decrypt a Matrix event; it was not bridged", "error", err, "event_id", ev.EventID, "room_id", ev.RoomID)
+		p.noteUndecryptable(ev)
 		return ev, false
 	}
 	content := dec.Content.VeryRaw
@@ -273,4 +275,39 @@ func decryptAttachment(file map[string]any, data []byte) ([]byte, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+const undecryptableKeyPrefix = "undecryptable_"
+
+// noteUndecryptable tells the channel that something was said which the bridge
+// could not read, so people know a message is missing instead of seeing
+// nothing. It is posted once per event, as the person who sent it.
+func (p *Plugin) noteUndecryptable(ev MatrixEvent) {
+	if p.kvstore == nil || p.matrixToMattermostBridge == nil || ev.EventID == "" {
+		return
+	}
+	key := undecryptableKeyPrefix + ev.EventID
+	if data, _ := p.kvstore.Get(key); len(data) > 0 {
+		return
+	}
+	channelID, err := p.getChannelIDFromMatrixRoom(ev.RoomID)
+	if err != nil || channelID == "" || p.isBridgeAccount(ev.Sender) {
+		return
+	}
+	userID, err := p.matrixToMattermostBridge.getOrCreateMattermostUser(ev.Sender, channelID)
+	if err != nil {
+		p.logger.LogDebug("Could not find who sent an undecryptable message", "error", err, "event_id", ev.EventID)
+		return
+	}
+	post := &model.Post{
+		UserId: userID, ChannelId: channelID,
+		Message:  "🔒 _A message was sent here that the bridge could not decrypt, so it is not shown. If this keeps happening, see the encryption notes in the plugin documentation._",
+		CreateAt: ev.Timestamp,
+		Props:    map[string]any{"from_matrix": true},
+	}
+	if _, appErr := p.API.CreatePost(post); appErr != nil {
+		p.logger.LogWarn("Could not post the notice about an undecryptable message", "error", appErr)
+		return
+	}
+	_ = p.kvstore.Set(key, []byte("1"))
 }

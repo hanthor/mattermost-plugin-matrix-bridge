@@ -2,12 +2,16 @@ package e2e
 
 import (
 	"net/http"
+	"strings"
 	"testing"
+
+	"github.com/matrix-org/complement/b"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/e2e/capabilities"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 )
 
@@ -103,5 +107,70 @@ func TestEncryptedRoomsAreBridged(t *testing.T) {
 		data, _, err := h.Admin.GetFile(ctx, post.FileIds[0])
 		require.NoError(t, err)
 		assert.Equal(t, "report from an encrypted client", string(data))
+	})
+
+	t.Run("a message the bridge cannot decrypt is announced in the channel", func(t *testing.T) {
+		// A message encrypted with a key the bridge was never given, as one sent
+		// before the bridge joined would be.
+		alice.SendEventSynced(t, room, b.Event{Type: "m.room.encrypted", Content: map[string]any{
+			"algorithm": "m.megolm.v1.aes-sha2", "sender_key": "unknown-sender-key",
+			"session_id": "unknown-session", "device_id": "UNKNOWN", "ciphertext": "AwgAEiBunknownciphertext",
+		}})
+		post := WaitForPost(t, carolClient, channel.Id, "the notice", func(p *model.Post) bool {
+			return strings.Contains(p.Message, "could not decrypt")
+		})
+		capabilities.Verify(t, "rooms.encryption.undecryptable_notice", post.Id != "")
+	})
+
+	t.Run("edits, reactions and replies in an encrypted room cross too", func(t *testing.T) {
+		original := ec.Send(roomID, "encrypted original")
+		post := WaitForPostWithMessage(t, carolClient, channel.Id, "encrypted original")
+
+		ec.SendEvent(roomID, event.EventMessage, map[string]any{
+			"msgtype": "m.text", "body": "* encrypted edited",
+			"m.new_content": map[string]any{"msgtype": "m.text", "body": "encrypted edited"},
+			"m.relates_to":  map[string]any{"rel_type": "m.replace", "event_id": string(original)},
+		})
+		WaitFor(t, bridgeTimeout, "the edit", func() bool {
+			p, _, err := h.Admin.GetPost(ctx, post.Id, "")
+			return err == nil && p.Message == "encrypted edited"
+		})
+
+		ec.SendEvent(roomID, event.EventReaction, map[string]any{
+			"m.relates_to": map[string]any{"rel_type": "m.annotation", "event_id": string(original), "key": "👍"},
+		})
+		WaitFor(t, bridgeTimeout, "the reaction", func() bool {
+			reactions, _, err := h.Admin.GetReactions(ctx, post.Id)
+			return err == nil && len(reactions) == 1
+		})
+
+		ec.SendEvent(roomID, event.EventMessage, map[string]any{
+			"msgtype": "m.text", "body": "an encrypted reply",
+			"m.relates_to": map[string]any{"m.in_reply_to": map[string]any{"event_id": string(original)}},
+		})
+		reply := WaitForPostWithMessage(t, carolClient, channel.Id, "an encrypted reply")
+		assert.NotEmpty(t, reply.Id)
+	})
+
+	t.Run("after a plugin restart the bridge still reads the room's keys", func(t *testing.T) {
+		_, err := h.Admin.DisablePlugin(ctx, PluginID)
+		require.NoError(t, err)
+		_, err = h.Admin.EnablePlugin(ctx, PluginID)
+		require.NoError(t, err)
+		// The same room key as before the restart: only a device kept in the
+		// key-value store can open it.
+		WaitFor(t, bridgeTimeout, "the bridge to read a message after the restart", func() bool {
+			ec.Send(roomID, "sent after the restart")
+			posts, _, err := h.Admin.GetPostsForChannel(ctx, channel.Id, 0, 60, "", false, false)
+			if err != nil {
+				return false
+			}
+			for _, id := range posts.Order {
+				if posts.Posts[id].Message == "sent after the restart" {
+					return true
+				}
+			}
+			return false
+		})
 	})
 }

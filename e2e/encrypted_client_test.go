@@ -118,10 +118,10 @@ func (ec *encryptedClient) handle(evt *event.Event) {
 	}
 }
 
-// Send encrypts and sends a text message.
-func (ec *encryptedClient) Send(room id.RoomID, body string) {
+// Send encrypts and sends a text message and returns its event ID.
+func (ec *encryptedClient) Send(room id.RoomID, body string) id.EventID {
 	ec.t.Helper()
-	ec.sendEncrypted(room, map[string]any{"msgtype": "m.text", "body": body})
+	return ec.sendEncrypted(room, event.EventMessage, map[string]any{"msgtype": "m.text", "body": body})
 }
 
 // WaitForMessage waits for a decrypted message with this body.
@@ -178,7 +178,7 @@ func (ec *encryptedClient) SendFile(room id.RoomID, cs *client.CSAPI, name strin
 	ec.t.Helper()
 	file := attachment.NewEncryptedFile()
 	mxc := cs.UploadContent(ec.t, file.Encrypt(data), "encrypted", "application/octet-stream")
-	ec.sendEncrypted(room, map[string]any{
+	ec.sendEncrypted(room, event.EventMessage, map[string]any{
 		"msgtype": "m.file",
 		"body":    name,
 		"file":    event.EncryptedFileInfo{EncryptedFile: *file, URL: id.ContentURIString(mxc)},
@@ -186,7 +186,7 @@ func (ec *encryptedClient) SendFile(room id.RoomID, cs *client.CSAPI, name strin
 	})
 }
 
-func (ec *encryptedClient) sendEncrypted(room id.RoomID, content map[string]any) {
+func (ec *encryptedClient) sendEncrypted(room id.RoomID, evType event.Type, content map[string]any) id.EventID {
 	ec.t.Helper()
 	members, err := ec.cli.JoinedMembers(ec.ctx, room)
 	require.NoError(ec.t, err)
@@ -195,10 +195,18 @@ func (ec *encryptedClient) sendEncrypted(room id.RoomID, content map[string]any)
 		users = append(users, u)
 	}
 	require.NoError(ec.t, ec.mach.ShareGroupSession(ec.ctx, room, users))
-	enc, err := ec.mach.EncryptMegolmEvent(ec.ctx, room, event.EventMessage, content)
+	enc, err := ec.mach.EncryptMegolmEvent(ec.ctx, room, evType, content)
 	require.NoError(ec.t, err)
-	_, err = ec.cli.SendMessageEvent(ec.ctx, room, event.EventEncrypted, enc)
+	resp, err := ec.cli.SendMessageEvent(ec.ctx, room, event.EventEncrypted, enc)
 	require.NoError(ec.t, err)
+	return resp.EventID
+}
+
+// SendEvent encrypts and sends an event of any type (an edit is a message with
+// a relation; a reaction has its own type) and returns its event ID.
+func (ec *encryptedClient) SendEvent(room id.RoomID, evType event.Type, content map[string]any) id.EventID {
+	ec.t.Helper()
+	return ec.sendEncrypted(room, evType, content)
 }
 
 // ServerCopyContains reports whether any event the server holds for the room
