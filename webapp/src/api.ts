@@ -39,6 +39,20 @@ export type PostMatrix = {bridged: boolean; event_id?: string; room_id?: string;
 export type Claim = {matrix_user_id: string; one_time_password: string};
 export type LinkCode = {code: string; bot_user: string; command: string; expires_min: number};
 
+export type AdminHealthCheck = {status: 'ok' | 'warn' | 'fail'; title: string; detail?: string};
+export type AdminMapping = {channel_id: string; channel_name: string; team?: string; room: string};
+export type AdminStatus = {
+    enabled: boolean;
+    mode: 'ghost' | 'mirror';
+    health: AdminHealthCheck[];
+    worst: 'ok' | 'warn' | 'fail';
+    mappings: AdminMapping[];
+    mapped_channels: number;
+    mirror: {accounts: number; claimed: number; collisions: number};
+    dead_letters: number;
+    cutover: boolean;
+};
+
 const base = `/plugins/${manifest.id}/api/v1`;
 
 function csrfToken(): string {
@@ -69,6 +83,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
     me: () => request<Me>('GET', '/me'),
+    adminStatus: () => request<AdminStatus>('GET', '/admin/status'),
     channel: (channelId: string) => request<ChannelStatus>('GET', `/channels/${channelId}`),
     members: (channelId: string) => request<{members: RoomMember[]}>('GET', `/channels/${channelId}/members`),
     postMatrix: (postId: string) => request<PostMatrix>('GET', `/posts/${postId}/matrix`),

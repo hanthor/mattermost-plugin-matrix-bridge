@@ -6,6 +6,7 @@ import type {Store, Action} from 'redux';
 
 import type {GlobalState} from '@mattermost/types/store';
 
+import BridgeStatus from '@/components/admin_console_settings/bridge_status';
 import HomeserverConfig from '@/components/admin_console_settings/homeserver_config';
 import RegistrationDownload from '@/components/admin_console_settings/registration_download';
 import BridgePanel from '@/components/bridge_panel';
@@ -33,6 +34,7 @@ export default class Plugin {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     public async initialize(registry: PluginRegistry, store: Store<GlobalState, Action<Record<string, unknown>>>) {
         // Register custom admin console components
+        registry.registerAdminConsoleCustomSetting('bridge_status', BridgeStatus, {showTitle: true});
         registry.registerAdminConsoleCustomSetting('registration_download', RegistrationDownload, {showTitle: false});
         registry.registerAdminConsoleCustomSetting('homeserver_config', HomeserverConfig, {showTitle: false});
 

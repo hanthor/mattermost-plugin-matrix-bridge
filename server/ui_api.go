@@ -22,6 +22,7 @@ func (p *Plugin) registerUIRoutes(router *mux.Router) {
 	ui := router.PathPrefix(uiAPIPrefix).Subrouter()
 	ui.Use(p.mattermostUserRequired)
 	ui.HandleFunc("/me", p.handleUIMe).Methods(http.MethodGet)
+	ui.HandleFunc("/admin/status", p.handleUIAdminStatus).Methods(http.MethodGet)
 	ui.HandleFunc("/me/claim", p.handleUIClaim).Methods(http.MethodPost)
 	ui.HandleFunc("/me/link", p.handleUILinkStart).Methods(http.MethodPost)
 	ui.HandleFunc("/me/link", p.handleUIUnlink).Methods(http.MethodDelete)

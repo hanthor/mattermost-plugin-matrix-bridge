@@ -23,6 +23,12 @@
         "footer": "For more information, see the [Matrix specification](https://spec.matrix.org/v1.14/)",
         "settings": [
             {
+                "key": "bridge_status",
+                "display_name": "Bridge status",
+                "type": "custom",
+                "help_text": "Health of the bridge, what is bridged to what and what is waiting. Check again after changing a setting."
+            },
+            {
                 "key": "matrix_server_url",
                 "display_name": "Matrix Server URL",
                 "type": "text",
