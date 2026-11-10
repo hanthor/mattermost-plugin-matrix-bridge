@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/matrix-org/complement/client"
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -36,6 +38,10 @@ func TestBackfillStructure(t *testing.T) {
 	// name nobody chose for it and, possibly, no widget.
 	require.Equal(t, "Something else", state("m.room.name", "").Get("name").Str)
 
+	// A custom emoji exists in Mattermost.
+	_, _, err := h.Admin.CreateEmoji(t.Context(), &model.Emoji{CreatorId: h.AdminUser.Id, Name: "backfillparrot"}, onePixelPNG, "parrot.png")
+	require.NoError(t, err)
+
 	resp, _, err := h.Admin.ExecuteCommand(t.Context(), channel.Id, "/matrix backfill structure")
 	require.NoError(t, err)
 	t.Log(resp.Text)
@@ -47,5 +53,12 @@ func TestBackfillStructure(t *testing.T) {
 		return state("im.vector.modular.widgets", "com.mattermost.channel").Get("url").Str != ""
 	})
 	assert.Equal(t, "Structure", state("m.room.name", "").Get("name").Str)
+
+	// The custom emoji are offered as the room's emoji pack (MSC2545).
+	WaitFor(t, bridgeTimeout, "the emoji pack", func() bool {
+		return state("im.ponies.room_emotes", "com.mattermost.emoji").Get("images.backfillparrot.url").Str != ""
+	})
+	mxc := state("im.ponies.room_emotes", "com.mattermost.emoji").Get("images.backfillparrot.url").Str
+	require.True(t, strings.HasPrefix(mxc, "mxc://"), mxc)
 	capabilities.Verify(t, "integration.backfill", true)
 }

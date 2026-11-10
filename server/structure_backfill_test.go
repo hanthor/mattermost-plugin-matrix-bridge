@@ -23,6 +23,8 @@ func TestBackfillStructureGoesThroughEveryBridgedChannel(t *testing.T) {
 	api.On("GetTeam", "t1").Return(&model.Team{Id: "t1", Name: "main", DisplayName: "Main"}, nil).Maybe()
 	api.On("EnsureBotUser", mock.Anything).Return("bot1", nil).Maybe()
 	api.On("CreatePost", mock.Anything).Return(&model.Post{}, nil).Maybe()
+	api.On("GetEmojiList", "name", 0, emojiPackLimit).Return([]*model.Emoji{{Id: "e1", Name: "party_parrot"}}, nil).Maybe()
+	api.On("GetEmojiImage", "e1").Return([]byte("png"), "png", nil).Maybe()
 	p.configuration.EnableSync = true
 
 	require.NoError(t, p.kvstore.Set(kvstore.BuildChannelMappingKey("ch1"), []byte("!room1:example.com")))
@@ -37,5 +39,7 @@ func TestBackfillStructureGoesThroughEveryBridgedChannel(t *testing.T) {
 	for _, room := range []string{"!room1:example.com", "!room2:example.com"} {
 		assert.Contains(t, joined, room+" m.bridge/")
 		assert.Contains(t, joined, room+" im.vector.modular.widgets/")
+		assert.Contains(t, joined, room+" im.ponies.room_emotes/com.mattermost.emoji")
 	}
+	assert.Contains(t, joined, `"party_parrot":{"url":"mxc://example.com/uploaded"}`)
 }
