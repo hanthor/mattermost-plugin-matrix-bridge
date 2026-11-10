@@ -177,6 +177,8 @@ Join by room ID:
 
 Maps the current Mattermost channel to an existing Matrix room. Use this when you want to bridge an existing channel to an existing room without creating a new one.
 
+Once mapped, the bridge sets the room's bridge-information state event so Matrix clients can show where the room leads (it is emptied on `/matrix unmap`). Setting it needs the bridge bot to have power to send state events; in a room you created yourself, give the bot moderator rights (power level 50), as `/matrix doctor` suggests.
+
 **Usage:**
 ```
 /matrix map [room_alias|room_id]
