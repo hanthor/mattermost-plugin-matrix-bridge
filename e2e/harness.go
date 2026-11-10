@@ -104,10 +104,14 @@ func bridgeBlueprint(encryption, federation bool) b.Blueprint {
 			EnableEncryption: encryption,
 		}},
 	}}
+	// Complement caches deployed blueprints by name, so a blueprint with a
+	// different set of homeservers needs a name of its own.
+	name := "mattermost_bridge"
 	if federation {
 		homeservers = append(homeservers, b.Homeserver{Name: RemoteHSName})
+		name = "mattermost_bridge_federated"
 	}
-	return b.MustValidate(b.Blueprint{Name: "mattermost_bridge", Homeservers: homeservers})
+	return b.MustValidate(b.Blueprint{Name: name, Homeservers: homeservers})
 }
 
 // NewHarness deploys everything and returns a ready-to-use harness. It
