@@ -9,9 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func resetRecentTransactions() {
-	recentTransactions.Range(func(k, _ any) bool { recentTransactions.Delete(k); return true })
-}
+func resetRecentTransactions() {}
 
 func TestATransactionHandledByAnotherNodeIsRecognised(t *testing.T) {
 	resetRecentTransactions()
@@ -43,7 +41,7 @@ func TestOldTransactionRecordsAreCleanedUp(t *testing.T) {
 
 	require.NoError(t, p.kvstore.Set(transactionKey("old"), []byte("1")))
 	p.markTransaction("fresh")
-	recentTransactions.Store("old", time.Now().Add(-2*time.Hour))
+	p.recentTransactions.Store("old", time.Now().Add(-2*time.Hour))
 
 	p.cleanupOldTransactions()
 

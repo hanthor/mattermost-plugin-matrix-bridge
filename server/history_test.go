@@ -191,8 +191,8 @@ func TestHistoryImportSkipsBotsAndMatrixUsers(t *testing.T) {
 func TestHistoryImportRefusesToRunTwiceAtOnce(t *testing.T) {
 	p, _, _ := historyFixture(t, oldPost("p1", "mm-ada", "one", 3))
 	p.configuration.MatrixServerURL = "https://example.com"
-	historyRuns.Store(historyChannel, struct{}{})
-	defer historyRuns.Delete(historyChannel)
+	p.historyRuns.Store(historyChannel, struct{}{})
+	defer p.historyRuns.Delete(historyChannel)
 
 	err := p.StartChannelHistory(historyChannel, 0)
 	require.Error(t, err)

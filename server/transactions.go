@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -27,8 +26,6 @@ const (
 	txnMaxKeyIDBytes = 100
 )
 
-var recentTransactions sync.Map // transaction ID -> time.Time
-
 func transactionKey(txnID string) string {
 	if len(txnID) > txnMaxKeyIDBytes {
 		sum := sha256.Sum256([]byte(txnID))
@@ -39,7 +36,7 @@ func transactionKey(txnID string) string {
 
 // transactionSeen reports whether a transaction was already handled.
 func (p *Plugin) transactionSeen(txnID string) bool {
-	if _, ok := recentTransactions.Load(txnID); ok {
+	if _, ok := p.recentTransactions.Load(txnID); ok {
 		return true
 	}
 	if p.kvstore == nil {
@@ -49,7 +46,7 @@ func (p *Plugin) transactionSeen(txnID string) bool {
 	if err != nil || len(data) == 0 {
 		return false
 	}
-	recentTransactions.Store(txnID, time.Now())
+	p.recentTransactions.Store(txnID, time.Now())
 	return true
 }
 
@@ -57,14 +54,14 @@ func (p *Plugin) transactionSeen(txnID string) bool {
 // hundredth call, which is when old records should be cleaned up.
 func (p *Plugin) markTransaction(txnID string) (cleanupDue bool) {
 	now := time.Now()
-	recentTransactions.Store(txnID, now)
+	p.recentTransactions.Store(txnID, now)
 	if p.kvstore != nil {
 		if err := p.kvstore.Set(transactionKey(txnID), []byte(strconv.FormatInt(now.Unix(), 10))); err != nil {
 			p.logger.LogWarn("Could not record a handled transaction", "error", err, "txn_id", txnID)
 		}
 	}
 	n := 0
-	recentTransactions.Range(func(_, _ any) bool { n++; return true })
+	p.recentTransactions.Range(func(_, _ any) bool { n++; return true })
 	return n%100 == 0
 }
 
@@ -72,9 +69,9 @@ func (p *Plugin) markTransaction(txnID string) (cleanupDue bool) {
 // and in the key-value store.
 func (p *Plugin) cleanupOldTransactions() {
 	cutoff := time.Now().Add(-txnRetention)
-	recentTransactions.Range(func(k, v any) bool {
+	p.recentTransactions.Range(func(k, v any) bool {
 		if t, ok := v.(time.Time); ok && t.Before(cutoff) {
-			recentTransactions.Delete(k)
+			p.recentTransactions.Delete(k)
 		}
 		return true
 	})

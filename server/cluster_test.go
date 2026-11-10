@@ -46,7 +46,7 @@ func TestHistoryImportIsRefusedWhileAnotherNodeRunsIt(t *testing.T) {
 	err := p.StartChannelHistory(historyChannel, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "another server")
-	_, running := historyRuns.Load(historyChannel)
+	_, running := p.historyRuns.Load(historyChannel)
 	assert.False(t, running, "the local marker is released too")
 }
 

@@ -64,6 +64,12 @@ type Plugin struct {
 	// inbox journals Matrix events until their handlers finish.
 	inbox inboxState
 
+	// recentTransactions is the in-memory part of transaction deduplication
+	// (transaction ID -> time handled); historyRuns marks channels whose history
+	// import is running on this node.
+	recentTransactions sync.Map
+	historyRuns        sync.Map
+
 	// outbox journals Mattermost changes until the homeserver has them.
 	outbox outboxState
 
