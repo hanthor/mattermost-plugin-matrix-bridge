@@ -18,7 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
-      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse:develop
+      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse@sha256:1b63e5c885f581d14d6b48a99f1c0835a5011efbbae1da11f067e8bc4db2a862
+      # Images are pinned by digest; e2e-moving-tags.yml watches the moving tags.
       # Optional: a Mattermost license enables the Shared Channels code paths.
       E2E_MM_LICENSE: ${{ secrets.MM_LICENSE }}
     steps:
@@ -43,8 +44,8 @@ jobs:
           docker pull mattermost/mattermost-enterprise-edition:12.1.0
           docker pull postgres:16-alpine
           docker pull ghcr.io/dexidp/dex:v2.41.1
-          docker pull ghcr.io/element-hq/matrix-authentication-service:latest
-          docker pull ghcr.io/element-hq/synapse:latest
+          docker pull ghcr.io/element-hq/matrix-authentication-service@sha256:494c67f08ee8344368f4ed336611dea02b26c4e058bf37a212d090d50b612659
+          docker pull ghcr.io/element-hq/synapse@sha256:1909bcc07d4180945464712a7f4d4bb6f644c4c1774d026d77cdadc196b91eb8
 
       - name: Build plugin bundle
         run: make dist
@@ -61,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse:develop
+      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse@sha256:1b63e5c885f581d14d6b48a99f1c0835a5011efbbae1da11f067e8bc4db2a862
     steps:
       - uses: actions/checkout@v4
 

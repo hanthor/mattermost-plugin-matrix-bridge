@@ -33,9 +33,12 @@ import (
 // through a table: redirects that carry the in-network address keep working.
 
 const (
-	defaultDexImage     = "ghcr.io/dexidp/dex:v2.41.1"
-	defaultMASImage     = "ghcr.io/element-hq/matrix-authentication-service:latest"
-	defaultSynapseImage = "ghcr.io/element-hq/synapse:latest"
+	defaultDexImage = "ghcr.io/dexidp/dex:v2.41.1"
+	// Pinned by digest so an upstream change cannot turn the suite red, or hide a
+	// regression, without a change here. The scheduled "e2e-moving-tags" workflow
+	// runs against the moving tags and reports when they break.
+	defaultMASImage     = "ghcr.io/element-hq/matrix-authentication-service@sha256:494c67f08ee8344368f4ed336611dea02b26c4e058bf37a212d090d50b612659"
+	defaultSynapseImage = "ghcr.io/element-hq/synapse@sha256:1909bcc07d4180945464712a7f4d4bb6f644c4c1774d026d77cdadc196b91eb8"
 
 	masServerName = "hs.test"
 	masProviderID = "01HQW90Z35CMXFJWQPHC3BGZGQ"

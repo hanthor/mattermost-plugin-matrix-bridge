@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
-      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse:develop
+      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse@sha256:1b63e5c885f581d14d6b48a99f1c0835a5011efbbae1da11f067e8bc4db2a862
     steps:
       - uses: actions/checkout@v4
 

@@ -32,6 +32,9 @@ const (
 	// on the Complement network.
 	HSName = "hs1"
 
+	// RemoteHSName is the second homeserver of a federated deployment.
+	RemoteHSName = "hs2"
+
 	// MattermostAlias is the DNS alias of the Mattermost container on the
 	// Complement network. Synapse delivers appservice transactions to it.
 	MattermostAlias = "mattermost"
@@ -89,21 +92,22 @@ func (h *Harness) SetBridgeSetting(key string, value any) {
 // bridgeBlueprint describes a single homeserver with the bridge registered as
 // an application service. Complement generates fresh tokens on every deploy;
 // the harness reads them back from the container.
-func bridgeBlueprint(encryption bool) b.Blueprint {
-	return b.MustValidate(b.Blueprint{
-		Name: "mattermost_bridge",
-		Homeservers: []b.Homeserver{{
-			Name: HSName,
-			ApplicationServices: []b.ApplicationService{{
-				ID:               appServiceID,
-				URL:              fmt.Sprintf("http://%s:8065/plugins/%s", MattermostAlias, PluginID),
-				SenderLocalpart:  bridgeBotLocalpart,
-				RateLimited:      false,
-				SendEphemeral:    true,
-				EnableEncryption: encryption,
-			}},
+func bridgeBlueprint(encryption, federation bool) b.Blueprint {
+	homeservers := []b.Homeserver{{
+		Name: HSName,
+		ApplicationServices: []b.ApplicationService{{
+			ID:               appServiceID,
+			URL:              fmt.Sprintf("http://%s:8065/plugins/%s", MattermostAlias, PluginID),
+			SenderLocalpart:  bridgeBotLocalpart,
+			RateLimited:      false,
+			SendEphemeral:    true,
+			EnableEncryption: encryption,
 		}},
-	})
+	}}
+	if federation {
+		homeservers = append(homeservers, b.Homeserver{Name: RemoteHSName})
+	}
+	return b.MustValidate(b.Blueprint{Name: "mattermost_bridge", Homeservers: homeservers})
 }
 
 // NewHarness deploys everything and returns a ready-to-use harness. It
@@ -128,6 +132,9 @@ type HarnessOptions struct {
 	Encryption bool
 	// DirectMessages allows opt-in bridging of direct and group messages.
 	DirectMessages bool
+	// Federation deploys a second, ordinary homeserver (RemoteHSName) that
+	// federates with hs1, so rooms and people on another server can be tested.
+	Federation bool
 }
 
 // NewHarnessWithOptions is NewHarness with options.
@@ -135,7 +142,7 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 	t.Helper()
 	ctx := context.Background()
 
-	deployment := complement.OldDeploy(t, bridgeBlueprint(opts.Encryption))
+	deployment := complement.OldDeploy(t, bridgeBlueprint(opts.Encryption, opts.Federation))
 	t.Cleanup(func() { deployment.Destroy(t) })
 
 	asToken, hsToken, registration := readAppServiceTokens(t, deployment.ContainerID(t, HSName))
@@ -245,6 +252,15 @@ func (h *Harness) NewMatrixUser(localpart string) *client.CSAPI {
 func (h *Harness) NewMatrixUserWithPassword(localpart, password string) *client.CSAPI {
 	h.t.Helper()
 	cs := h.Deployment.Register(h.t, HSName, helpers.RegistrationOpts{LocalpartSuffix: localpart, Password: password})
+	cs.SyncUntilTimeout = bridgeTimeout
+	return cs
+}
+
+// NewRemoteMatrixUser registers a user on the second homeserver of a federated
+// deployment (HarnessOptions.Federation).
+func (h *Harness) NewRemoteMatrixUser(localpart string) *client.CSAPI {
+	h.t.Helper()
+	cs := h.Deployment.Register(h.t, RemoteHSName, helpers.RegistrationOpts{LocalpartSuffix: localpart})
 	cs.SyncUntilTimeout = bridgeTimeout
 	return cs
 }

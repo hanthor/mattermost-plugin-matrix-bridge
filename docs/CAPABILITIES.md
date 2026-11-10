@@ -163,9 +163,15 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Image size is sent with the file | Mattermost → Matrix | ✅ | Width and height of images (from Mattermost's file information) are sent in the file event's info, so Matrix clients can reserve space before the picture loads. Duration, thumbnails, voice messages and streaming of large files are not done yet. A file over the size limit is announced with a short notice on the other side instead of being dropped silently; that notice is covered by unit tests only. |
 
+## Federation
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Map and use a room that lives on another homeserver | Matrix → Mattermost | ✅ | /matrix map #room:other.server joins the room across federation; messages, edits, reactions and files from people on that server arrive, and Mattermost posts reach them. Tested with a second Synapse; other homeserver implementations are not tested yet. |
+
 ## Totals
 
-- ✅ supported: 62
+- ✅ supported: 63
 - 🟡 partial: 5
 - ❌ gap: 25
 - — n/a: 0
