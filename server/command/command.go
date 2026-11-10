@@ -196,6 +196,10 @@ type PluginAccessor interface {
 	// authors and with the original times; ChannelHistoryStatus reports the
 	// last or current run.
 	PlanChannelHistory(channelID string, limit int) (HistoryReport, error)
+	// ImportMatrixHistory is the other direction: it copies the room's past
+	// messages into the channel (preview, or with confirm start in the
+	// background) and returns what to tell the person.
+	ImportMatrixHistory(userID, channelID string, limit int, confirm bool) (string, error)
 	StartChannelHistory(channelID string, limit int) error
 	ChannelHistoryStatus(channelID string) HistoryReport
 
@@ -519,7 +523,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	})
 	teamCmd.AddStaticListArgument("confirm", false, []model.AutocompleteListItem{{Item: "confirm", HelpText: "Apply the change"}})
 	matrixData.AddCommand(teamCmd)
-	historyCmd := model.NewAutocompleteData("history", "[confirm] [limit=N]", "Import this channel's past messages into its Matrix room")
+	historyCmd := model.NewAutocompleteData("history", "[from-matrix] [confirm] [limit=N]", "Import past messages: this channel into its room, or with from-matrix the room into this channel")
 	historyCmd.AddTextArgument("confirm to start; omit to preview", "[confirm] [limit=N]", "")
 	matrixData.AddCommand(historyCmd)
 	matrixData.AddCommand(model.NewAutocompleteData("link", "", linkCommandDesc))
@@ -1866,9 +1870,12 @@ func (c *Handler) executeHistoryCommand(args *model.CommandArgs) *model.CommandR
 		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	}
 	confirm := false
+	fromMatrix := false
 	limit := 0
 	for _, f := range strings.Fields(args.Command)[2:] {
 		switch {
+		case f == "from-matrix":
+			fromMatrix = true
 		case f == "confirm":
 			confirm = true
 		case strings.HasPrefix(f, "limit="):
@@ -1878,8 +1885,16 @@ func (c *Handler) executeHistoryCommand(args *model.CommandArgs) *model.CommandR
 			}
 			limit = n
 		default:
-			return reply("Usage: `/matrix history [confirm] [limit=N]`. Without `confirm` it only shows what would be imported.")
+			return reply("Usage: `/matrix history [from-matrix] [confirm] [limit=N]`. Without `confirm` it only shows what would be imported.")
 		}
+	}
+
+	if fromMatrix {
+		text, err := c.plugin.ImportMatrixHistory(args.UserId, args.ChannelId, limit, confirm)
+		if err != nil {
+			return reply("❌ " + err.Error())
+		}
+		return reply(text)
 	}
 
 	status := c.plugin.ChannelHistoryStatus(args.ChannelId)

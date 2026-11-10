@@ -103,3 +103,20 @@ from element-web's Playwright suite, writing the images behind
 - Without a license Mattermost runs with the Team Edition feature set. The
   bridge then works in hooks-only mode, which is what the suite exercises by
   default.
+
+## Federation and pinned images
+
+`HarnessOptions{Federation: true}` deploys a second ordinary homeserver
+(`hs2`, `RemoteHSName`) that federates with `hs1`; `h.NewRemoteMatrixUser`
+registers people on it. `TestFederation` maps a room that lives on `hs2` and
+checks messages, edits, reactions, files and joins in both directions.
+
+Homeserver images are pinned by digest in `.github/workflows/e2e.yml`,
+`walkthrough.yml` and `masstack_test.go`, so an upstream change cannot turn the
+suite red unannounced. `e2e-moving-tags.yml` runs the suite against the moving
+tags every week and opens an issue when it fails; move the pins when that is
+fixed.
+
+Not covered yet: other homeserver implementations (Dendrite, Conduit-family),
+encrypted rooms with remote members, a slow or unreachable remote server, and
+the minimum Mattermost version and Team Edition (#73).

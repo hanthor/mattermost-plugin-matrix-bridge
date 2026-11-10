@@ -14,7 +14,7 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix list`](#matrix-list) | List all mappings | `/matrix list` |
 | [`/matrix map_user`](#matrix-map_user) | Map user to Matrix ID | `/matrix map_user @alice @alice:matrix.org` |
 | [`/matrix backfill`](#matrix-backfill) | Backfill existing data | `/matrix backfill all` |
-| [`/matrix history`](#matrix-history) | Import a channel's past messages | `/matrix history confirm` |
+| [`/matrix history`](#matrix-history) | Import a channel's past messages, or a room's into the channel | `/matrix history confirm`, `/matrix history from-matrix confirm` |
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix dm`](#matrix-dm) | Agree to bridge your direct and group messages | `/matrix dm on` |
 | [`/matrix doctor`](#matrix-doctor) | Check the setup and this channel, with what to fix | `/matrix doctor` |
@@ -571,6 +571,26 @@ original times. Not carried across: earlier versions of edited messages (the
 latest text is imported) and direct messages. People who use their
 own Matrix token for the bridge (double puppeting) show the import time rather
 than the original one, because only the bridge itself may set a message's time.
+
+### The other direction: `/matrix history from-matrix`
+
+When an existing Matrix room is connected with `/matrix map` or `/matrix join`,
+the channel starts empty. `/matrix history from-matrix` previews, and
+`/matrix history from-matrix confirm [limit=N]` copies the room's earlier
+messages into the channel, oldest first, as the people who wrote them (their
+Mattermost account when linked, otherwise the account that represents them),
+with the original times, so Mattermost places them where they belong in the
+channel. The latest edit of each message is applied, and reactions come with
+new messages.
+
+Each run reads up to 2,000 events (default 200) and skips what is already
+imported, the bridge's own messages, and events the bridge cannot read
+(encrypted rooms without keys; they are counted in the preview). Run it again
+for older history. Only system administrators can run it; the person who
+started it is told when it finishes.
+
+Not verified: whether posts created in the past raise notifications or unread
+marks on a real server. Check before running it on a large room.
 
 ## Mirror mode: `/matrix claim`
 

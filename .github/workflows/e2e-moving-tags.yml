@@ -1,0 +1,85 @@
+name: e2e-moving-tags
+# The main end-to-end workflow pins every homeserver image by digest. This one
+# runs the same suite against the moving upstream tags every week, so a change
+# upstream is noticed and upgraded deliberately instead of turning pull
+# requests red. A failure opens (or comments on) an issue.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  GOFLAGS: -tags=goolm
+
+jobs:
+  complement:
+    name: Complement end-to-end (moving tags)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse:develop
+      E2E_MAS_IMAGE: ghcr.io/element-hq/matrix-authentication-service:latest
+      E2E_SYNAPSE_IMAGE: ghcr.io/element-hq/synapse:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            e2e/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Pull images
+        run: |
+          docker pull "$COMPLEMENT_BASE_IMAGE"
+          docker pull "$E2E_MAS_IMAGE"
+          docker pull "$E2E_SYNAPSE_IMAGE"
+          docker pull mattermost/mattermost-enterprise-edition:12.1.0
+          docker pull postgres:16-alpine
+          docker pull ghcr.io/dexidp/dex:v2.41.1
+
+      - name: Build plugin bundle
+        run: make dist
+
+      - name: Run end-to-end suite
+        run: make e2e
+
+      - name: Report the digests that failed
+        if: failure()
+        run: |
+          {
+            echo "complement-synapse: $(docker image inspect --format '{{index .RepoDigests 0}}' "$COMPLEMENT_BASE_IMAGE")"
+            echo "matrix-authentication-service: $(docker image inspect --format '{{index .RepoDigests 0}}' "$E2E_MAS_IMAGE")"
+            echo "synapse: $(docker image inspect --format '{{index .RepoDigests 0}}' "$E2E_SYNAPSE_IMAGE")"
+          } | tee digests.txt
+
+      - name: Open an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="End-to-end suite fails against the latest homeserver images"
+          body="The weekly run against the moving tags failed: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Digests tested:
+
+          $(sed 's/^/- /' digests.txt)
+
+          The main workflow still uses the pinned digests, so pull requests are not affected. Fix the incompatibility, then move the pins in \`.github/workflows/e2e.yml\`, \`.github/workflows/walkthrough.yml\` and \`e2e/masstack_test.go\`."
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
