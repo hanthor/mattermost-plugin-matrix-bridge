@@ -95,12 +95,12 @@ func (p *Plugin) doctorChecks(channelID string) []doctorCheck {
 	}
 
 	// Homeserver
-	if versions, err := p.matrixClient.ServerVersions(); err != nil {
+	versions, err := p.matrixClient.ServerVersions()
+	if err != nil || len(versions) == 0 {
 		add(doctorFail, "Homeserver reachable", fmt.Sprintf("could not reach %s from Mattermost (%v). Check the URL and that Mattermost may connect to it.", cfg.MatrixServerURL, err))
 		return out
-	} else {
-		add(doctorOK, "Homeserver reachable", fmt.Sprintf("speaks Matrix %s", versions[len(versions)-1]))
 	}
+	add(doctorOK, "Homeserver reachable", fmt.Sprintf("speaks Matrix %s", versions[len(versions)-1]))
 
 	// Appservice token and server name
 	botID, err := p.matrixClient.WhoAmIAsBridge()
