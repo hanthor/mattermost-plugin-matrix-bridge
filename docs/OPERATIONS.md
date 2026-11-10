@@ -92,13 +92,33 @@ recognised and not handled twice. Two nodes receiving the same transaction at
 the very same instant are not guarded against; a homeserver sends one
 transaction at a time to an appservice, so that does not happen in practice.
 
-## What is still per node
+## Running on several nodes
 
+Shared between nodes (key-value store or cluster events):
+
+- Transaction IDs, the inbound journal and the outbox.
+- The record of events the bridge sent, used to recognise their echo, so an
+  echo that reaches another node is still ignored.
+- The history-import lock: two nodes cannot import the same channel at once.
+- Mapping changes: `/matrix map`, `unmap`, `join`, `create` and DM changes tell
+  the other nodes to drop their cached mapping for the channel at once.
+
+Still per node:
+
+- Other caches (ghost accounts, room membership) expire on their own after
+  their time to live; a change on one node can take up to that long to show on
+  another.
 - The websocket-based extras (typing, presence) have no single-consumer
   election yet (#35).
-- The record of events the bridge sent itself (used to ignore their echo) is in
-  memory on each node.
+- The event queue and the reaction batcher are in memory; what they hold is
+  journaled, so a restart replays it.
 - Encryption needs a single node (see [ENCRYPTION.md](ENCRYPTION.md)).
+- A Mattermost server configuration change that does not touch the bridge's
+  settings no longer rebuilds the Matrix client, the bridges or the encryption
+  device.
+
+Not covered by an automated test: a real two-node Mattermost needs a license.
+The behaviours above are covered by unit tests that simulate a second node.
 
 ## Secrets and what protects them
 

@@ -221,6 +221,7 @@ func (p *Plugin) initMatrixClient() {
 	rateLimitMode := matrix.ParseRateLimitingMode(config.RateLimitingMode)
 	rateLimitConfig := matrix.GetRateLimitConfigByMode(rateLimitMode)
 	p.matrixClient = matrix.NewClientWithRateLimit(config.MatrixServerURL, config.MatrixASToken, p.remoteID, p.API, rateLimitConfig)
+	p.matrixClient.SetSharedSentStore(sharedSentStore{p})
 	if mgr := p.cryptoManager(); mgr != nil {
 		p.matrixClient.SetRoomCrypto(mgr)
 	}
@@ -308,7 +309,9 @@ func (p *Plugin) InvalidateChannelMapping(channelID string) {
 	if p.roomMappingCache != nil {
 		p.roomMappingCache.Delete(kvstore.BuildChannelMappingKey(channelID))
 	}
-	// A mapping changed: refresh the room's bridge-information event.
+	// A mapping changed: tell the other nodes, and refresh the room's
+	// bridge-information event.
+	go p.publishChannelInvalidation(channelID)
 	go p.syncBridgeInfoSafely(channelID)
 }
 

@@ -141,7 +141,15 @@ func (p *Plugin) OnConfigurationChange() error {
 	}
 
 	p.applyAccountModeLock(configuration)
+
+	// Mattermost reports every server configuration change, not only this
+	// plugin's. When no bridge setting changed, keep the client, bridges and
+	// encryption device as they are.
+	unchanged := p.matrixClient != nil && p.mattermostToMatrixBridge != nil && reflect.DeepEqual(p.getConfiguration(), configuration)
 	p.setConfiguration(configuration)
+	if unchanged {
+		return nil
+	}
 
 	p.initMatrixClient()
 	// The bridges hold the client they were built with; give them the new one

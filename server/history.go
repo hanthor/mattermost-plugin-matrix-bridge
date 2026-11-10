@@ -153,6 +153,7 @@ func (p *Plugin) ChannelHistoryStatus(channelID string) command.HistoryReport {
 		_ = json.Unmarshal(data, &r)
 	}
 	_, running := historyRuns.Load(channelID)
+	running = running || p.historyLockHeld(channelID)
 	r.Running = running
 	return r
 }
@@ -173,13 +174,19 @@ func (p *Plugin) StartChannelHistory(channelID string, limit int) error {
 	if _, busy := historyRuns.LoadOrStore(channelID, struct{}{}); busy {
 		return errors.New("an import is already running for this channel")
 	}
+	if !p.acquireHistoryLock(channelID) {
+		historyRuns.Delete(channelID)
+		return errors.New("an import is already running for this channel (on another server)")
+	}
 	plan, err := p.planHistory(channelID, limit)
 	if err != nil {
 		historyRuns.Delete(channelID)
+		p.releaseHistoryLock(channelID)
 		return err
 	}
 	go func() {
 		defer historyRuns.Delete(channelID)
+		defer p.releaseHistoryLock(channelID)
 		p.runHistoryImport(channelID, roomID, plan)
 	}()
 	return nil
@@ -219,6 +226,7 @@ func (p *Plugin) runHistoryImport(channelID, roomID string, plan *historyPlan) {
 		}
 		if (i+1)%25 == 0 {
 			p.saveHistoryReport(channelID, report)
+			p.refreshHistoryLock(channelID)
 		}
 	}
 	report.Pending = 0

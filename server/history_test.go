@@ -26,6 +26,10 @@ func historyFixture(t *testing.T, posts ...*model.Post) (*Plugin, *fakeSynapse, 
 	p.mattermostToMatrixBridge.fileTracker = NewPendingFileTracker()
 	p.mattermostToMatrixBridge.postTracker = NewPostTracker(100)
 	require.NoError(t, p.kvstore.Set(kvstore.BuildChannelMappingKey(historyChannel), []byte("!room:example.com")))
+	// The cross-node import lock, as a single node sees it.
+	api.On("KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
+	api.On("KVDelete", mock.Anything).Return(nil).Maybe()
+	api.On("KVGet", mock.Anything).Return(nil, nil).Maybe()
 
 	list := &model.PostList{Posts: map[string]*model.Post{}}
 	// The API returns the newest first.
@@ -172,6 +176,9 @@ func TestHistoryImportSkipsBotsAndMatrixUsers(t *testing.T) {
 	api.On("GetPostsForChannel", historyChannel, mock.Anything, historyPageSize).Return(&model.PostList{}, nil).Maybe()
 	api.On("UpdatePost", mock.Anything).Return(func(post *model.Post) *model.Post { return post }, nil).Maybe()
 	api.On("GetReactions", mock.Anything).Return([]*model.Reaction{}, nil).Maybe()
+	api.On("KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
+	api.On("KVDelete", mock.Anything).Return(nil).Maybe()
+	api.On("KVGet", mock.Anything).Return(nil, nil).Maybe()
 
 	require.NoError(t, p.StartChannelHistory(historyChannel, 0))
 	waitForHistory(t, p)
