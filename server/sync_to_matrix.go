@@ -554,7 +554,7 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 	mentionData := b.extractMattermostMentions(post)
 
 	// Convert post content to Matrix format
-	plainText, htmlContent := convertMattermostToMatrix(postMessageText(post))
+	plainText, htmlContent := convertMattermostToMatrix(b.rewriteLinksToMatrix(postMessageText(post), post.ChannelId))
 
 	// Create Matrix message content structure
 	messageContent := map[string]any{
@@ -692,7 +692,7 @@ func (b *MattermostToMatrixBridge) updatePostInMatrix(post *model.Post, matrixRo
 	mentionData := b.extractMattermostMentions(post)
 
 	// Convert post content to Matrix format
-	plainText, htmlContent := convertMattermostToMatrix(postMessageText(post))
+	plainText, htmlContent := convertMattermostToMatrix(b.rewriteLinksToMatrix(postMessageText(post), post.ChannelId))
 
 	// Create Matrix message content structure
 	messageContent := map[string]any{

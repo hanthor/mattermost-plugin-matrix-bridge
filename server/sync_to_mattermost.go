@@ -89,7 +89,7 @@ func (b *MatrixToMattermostBridge) syncMatrixMessageToMattermost(event MatrixEve
 	}
 
 	// Convert Matrix content to Mattermost format
-	mattermostContent := b.convertMatrixToMattermost(content)
+	mattermostContent := b.rewriteLinksToMattermost(b.convertMatrixToMattermost(content))
 
 	// Check if this is a threaded message (reply)
 	var rootID string
