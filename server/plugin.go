@@ -461,6 +461,14 @@ func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, channelMember *model.Ch
 			return
 		}
 
+		// A person who sends as their own Matrix account joins with it.
+		if link, linked := p.identity().Link(user.Id); linked && link.Puppeted() && link.MatrixUserID == matrixUserID {
+			if err := p.mattermostToMatrixBridge.ensureSenderInRoom(p.matrixClient.AsPuppet(link.AccessToken), matrixUserID, resolvedRoomID, user.Id); err != nil {
+				p.logger.LogWarn("The person's own Matrix account could not join the room", "error", err, "matrix_user_id", matrixUserID, "room_id", resolvedRoomID)
+			}
+			return
+		}
+
 		// Try to join the user to the Matrix room (handles both public and private rooms)
 		if err := p.matrixClient.InviteAndJoinGhostUser(resolvedRoomID, matrixUserID); err != nil {
 			p.logger.LogError("Failed to join user to Matrix room", "error", err, "matrix_user_id", matrixUserID, "room_id", resolvedRoomID, "mattermost_user_id", user.Id)

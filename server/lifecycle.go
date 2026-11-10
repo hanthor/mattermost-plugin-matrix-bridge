@@ -174,3 +174,52 @@ func (p *Plugin) retiredMirrorAccount(userID string) (string, bool) {
 	}
 	return strings.TrimSpace(string(data)), true
 }
+
+// retireGhost takes a Mattermost person's ghost out of the rooms once they send
+// as their own Matrix account, which joins in its place.
+func (p *Plugin) retireGhost(userID, linkedMatrixID string) {
+	if p.kvstore == nil || p.matrixClient == nil {
+		return
+	}
+	data, err := p.kvstore.Get(kvstore.BuildGhostUserKey(userID))
+	if err != nil || len(data) == 0 {
+		return
+	}
+	ghostID := string(data)
+	if ghostID == linkedMatrixID {
+		return
+	}
+	for _, room := range p.roomsForUser(userID) {
+		if err := p.matrixClient.InviteUserToRoom(room, linkedMatrixID); err != nil {
+			p.logger.LogDebug("The linked account could not be invited (it may already be in the room)", "error", err, "room_id", room)
+		}
+		if err := p.matrixClient.LeaveRoomAsUser(room, ghostID); err != nil {
+			p.logger.LogDebug("A ghost could not leave a room while being retired", "error", err, "ghost", ghostID, "room_id", room)
+			continue
+		}
+		p.forgetRoomMembership(userID, room)
+	}
+	_ = p.kvstore.Delete(kvstore.BuildGhostUserKey(userID))
+	if p.mattermostToMatrixBridge != nil && p.mattermostToMatrixBridge.ghostUserCache != nil {
+		p.mattermostToMatrixBridge.ghostUserCache.Delete(kvstore.BuildGhostUserKey(userID))
+	}
+	p.logger.LogInfo("Retired a ghost in favour of the person's own Matrix account", "user_id", userID, "ghost", ghostID, "linked", linkedMatrixID)
+}
+
+// retireShadowAccount deactivates the account that stood for a Matrix person
+// in Mattermost before they linked their real Mattermost account. What it
+// posted stays attributed to it.
+func (p *Plugin) retireShadowAccount(shadowID, realUserID string) {
+	if shadowID == "" || shadowID == realUserID {
+		return
+	}
+	user, appErr := p.API.GetUser(shadowID)
+	if appErr != nil || user == nil || !user.IsRemote() || user.DeleteAt != 0 {
+		return
+	}
+	if appErr := p.API.UpdateUserActive(shadowID, false); appErr != nil {
+		p.logger.LogWarn("Could not retire a shadow account after linking", "error", appErr, "user_id", shadowID)
+		return
+	}
+	p.logger.LogInfo("Retired a shadow account after the person linked their own", "shadow_user_id", shadowID, "user_id", realUserID)
+}

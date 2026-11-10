@@ -119,10 +119,14 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		if len(fields) < 3 {
 			return "Usage: `!mattermost link <code>` — get a code with `/matrix link` in Mattermost."
 		}
+		// Before linking, the person may have posted from Matrix as a shadow
+		// account of their own; it is retired once they are their real self.
+		shadow := p.lookupMattermostUserForMatrixUser(sender)
 		link, err := store.Redeem(fields[2], sender)
 		if err != nil {
 			return "❌ " + err.Error()
 		}
+		p.retireShadowAccount(shadow, link.MattermostUserID)
 		username := link.MattermostUserID
 		if user, appErr := p.API.GetUser(link.MattermostUserID); appErr == nil {
 			username = "@" + user.Username
@@ -151,6 +155,7 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		// From now on the person sends as this account, so a mirror account
 		// they were using is retired.
 		p.retireMirrorAccount(link.MattermostUserID, link.MatrixUserID)
+		p.retireGhost(link.MattermostUserID, link.MatrixUserID)
 		return "✅ Double puppeting enabled: your Mattermost messages will now appear from this Matrix account."
 
 	case "logout":
