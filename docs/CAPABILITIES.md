@@ -122,7 +122,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Tombstone ↔ archive | Matrix → Mattermost | ✅ | A tombstoned room archives its channel. |
 | Direct and group messages between Mattermost users | Mattermost → Matrix | ✅ | Opt-in: an administrator turns on Bridge Direct Messages and everyone in a conversation runs /matrix dm on; then new messages go to a private Matrix room. /matrix dm off unbridges. Earlier messages are not copied. |
 | Direct messages | Matrix → Mattermost | ❌ | Mattermost refuses direct channels with remote users ("Cannot create a direct channel with a remote user"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users. |
-| Team ↔ space | Mattermost → Matrix | 🟡 | Spaces are created and rooms added; team membership is not mirrored. |
+| Team ↔ space | Mattermost → Matrix | ✅ | Spaces are created by /matrix backfill and rooms are added to them; a person who joins or leaves the team has their account join or leave the space. |
 | End-to-end encrypted rooms: reading | Matrix → Mattermost | ✅ | With "Bridge Encrypted Rooms" on, the bridge bot holds a device and the room keys, decrypts what Matrix people send, and posts it. Encryption ends at the bridge (docs/ENCRYPTION.md). Off by default; with it off, encrypted rooms are refused instead. |
 | End-to-end encrypted rooms: writing | Mattermost → Matrix | ✅ | Mattermost posts are encrypted with the bot's room key before they leave, so the homeserver only holds ciphertext. Messages, reactions and attachments; Matrix clients show the sender as the bridge's device, not as verified. |
 | A message the bridge cannot decrypt is announced | Matrix → Mattermost | ✅ | When an encrypted message cannot be read (the bridge was not given its key, for example because it was sent before the bridge joined), the channel gets a short notice from the sender instead of nothing, once per message. |
@@ -175,7 +175,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 84
-- 🟡 partial: 5
+- ✅ supported: 85
+- 🟡 partial: 4
 - ❌ gap: 8
 - — n/a: 0
