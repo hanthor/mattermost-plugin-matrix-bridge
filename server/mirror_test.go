@@ -22,7 +22,8 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
-	redactions   []string // rooms an event was redacted in
+	timeline     []map[string]any // room history returned by /messages, newest first
+	redactions   []string         // rooms an event was redacted in
 	redactFails  bool
 	states       []string // state events PUT: "room type/key body"
 	mu           sync.Mutex
@@ -151,6 +152,9 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 			}
 			f.redactions = append(f.redactions, roomFromPath(r.URL.Path))
 			_, _ = w.Write([]byte(`{"event_id":"$redaction"}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/messages"):
+			// One page: newest first, with no further token.
+			_ = json.NewEncoder(w).Encode(map[string]any{"chunk": f.timeline, "end": ""})
 		case strings.HasSuffix(r.URL.Path, "/invite"):
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)
