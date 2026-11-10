@@ -22,7 +22,7 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
-	states []string // state events PUT: "room type/key body"
+	states       []string // state events PUT: "room type/key body"
 	mu           sync.Mutex
 	existing     map[string]bool // accounts that already exist (natives)
 	created      []string
