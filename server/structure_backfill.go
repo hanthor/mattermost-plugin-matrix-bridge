@@ -43,7 +43,7 @@ func (p *Plugin) backfillChannelStructure(channelID string) {
 	// Mattermost. Forgetting what was last sent makes the next pass send them
 	// again, which restores a room that drifted.
 	_ = p.kvstore.Delete(channelStateKeyPrefix + channelID)
-	for _, step := range []func(string){p.syncBridgeInfo, p.syncChannelStateByID, p.syncChannelRoles, p.syncPinsToMatrix} {
+	for _, step := range []func(string){p.syncBridgeInfo, p.syncChannelStateByID, p.syncChannelRoles, p.syncPinsToMatrix, p.syncEmojiPack} {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
