@@ -234,6 +234,10 @@ type PluginAccessor interface {
 	GetIdentityLink(mattermostUserID string) (matrixUserID string, puppeted bool, ok bool)
 	UnlinkIdentity(mattermostUserID string) error
 
+	// BackfillStructure brings the structure of every bridged channel's room
+	// up to date and returns how many channels it went through.
+	BackfillStructure() int
+
 	// Backfill synchronization
 	SyncUser(userID string) error
 	SyncTeam(teamID string) error
@@ -457,11 +461,11 @@ const (
 	mapUserInvalidMatrix = "❌ Invalid Matrix User ID. Must look like `@user:server.com`"
 
 	// Backfill messages
-	backfillCommandDesc  = "Backfill existing data to Matrix (users, teams, channels)"
-	backfillCommandHint  = "[users|teams|channels|all]"
-	backfillCommandUsage = "Usage: /matrix backfill [users|teams|channels|all]"
+	backfillCommandDesc  = "Backfill existing data to Matrix (users, teams, channels, room structure)"
+	backfillCommandHint  = "[users|teams|channels|structure|all]"
+	backfillCommandUsage = "Usage: /matrix backfill [users|teams|channels|structure|all]"
 	backfillStarted      = "🔄 **Backfill started** for: %s. This may take a while. Check server logs for progress."
-	backfillInvalidMode  = "❌ Invalid backfill mode. Use: users, teams, channels, or all"
+	backfillInvalidMode  = "❌ Invalid backfill mode. Use: users, teams, channels, structure, or all"
 )
 
 // buildMatrixAutocompleteData describes the /matrix command tree used for
@@ -496,7 +500,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 
 	// Backfill command
 	backfillCmd := model.NewAutocompleteData("backfill", backfillCommandHint, backfillCommandDesc)
-	backfillCmd.AddTextArgument("Mode", "[users|teams|channels|all]", "")
+	backfillCmd.AddTextArgument("Mode", "[users|teams|channels|structure|all]", "")
 	matrixData.AddCommand(backfillCmd)
 
 	// Unmap command
@@ -1714,10 +1718,10 @@ func (c *Handler) executeMetricsCommand(_ *model.CommandArgs) *model.CommandResp
 }
 
 func (c *Handler) executeBackfillCommand(args *model.CommandArgs, mode string) *model.CommandResponse {
-	if mode != "users" && mode != "teams" && mode != "channels" && mode != "all" {
+	if mode != "users" && mode != "teams" && mode != "channels" && mode != "structure" && mode != "all" {
 		return &model.CommandResponse{
 			ResponseType: model.CommandResponseTypeEphemeral,
-			Text:         "Invalid mode. Available modes: users, teams, channels, all",
+			Text:         "Invalid mode. Available modes: users, teams, channels, structure, all",
 		}
 	}
 
@@ -1730,6 +1734,10 @@ func (c *Handler) executeBackfillCommand(args *model.CommandArgs, mode string) *
 		}
 		if mode == "channels" || mode == "all" {
 			c.backfillChannels()
+		}
+		if mode == "structure" || mode == "all" {
+			n := c.plugin.BackfillStructure()
+			c.plugin.GetPluginAPI().LogInfo("Structure backfill finished", "channels", n)
 		}
 	}()
 
