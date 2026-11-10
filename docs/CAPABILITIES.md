@@ -131,9 +131,17 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 | History import: attachments and reactions | Mattermost → Matrix | ✅ | Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text. |
 
+## Operations
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Prometheus metrics endpoint | Mattermost → Matrix | ✅ | GET <site>/plugins/com.mattermost.plugin-matrix-bridge/metrics with the homeserver token as a bearer token: message and error counters, API latency, queue depth, accounts, rate-limit state and whether encryption is ready. |
+| Retried homeserver transactions are handled once | Matrix → Mattermost | ✅ | Handled transaction IDs are kept in the key-value store, so a retry that reaches another node or follows a restart is recognised. Two nodes receiving the same transaction at the same instant are not guarded against. |
+| Adapts to the homeserver's 429 answers | Mattermost → Matrix | ✅ | Honours retry_after_ms: requests pause until the stated time, the refused request is repeated (up to three times), and the bridge's own limiters slow down until the homeserver stops complaining. Covered by unit tests with a fake homeserver; not exercised against a real rate-limited Synapse. |
+
 ## Totals
 
-- ✅ supported: 46
+- ✅ supported: 49
 - 🟡 partial: 4
 - ❌ gap: 25
 - — n/a: 0

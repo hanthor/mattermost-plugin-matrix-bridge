@@ -201,6 +201,9 @@ type Client struct {
 	// crypto is shared by every copy of the client (see AsPuppet): the optional
 	// encryptor for outgoing events and what is known about encrypted rooms.
 	crypto *clientCrypto
+
+	// adapter slows requests down when the homeserver answers 429.
+	adapter *rateAdapter
 }
 
 // waitForRateLimit applies rate limiting for the specified operation
@@ -294,14 +297,16 @@ func NewClientWithLoggerAndRateLimit(serverURL, asToken, remoteID string, logger
 		ForceAttemptHTTP2:   true,             // Try HTTP/2 if available
 	}
 
+	adapter := newRateAdapter()
 	client := &Client{
+		adapter:   adapter,
 		crypto:    &clientCrypto{},
 		serverURL: serverURL,
 		asToken:   asToken,
 		remoteID:  remoteID,
 		httpClient: &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: transport,
+			Transport: &rateAwareTransport{base: transport, adapter: adapter, logger: logger},
 		},
 		logger:          logger,
 		rateLimitConfig: rateLimitConfig,
@@ -321,6 +326,7 @@ func NewClientWithLoggerAndRateLimit(serverURL, asToken, remoteID string, logger
 		client.inviteLimiter = NewTokenBucket(rateLimitConfig.Invites)
 		client.registrationLimiter = NewTokenBucket(rateLimitConfig.Registration)
 		client.joinLimiter = NewTokenBucket(rateLimitConfig.Joins)
+		adapter.attach(client.roomCreationLimiter, client.messageLimiter, client.inviteLimiter, client.registrationLimiter, client.joinLimiter)
 	} else {
 		logger.LogWarn("Matrix client initialized with rate limiting DISABLED - may encounter 429 errors")
 	}

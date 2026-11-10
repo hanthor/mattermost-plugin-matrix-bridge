@@ -16,7 +16,13 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
+	github.com/beevik/etree v1.8.1 // indirect
+	github.com/jonboulle/clockwork v0.5.0 // indirect
+	github.com/lib/pq v1.12.3 // indirect
+	github.com/mattermost/gosaml2 v0.10.0 // indirect
+	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
 	github.com/petermattis/goid v0.0.0-20260918085751-abfca077860b // indirect
+	github.com/russellhaering/goxmldsig v1.6.1 // indirect
 	go.mau.fi/util v0.11.0 // indirect
 )
 
