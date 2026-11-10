@@ -17,6 +17,9 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix history`](#matrix-history) | Import a channel's past messages | `/matrix history confirm` |
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix dm`](#matrix-dm) | Agree to bridge your direct and group messages | `/matrix dm on` |
+| [`/matrix doctor`](#matrix-doctor) | Check the setup and this channel, with what to fix | `/matrix doctor` |
+| [`/matrix repair`](#matrix-repair) | Make this channel's room match its members | `/matrix repair` |
+| [`/matrix retry`](#matrix-retry) | Send changes that could not be delivered again | `/matrix retry` |
 | [`/matrix migrate-team`](#matrix-migrate-team) | Cut a team over to Matrix: report, read-only channels, archive | `/matrix migrate-team report` |
 | [`/matrix migrate`](#matrix-migrate) | Re-run KV migrations | `/matrix migrate` |
 | [`/matrix call`](#calls-matrix-call) | Start a call both sides can join | `/matrix call Weekly sync` |
@@ -173,6 +176,8 @@ Join by room ID:
 ### `/matrix map`
 
 Maps the current Mattermost channel to an existing Matrix room. Use this when you want to bridge an existing channel to an existing room without creating a new one.
+
+Once mapped, the bridge sets the room's bridge-information state event so Matrix clients can show where the room leads (it is emptied on `/matrix unmap`). Setting it needs the bridge bot to have power to send state events; in a room you created yourself, give the bot moderator rights (power level 50), as `/matrix doctor` suggests.
 
 **Usage:**
 ```
@@ -568,6 +573,36 @@ own Matrix client posts in Mattermost as you, and the bridge keeps sending your
 Mattermost messages from the same account. `/matrix status` shows how many
 accounts exist and how many are claimed. See
 [MIRROR_MODE_SETUP.md](MIRROR_MODE_SETUP.md#54-claiming-accounts).
+
+## `/matrix doctor`
+
+System administrators. Runs the checks a first setup tends to fail and says
+what to do about each; it never changes anything. It checks the settings, that
+Mattermost can reach the homeserver, that the appservice token is accepted and
+the server name matches, that the homeserver can call the plugin back (the
+appservice ping, which proves the registration URL and the homeserver token),
+encryption and Matrix Authentication Service when they are switched on, stuck
+deliveries and rate limits. Run in a bridged channel it also checks the
+mapping in both directions, the bridge bot's membership and power level, and
+whether the room is encrypted or the channel read-only.
+
+## `/matrix repair`
+
+Channel managers and administrators. Membership is normally kept in step by
+events; one missed while the homeserver was down would stay wrong. `/matrix
+repair` compares the channel's members with the room's and fixes the bridge's
+own accounts: people missing from the room are added, and the accounts of
+people who left the channel are removed from it. Real Matrix people, claimed
+mirror accounts and the bridge bot are never touched, and people who use their
+own linked Matrix account must join the room themselves (the command lists
+them). A background pass repairs twenty channels at a time, continuing where
+the last run stopped, so every bridged channel is checked over time.
+
+## `/matrix retry`
+
+System administrators. Queues again the changes that could not be delivered
+across the bridge and were set aside (`/matrix status` shows how many). See
+[OPERATIONS.md](OPERATIONS.md#delivery-guarantees).
 
 ## `/matrix dm`
 

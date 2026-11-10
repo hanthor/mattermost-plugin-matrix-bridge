@@ -235,3 +235,9 @@ func Shared(baseURL, clientID, clientSecret string) *Client {
 	shared[key] = c
 	return c
 }
+
+// Check proves the admin client credentials work by obtaining a token.
+func (c *Client) Check(ctx context.Context) error {
+	_, err := c.accessToken(ctx)
+	return err
+}

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
@@ -69,27 +67,10 @@ func (p *Plugin) queueReaction(reaction *model.Reaction, channelID string) {
 	})
 }
 
-func (p *Plugin) processReactionBatch(postID string, items []any) {
-	// Enqueue a single task that processes all reactions in the batch
-	if err := p.eventQueue.Enqueue(Task{
-		ID:   "reaction-batch-" + postID,
-		Type: "mattermost-reaction-batch",
-		Execute: func(ctx context.Context) error {
-			for _, item := range items {
-				batchItem := item.(reactionBatchItem)
-				if err := p.mattermostToMatrixBridge.SyncReactionToMatrix(batchItem.reaction, batchItem.channelID); err != nil {
-					p.logger.LogError("Failed to sync reaction in batch", "error", err, "post_id", postID)
-				}
-			}
-			return nil
-		},
-	}); err != nil {
-		p.logger.LogError("Failed to enqueue reaction batch", "error", err, "post_id", postID)
-		// Fallback to processing immediately if queue is full
-		for _, item := range items {
-			batchItem := item.(reactionBatchItem)
-			_ = p.mattermostToMatrixBridge.SyncReactionToMatrix(batchItem.reaction, batchItem.channelID)
-		}
+func (p *Plugin) processReactionBatch(_ string, items []any) {
+	for _, item := range items {
+		batchItem := item.(reactionBatchItem)
+		p.sendOutbound(outboxOpReaction, nil, batchItem.reaction, batchItem.channelID)
 	}
 }
 
@@ -105,23 +86,7 @@ func (p *Plugin) MessageHasBeenUpdated(_ *plugin.Context, newPost, oldPost *mode
 		return
 	}
 
-	if p.eventQueue == nil {
-		if err := p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId); err != nil {
-			p.logger.LogError("Failed to sync post edit to Matrix", "error", err, "post_id", newPost.Id)
-		}
-		return
-	}
-
-	if err := p.eventQueue.Enqueue(Task{
-		ID:   "post-edit-" + newPost.Id,
-		Type: "mattermost-post-edit",
-		Execute: func(ctx context.Context) error {
-			return p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId)
-		},
-	}); err != nil {
-		p.logger.LogError("Failed to enqueue post edit", "error", err, "post_id", newPost.Id)
-		_ = p.mattermostToMatrixBridge.SyncPostToMatrix(newPost, newPost.ChannelId)
-	}
+	p.sendOutbound(outboxOpPost, newPost, nil, newPost.ChannelId)
 }
 
 // OnSharedChannelsSyncMsg is called when messages need to be synced from Mattermost to Matrix

@@ -6,4 +6,5 @@ func (p *Plugin) runJob() {
 	p.logger.LogDebug("Background job running")
 	p.sweepProfiles()
 	p.sweepCalls()
+	p.reconcileSome()
 }

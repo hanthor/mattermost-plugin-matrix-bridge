@@ -61,6 +61,12 @@ type Plugin struct {
 	// Event queue for asynchronous task processing
 	eventQueue *EventQueue
 
+	// inbox journals Matrix events until their handlers finish.
+	inbox inboxState
+
+	// outbox journals Mattermost changes until the homeserver has them.
+	outbox outboxState
+
 	// Batcher for grouping reactions
 	reactionBatcher *Batcher
 
@@ -132,6 +138,9 @@ func (p *Plugin) OnActivate() error {
 
 	// Initialize event queue: 4 workers, 1000 buffer
 	p.eventQueue = NewEventQueue(4, 1000, p.logger, p.metrics)
+	p.eventQueue.MaxAttempts = inboxAttempts
+	p.eventQueue.RetryBackoff = []time.Duration{500 * time.Millisecond, 2 * time.Second}
+	p.eventQueue.OnFinalFailure = p.onTaskFailed
 	p.eventQueue.Start()
 
 	// Initialize reaction batcher with 100ms timeout
@@ -159,6 +168,8 @@ func (p *Plugin) OnActivate() error {
 	// Initialize bridge components after getting remote ID
 	p.initBridges()
 	p.startEncryption()
+	p.startInbox()
+	p.startOutbox()
 
 	p.commandClient = command.NewCommandHandler(p)
 
@@ -180,6 +191,8 @@ func (p *Plugin) OnActivate() error {
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
 	p.stopEncryption()
+	p.stopInbox()
+	p.stopOutbox()
 	if p.reactionBatcher != nil {
 		p.reactionBatcher.FlushAll()
 	}
@@ -295,6 +308,8 @@ func (p *Plugin) InvalidateChannelMapping(channelID string) {
 	if p.roomMappingCache != nil {
 		p.roomMappingCache.Delete(kvstore.BuildChannelMappingKey(channelID))
 	}
+	// A mapping changed: refresh the room's bridge-information event.
+	go p.syncBridgeInfoSafely(channelID)
 }
 
 // GetConfiguration returns the plugin configuration
@@ -599,13 +614,9 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *model.Post) {
 	roomID := string(roomIDBytes)
 	p.logger.LogDebug("Syncing message to Matrix", "channel_id", post.ChannelId, "room_id", roomID, "post_id", post.Id)
 
-	// Upload attachments first so they are sent together with the message.
-	p.stageAttachmentsForPost(post)
-
-	// Sync the post to Matrix
-	if err := p.mattermostToMatrixBridge.SyncPostToMatrix(post, post.ChannelId); err != nil {
-		p.logger.LogError("Failed to sync message to Matrix", "error", err, "post_id", post.Id, "room_id", roomID)
-	}
+	// The post is journaled and sent in order with the channel's other changes;
+	// attachments are uploaded as part of sending it.
+	p.sendOutbound(outboxOpPost, post, nil, post.ChannelId)
 }
 
 // postOriginatedFromMatrix reports whether a post was created by the inbound
@@ -730,9 +741,7 @@ func (p *Plugin) MessageHasBeenDeleted(_ *plugin.Context, post *model.Post) {
 		return
 	}
 
-	if err := p.mattermostToMatrixBridge.deletePostFromMatrix(post, post.ChannelId); err != nil {
-		p.logger.LogError("Failed to redact deleted post in Matrix", "error", err, "post_id", post.Id)
-	}
+	p.sendOutbound(outboxOpDelete, post, nil, post.ChannelId)
 }
 
 // TeamHasBeenCreated is called when a new team is created in Mattermost

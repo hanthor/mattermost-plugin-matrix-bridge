@@ -129,6 +129,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
 | Channel shows the linked room in Mattermost | Mattermost → Matrix | ✅ | The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself. |
 | Post menu: Open in Matrix and Copy Matrix event ID | Mattermost → Matrix | ✅ | Both actions appear on posts that were synced to Matrix. Open in Matrix uses Element Web when its address is configured and matrix.to otherwise. The server route is tested against a real homeserver; the menu itself is covered by webapp unit tests only. |
+| Matrix clients show where a room is bridged to | Mattermost → Matrix | ✅ | A mapped room carries the bridge-information state event (m.bridge and Element's uk.half-shot.bridge) naming the Mattermost team, channel and link; it is emptied when the channel is unmapped. Needs the bot to be allowed to send state events, so rooms mapped with /matrix map where the bot is not a moderator keep no event (the doctor says so). Direct messages carry none. |
 | Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. |
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 | History import: attachments and reactions | Mattermost → Matrix | ✅ | Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text. |
@@ -139,11 +140,20 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Prometheus metrics endpoint | Mattermost → Matrix | ✅ | GET <site>/plugins/com.mattermost.plugin-matrix-bridge/metrics with the homeserver token as a bearer token: message and error counters, API latency, queue depth, accounts, rate-limit state and whether encryption is ready. |
 | Retried homeserver transactions are handled once | Matrix → Mattermost | ✅ | Handled transaction IDs are kept in the key-value store, so a retry that reaches another node or follows a restart is recognised. Two nodes receiving the same transaction at the same instant are not guarded against. |
+| Matrix events survive a restart and are delivered in order per room | Matrix → Mattermost | ✅ | Each event is written to the key-value store before the homeserver is told it arrived and removed when handled; what a crash leaves behind is replayed on start. Events of one room are handled by one worker in order, failures are retried three times, then set aside (/matrix retry replays them). |
+| Mattermost changes reach Matrix after an outage, in order | Mattermost → Matrix | ✅ | Posts, edits, deletes and reactions are written to the key-value store before they are sent and removed once Matrix has them. While the homeserver is down they wait and are sent again with a growing delay (up to five minutes), channel by channel in order; after a day they are set aside for /matrix retry. A sent-again message carries the time it was sent again, not the time it was written. |
+| /matrix doctor setup check | Mattermost → Matrix | ✅ | Checks the settings, the homeserver, the appservice token and server name, that the homeserver can call the plugin back (appservice ping), encryption, MAS, stuck deliveries, rate limits, and for the current channel its mapping, the bot's membership and power level. Never changes anything. Mirror mode namespace and registration namespaces cannot be probed safely and are reported as advice. |
 | Adapts to the homeserver's 429 answers | Mattermost → Matrix | ✅ | Honours retry_after_ms: requests pause until the stated time, the refused request is repeated (up to three times), and the bridge's own limiters slow down until the homeserver stops complaining. Covered by unit tests with a fake homeserver; not exercised against a real rate-limited Synapse. |
+
+## Membership
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Rooms are repaired to match channel membership | Mattermost → Matrix | ✅ | /matrix repair (and a rotating background pass, twenty channels per run) adds the bridge accounts of channel members who are missing from the room and removes the accounts of people who left the channel. Real Matrix people, claimed mirror accounts and the bot are never touched; people with their own linked account must join themselves. |
 
 ## Totals
 
-- ✅ supported: 51
+- ✅ supported: 56
 - 🟡 partial: 4
 - ❌ gap: 25
 - — n/a: 0

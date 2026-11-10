@@ -22,6 +22,7 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
+	states       []string // state events PUT: "room type/key body"
 	mu           sync.Mutex
 	existing     map[string]bool // accounts that already exist (natives)
 	created      []string
@@ -32,8 +33,15 @@ type fakeSynapse struct {
 	invites      []string
 	uploads      []string
 	createdRooms []map[string]any
-	reactions    []fakeSent
-	deactivated  []string
+	down         bool // the homeserver answers 503 to message sends
+	// doctor endpoints
+	whoami      string
+	pingFails   bool
+	joinedRooms []string
+	botPower    int
+	members     []string // joined_members of any room
+	reactions   []fakeSent
+	deactivated []string
 	// sent records the messages sent to rooms, in order.
 	sent   []fakeSent
 	server *httptest.Server
@@ -75,6 +83,9 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 			_ = json.Unmarshal(body, &req)
 			f.passwords[strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v2/users/")], _ = req["password"].(string)
 			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/send/m.room.message/") && f.down:
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"errcode":"M_UNKNOWN","error":"down"}`))
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/send/m.room.message/"):
 			var content map[string]any
 			_ = json.Unmarshal(body, &content)
@@ -98,6 +109,27 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 		case strings.HasPrefix(r.URL.Path, "/_matrix/client/v3/join/"):
 			f.joins = append(f.joins, r.URL.Query().Get("user_id")+" in "+strings.TrimPrefix(r.URL.Path, "/_matrix/client/v3/join/"))
 			_, _ = w.Write([]byte(`{}`))
+		case r.URL.Path == "/_matrix/client/versions":
+			_, _ = w.Write([]byte(`{"versions":["v1.1","v1.12"]}`))
+		case r.URL.Path == "/_matrix/client/v3/account/whoami":
+			_ = json.NewEncoder(w).Encode(map[string]string{"user_id": f.whoami})
+		case strings.HasSuffix(r.URL.Path, "/ping") && strings.Contains(r.URL.Path, "/appservice/"):
+			if f.pingFails {
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = w.Write([]byte(`{"errcode":"M_URL_NOT_REACHABLE","error":"cannot connect"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"duration_ms":12}`))
+		case strings.HasSuffix(r.URL.Path, "/joined_members"):
+			joined := map[string]any{}
+			for _, id := range f.members {
+				joined[id] = map[string]any{}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"joined": joined})
+		case r.URL.Path == "/_matrix/client/v3/joined_rooms":
+			_ = json.NewEncoder(w).Encode(map[string]any{"joined_rooms": f.joinedRooms})
+		case strings.Contains(r.URL.Path, "/state/m.room.power_levels"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"users": map[string]int{"@_mattermost_bridge:example.com": f.botPower}, "users_default": 0})
 		case r.Method == http.MethodPost && r.URL.Path == "/_matrix/client/v3/createRoom":
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)
@@ -106,6 +138,9 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 		case strings.HasPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"):
 			f.deactivated = append(f.deactivated, strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"))
 			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/state/") && !strings.Contains(r.URL.Path, "power_levels"):
+			f.states = append(f.states, roomFromPath(r.URL.Path)+" "+r.URL.Path[strings.Index(r.URL.Path, "/state/")+7:]+" "+string(body))
+			_, _ = w.Write([]byte(`{"event_id":"$state"}`))
 		case strings.HasSuffix(r.URL.Path, "/invite"):
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)
@@ -486,4 +521,10 @@ func TestCutoverFreezesAccounts(t *testing.T) {
 	assert.Contains(t, err.Error(), "cut-over")
 	assert.Equal(t, []string{"ada"}, hs.created)
 	assert.True(t, p.MirrorStatus().Cutover)
+}
+
+func (f *fakeSynapse) setDown(down bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.down = down
 }
