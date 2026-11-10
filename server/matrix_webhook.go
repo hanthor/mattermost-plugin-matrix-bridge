@@ -249,6 +249,11 @@ func (p *Plugin) processMatrixEvent(event MatrixEvent) error {
 		return p.handleMatrixCallEvent(event, channelID)
 	case "m.call.invite", "m.call.answer", "m.call.hangup", "m.call.reject":
 		return p.handleLegacyCallEvent(event, channelID)
+	case "m.room.power_levels":
+		if event.Sender == p.BridgeBotUserID() || p.isBridgeAccount(event.Sender) {
+			return nil
+		}
+		return p.syncMatrixPowerLevels(event, channelID)
 	case pinnedEventsType:
 		if event.Sender == p.BridgeBotUserID() {
 			return nil

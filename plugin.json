@@ -69,6 +69,13 @@
                 "default": false
             },
             {
+                "key": "invite_creates_channels_team",
+                "display_name": "Create Channels for Invited Rooms (team name)",
+                "type": "text",
+                "default": "",
+                "help_text": "Team name (as in the team's address). When set, a moderator of a Matrix room who invites the bridge bot gets a new public channel in this team, bridged to the room. When their Matrix account is linked, they become its admin. Empty turns this off."
+            },
+            {
                 "key": "enable_encryption",
                 "display_name": "Bridge Encrypted Rooms",
                 "type": "bool",

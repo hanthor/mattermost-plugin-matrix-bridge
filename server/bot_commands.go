@@ -38,6 +38,9 @@ func (p *Plugin) handleBridgeBotMembership(event MatrixEvent) {
 		return
 	}
 	p.logger.LogInfo("Bridge bot accepted an invite", "room_id", event.RoomID, "inviter", event.Sender)
+	if p.createChannelForRoom(event) {
+		return
+	}
 	if strings.HasPrefix(event.Sender, "@") {
 		_ = p.matrixClient.SendNotice(event.RoomID, "Hi! I'm the Mattermost bridge.\n\n"+botHelpText)
 	}

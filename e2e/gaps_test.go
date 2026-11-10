@@ -315,6 +315,8 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("channel admin becomes a moderator power level", func(t *testing.T) {
+		// Changing power levels needs a power level of 100: given by whoever set up the room.
+		h.GrantBridgePower(alice, roomID, 100)
 		_, err := h.Admin.UpdateChannelMemberSchemeRoles(ctx, channel.Id, h.AdminUser.Id, &model.SchemeRoles{SchemeUser: true, SchemeAdmin: true})
 		require.NoError(t, err)
 		works := TryFor(probeTimeout, func() bool {
@@ -350,9 +352,10 @@ func TestCapabilityGaps(t *testing.T) {
 	})
 
 	t.Run("inviting the bot to a new room creates a channel", func(t *testing.T) {
+		h.SetBridgeSetting("invite_creates_channels_team", h.Team.Name)
 		newRoom := alice.MustCreateRoom(t, map[string]interface{}{"preset": "public_chat", "name": "Born in Matrix", "invite": []string{h.BridgeBotUserID()}})
 		works := TryFor(probeTimeout, func() bool {
-			channels, _, err := h.Admin.GetChannelsForTeamForUser(ctx, h.Team.Id, h.AdminUser.Id, false, "")
+			channels, _, err := h.Admin.GetPublicChannelsForTeam(ctx, h.Team.Id, 0, 200, "")
 			if err != nil {
 				return false
 			}

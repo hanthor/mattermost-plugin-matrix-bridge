@@ -22,6 +22,7 @@ import (
 
 // fakeSynapse implements the few homeserver endpoints mirror mode uses.
 type fakeSynapse struct {
+	levels       map[string]int   // extra power levels reported for users
 	ephemeral    []string         // typing, presence and receipts sent
 	timeline     []map[string]any // room history returned by /messages, newest first
 	redactions   []string         // rooms an event was redacted in
@@ -132,8 +133,12 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 			_ = json.NewEncoder(w).Encode(map[string]any{"joined": joined})
 		case r.URL.Path == "/_matrix/client/v3/joined_rooms":
 			_ = json.NewEncoder(w).Encode(map[string]any{"joined_rooms": f.joinedRooms})
-		case strings.Contains(r.URL.Path, "/state/m.room.power_levels"):
-			_ = json.NewEncoder(w).Encode(map[string]any{"users": map[string]int{"@_mattermost_bridge:example.com": f.botPower}, "users_default": 0})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/state/m.room.power_levels"):
+			users := map[string]int{"@_mattermost_bridge:example.com": f.botPower}
+			for id, level := range f.levels {
+				users[id] = level
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"users": users, "users_default": 0})
 		case r.Method == http.MethodPost && r.URL.Path == "/_matrix/client/v3/createRoom":
 			var req map[string]any
 			_ = json.Unmarshal(body, &req)
@@ -142,7 +147,7 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 		case strings.HasPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"):
 			f.deactivated = append(f.deactivated, strings.TrimPrefix(r.URL.Path, "/_synapse/admin/v1/deactivate/"))
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/state/") && !strings.Contains(r.URL.Path, "power_levels"):
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/state/"):
 			f.states = append(f.states, roomFromPath(r.URL.Path)+" "+r.URL.Path[strings.Index(r.URL.Path, "/state/")+7:]+" "+string(body))
 			_, _ = w.Write([]byte(`{"event_id":"$state"}`))
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/redact/"):

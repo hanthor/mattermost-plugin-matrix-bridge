@@ -112,10 +112,10 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Join and leave | Mattermost → Matrix | ✅ |  |
 | Join and leave | Matrix → Mattermost | ✅ |  |
-| Channel admin ↔ power levels | Mattermost → Matrix | ❌ |  |
-| Power levels ↔ channel admin | Matrix → Mattermost | ❌ |  |
+| Channel admin ↔ power levels | Mattermost → Matrix | ✅ | Channel admins get power level 50 (moderator) in the room, and lose it when they stop being admins. Checked every 15 minutes, on /matrix repair, and every few seconds when real-time events are on. The bridge bot needs power level 100 in the room to change power levels, which rooms it creates give it. |
+| Power levels ↔ channel admin | Matrix → Mattermost | ✅ | A Matrix person at power level 50 or more becomes a channel admin, and one below it an ordinary member. Applies to people on Matrix and linked accounts, not to accounts the bridge runs for Mattermost people. |
 | New channel creates a room | Mattermost → Matrix | ✅ | Public and private channels; DMs on first message. |
-| Inviting the bot creates a channel | Matrix → Mattermost | ❌ | Only /matrix join from Mattermost today. |
+| Inviting the bot creates a channel | Matrix → Mattermost | ✅ | With a team named in Create Channels for Invited Rooms, a moderator of a Matrix room who invites the bridge bot gets a new public channel in that team, bridged to the room; when their Matrix account is linked they become its admin. Off by default. |
 | Channel name/header → room name/topic | Mattermost → Matrix | ✅ | A rename becomes the room name and a header change becomes the topic, as soon as Mattermost's system post announces it. A sweep every 15 minutes catches anything missed. |
 | Room name/topic → channel name/header | Matrix → Mattermost | ✅ |  |
 | Archive ↔ tombstone/leave | Mattermost → Matrix | ✅ | Archiving a channel posts a notice in the room and the bridge bot leaves; restoring the channel rejoins and says so. |
@@ -175,7 +175,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 81
+- ✅ supported: 84
 - 🟡 partial: 5
-- ❌ gap: 11
+- ❌ gap: 8
 - — n/a: 0

@@ -9,4 +9,5 @@ func (p *Plugin) runJob() {
 	p.reconcileSome()
 	p.sweepSentEvents()
 	p.sweepChannelStates()
+	p.syncSomeChannelRoles()
 }

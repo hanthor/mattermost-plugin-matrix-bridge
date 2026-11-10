@@ -162,3 +162,16 @@ func (c *Client) isRoomCreator(roomID, userID string) (bool, error) {
 	}
 	return false, nil
 }
+
+// GetPowerLevels returns a room's power levels content.
+func (c *Client) GetPowerLevels(roomID string) (map[string]any, error) {
+	var levels map[string]any
+	status, err := c.getJSON(c.serverURL+"/_matrix/client/v3/rooms/"+url.PathEscape(roomID)+"/state/m.room.power_levels/", &levels)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("could not read the room's power levels: status %d", status)
+	}
+	return levels, nil
+}

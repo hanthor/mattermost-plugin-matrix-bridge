@@ -192,6 +192,7 @@ func (p *Plugin) runRealtime(ctx context.Context) error {
 			p.pollPresence(memory)
 			p.pollReadReceipts(memory)
 			p.ensureBotInMappedChannels(botID)
+			p.syncSomeChannelRoles()
 		}
 	}
 }
