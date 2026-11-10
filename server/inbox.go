@@ -128,6 +128,17 @@ func (p *Plugin) deadLetter(e MatrixEvent, cause error) {
 		return
 	}
 	p.logger.LogError("A Matrix event could not be delivered to Mattermost and was set aside; /matrix retry replays it", "event_id", e.EventID, "room_id", e.RoomID, "error", cause)
+	p.tellRoomNotDelivered(e)
+}
+
+// tellRoomNotDelivered says in the room that a message did not reach
+// Mattermost, so its sender is not left guessing.
+func (p *Plugin) tellRoomNotDelivered(e MatrixEvent) {
+	defer func() { _ = recover() }()
+	if p.matrixClient == nil || e.RoomID == "" || e.Type != "m.room.message" {
+		return
+	}
+	_ = p.matrixClient.SendNotice(e.RoomID, "⚠️ A message from "+e.Sender+" could not be delivered to Mattermost. An administrator can send it again with /matrix retry.")
 }
 
 // DeadLetters implements command.PluginAccessor: how many changes are set
