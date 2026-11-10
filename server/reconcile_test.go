@@ -25,13 +25,13 @@ func reconcileFixture(t *testing.T, channelMembers ...string) (*Plugin, *fakeSyn
 	for _, id := range channelMembers {
 		members = append(members, &model.ChannelMember{UserId: id})
 	}
-	api.On("GetChannelMembers", "chan-1", 0, 200).Return(model.ChannelMembers(func() model.ChannelMembers {
+	api.On("GetChannelMembers", "chan-1", 0, 200).Return(func() model.ChannelMembers {
 		out := model.ChannelMembers{}
 		for _, m := range members {
 			out = append(out, *m)
 		}
 		return out
-	}()), nil)
+	}(), nil)
 	api.On("GetProfileImage", mock.Anything).Return([]byte{}, nil).Maybe()
 	return p, hs
 }
