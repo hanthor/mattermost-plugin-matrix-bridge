@@ -68,6 +68,10 @@ func (p *Plugin) syncBridgeInfoSafely(channelID string) {
 // syncBridgeInfo makes the room's bridge-information event match the
 // channel's mapping: set when mapped, cleared when not.
 func (p *Plugin) syncBridgeInfo(channelID string) {
+	// Updates triggered by quick successive mapping changes run in their own
+	// goroutines; taken one at a time, each sees the state the last left.
+	p.bridgeInfoMu.Lock()
+	defer p.bridgeInfoMu.Unlock()
 	if p.matrixClient == nil || p.mattermostToMatrixBridge == nil || p.kvstore == nil || !p.getConfiguration().EnableSync {
 		return
 	}

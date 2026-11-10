@@ -58,6 +58,9 @@ type Plugin struct {
 	roomMappingCache    *Cache
 	roomMembershipCache *Cache
 
+	// bridgeInfoMu serialises bridge-information updates.
+	bridgeInfoMu sync.Mutex
+
 	// Event queue for asynchronous task processing
 	eventQueue *EventQueue
 
