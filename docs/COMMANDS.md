@@ -18,6 +18,7 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix dm`](#matrix-dm) | Agree to bridge your direct and group messages | `/matrix dm on` |
 | [`/matrix doctor`](#matrix-doctor) | Check the setup and this channel, with what to fix | `/matrix doctor` |
+| [`/matrix repair`](#matrix-repair) | Make this channel's room match its members | `/matrix repair` |
 | [`/matrix retry`](#matrix-retry) | Send changes that could not be delivered again | `/matrix retry` |
 | [`/matrix migrate-team`](#matrix-migrate-team) | Cut a team over to Matrix: report, read-only channels, archive | `/matrix migrate-team report` |
 | [`/matrix migrate`](#matrix-migrate) | Re-run KV migrations | `/matrix migrate` |
@@ -582,6 +583,18 @@ encryption and Matrix Authentication Service when they are switched on, stuck
 deliveries and rate limits. Run in a bridged channel it also checks the
 mapping in both directions, the bridge bot's membership and power level, and
 whether the room is encrypted or the channel read-only.
+
+## `/matrix repair`
+
+Channel managers and administrators. Membership is normally kept in step by
+events; one missed while the homeserver was down would stay wrong. `/matrix
+repair` compares the channel's members with the room's and fixes the bridge's
+own accounts: people missing from the room are added, and the accounts of
+people who left the channel are removed from it. Real Matrix people, claimed
+mirror accounts and the bridge bot are never touched, and people who use their
+own linked Matrix account must join the room themselves (the command lists
+them). A background pass repairs twenty channels at a time, continuing where
+the last run stopped, so every bridged channel is checked over time.
 
 ## `/matrix retry`
 

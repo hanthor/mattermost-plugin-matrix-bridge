@@ -38,6 +38,7 @@ type fakeSynapse struct {
 	pingFails   bool
 	joinedRooms []string
 	botPower    int
+	members     []string // joined_members of any room
 	reactions   []fakeSent
 	deactivated []string
 	// sent records the messages sent to rooms, in order.
@@ -118,6 +119,12 @@ func newFakeSynapse(t *testing.T, natives ...string) *fakeSynapse {
 				return
 			}
 			_, _ = w.Write([]byte(`{"duration_ms":12}`))
+		case strings.HasSuffix(r.URL.Path, "/joined_members"):
+			joined := map[string]any{}
+			for _, id := range f.members {
+				joined[id] = map[string]any{}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"joined": joined})
 		case r.URL.Path == "/_matrix/client/v3/joined_rooms":
 			_ = json.NewEncoder(w).Encode(map[string]any{"joined_rooms": f.joinedRooms})
 		case strings.Contains(r.URL.Path, "/state/m.room.power_levels"):

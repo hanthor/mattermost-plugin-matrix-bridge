@@ -212,6 +212,10 @@ type PluginAccessor interface {
 	DeadLetters() int
 	RetryDeadLetters() (int, error)
 
+	// RepairMembership makes the channel's room match the channel's members
+	// (for the bridge's own accounts) and describes what it changed.
+	RepairMembership(channelID string) (string, error)
+
 	// Doctor runs the setup checks (and the channel's checks) and returns the report.
 	Doctor(channelID string) string
 
@@ -491,6 +495,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	matrixData.AddCommand(model.NewAutocompleteData("list", "", listCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("status", "", statusCommandDesc))
 	matrixData.AddCommand(model.NewAutocompleteData("migrate", "", migrateCommandDesc))
+	matrixData.AddCommand(model.NewAutocompleteData("repair", "", "Make this channel's room match the channel's members"))
 	matrixData.AddCommand(model.NewAutocompleteData("doctor", "", "Check the bridge setup and this channel, with what to fix"))
 	matrixData.AddCommand(model.NewAutocompleteData("retry", "", "Replay changes that could not be delivered across the bridge"))
 	dmCmd := model.NewAutocompleteData("dm", "[on|off|status]", "Allow your direct messages to be bridged to Matrix (only if everyone in the conversation agrees)")
@@ -1365,6 +1370,12 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return c.executeHistoryCommand(args)
 	case "migrate-team":
 		return c.executeMigrateTeamCommand(args)
+	case "repair":
+		text, err := c.plugin.RepairMembership(args.ChannelId)
+		if err != nil {
+			return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "❌ " + err.Error()}
+		}
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	case "doctor":
 		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: c.plugin.Doctor(args.ChannelId)}
 	case "retry":
@@ -1420,7 +1431,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
-	case "create", "map", "unmap", "join":
+	case "create", "map", "unmap", "join", "repair":
 		if isSystemAdmin() {
 			return nil
 		}

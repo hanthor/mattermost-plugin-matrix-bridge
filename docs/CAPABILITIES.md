@@ -144,9 +144,15 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | /matrix doctor setup check | Mattermost → Matrix | ✅ | Checks the settings, the homeserver, the appservice token and server name, that the homeserver can call the plugin back (appservice ping), encryption, MAS, stuck deliveries, rate limits, and for the current channel its mapping, the bot's membership and power level. Never changes anything. Mirror mode namespace and registration namespaces cannot be probed safely and are reported as advice. |
 | Adapts to the homeserver's 429 answers | Mattermost → Matrix | ✅ | Honours retry_after_ms: requests pause until the stated time, the refused request is repeated (up to three times), and the bridge's own limiters slow down until the homeserver stops complaining. Covered by unit tests with a fake homeserver; not exercised against a real rate-limited Synapse. |
 
+## Membership
+
+| Capability | Direction | Status | Notes |
+|---|---|---|---|
+| Rooms are repaired to match channel membership | Mattermost → Matrix | ✅ | /matrix repair (and a rotating background pass, twenty channels per run) adds the bridge accounts of channel members who are missing from the room and removes the accounts of people who left the channel. Real Matrix people, claimed mirror accounts and the bot are never touched; people with their own linked account must join themselves. |
+
 ## Totals
 
-- ✅ supported: 54
+- ✅ supported: 55
 - 🟡 partial: 4
 - ❌ gap: 25
 - — n/a: 0

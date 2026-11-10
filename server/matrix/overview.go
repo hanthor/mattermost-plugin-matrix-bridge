@@ -69,3 +69,26 @@ func (c *Client) getJSON(requestURL string, into any) (int, error) {
 	}
 	return resp.StatusCode, nil
 }
+
+// JoinedMembers lists the accounts that have joined a room, as seen by the
+// bridge bot.
+func (c *Client) JoinedMembers(roomID string) ([]string, error) {
+	if c.serverURL == "" || c.asToken == "" {
+		return nil, errors.New("matrix client not configured")
+	}
+	var joined struct {
+		Joined map[string]json.RawMessage `json:"joined"`
+	}
+	status, err := c.getJSON(c.serverURL+"/_matrix/client/v3/rooms/"+url.PathEscape(roomID)+"/joined_members", &joined)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("could not list room members: status %d", status)
+	}
+	out := make([]string, 0, len(joined.Joined))
+	for id := range joined.Joined {
+		out = append(out, id)
+	}
+	return out, nil
+}
