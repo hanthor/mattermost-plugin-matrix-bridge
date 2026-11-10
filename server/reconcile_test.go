@@ -33,6 +33,8 @@ func reconcileFixture(t *testing.T, channelMembers ...string) (*Plugin, *fakeSyn
 		return out
 	}(), nil)
 	api.On("GetProfileImage", mock.Anything).Return([]byte{}, nil).Maybe()
+	// A repair also refreshes the room's name and topic.
+	api.On("GetChannel", "chan-1").Return(&model.Channel{Id: "chan-1", Type: model.ChannelTypeOpen, DisplayName: "Chan"}, nil).Maybe()
 	return p, hs
 }
 
