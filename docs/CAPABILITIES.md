@@ -110,6 +110,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
+| Automatic linking by verified email | Matrix → Mattermost | ✅ | With "Link people by verified email" on and a Matrix admin token configured, a Matrix person who first appears in a bridged room (joining or writing) is linked to the Mattermost account with the same verified email instead of getting a separate remote account. Both sides must have verified the address, the Mattermost account must be active and not linked to someone else. The person's own Matrix token (puppeting) still needs !mattermost login or shared login. |
 | Linking retires the ghost and any Matrix-side shadow user | Mattermost → Matrix | ✅ | When a person enables double puppeting, their ghost leaves the bridged rooms, their own Matrix account takes its place (also in mention pills), and the remote shadow user that stood for them in Mattermost is deactivated. Unlinking brings the ghost back. |
 
 ## Rooms
@@ -182,7 +183,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 89
+- ✅ supported: 90
 - 🟡 partial: 4
 - ❌ gap: 6
 - — n/a: 0

@@ -627,6 +627,16 @@ func (b *MatrixToMattermostBridge) getOrCreateMattermostUser(matrixUserID string
 		return "", errors.New("cut-over mode is on: no new Mattermost users are created for Matrix users")
 	}
 
+	// The same person on both sides, by verified email: link, do not duplicate.
+	if linkedID, ok := b.autoLinkByEmail(matrixUserID); ok {
+		if channelID != "" {
+			if err := b.addUserToChannelTeam(linkedID, channelID); err != nil {
+				b.logger.LogWarn("Failed to add linked user to team", "error", err, "user_id", linkedID, "channel_id", channelID)
+			}
+		}
+		return linkedID, nil
+	}
+
 	// Extract username from Matrix user ID (@username:server.com -> username)
 	username := b.extractUsernameFromMatrixUserID(matrixUserID)
 	if username == "" {

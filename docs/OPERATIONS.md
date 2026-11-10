@@ -168,3 +168,20 @@ rotating when encrypted rooms are bridged.
 - `!mattermost login <token>` messages are removed from the room by the bot
   where it has the power to do so; otherwise the bot asks the person to delete
   the message and to sign out of that session to get a new token.
+
+## Linking people by verified email
+
+Turn on **Link people by verified email** (needs the **Matrix Admin Access
+Token**) when the same people use both systems and their email addresses are
+verified in both. The first time a Matrix person appears in a bridged room, by
+joining or writing, the bridge reads the verified email addresses of their
+Matrix account from the homeserver and, if a Mattermost account with the same
+verified address exists, links the two: their Matrix messages then post as the
+real Mattermost account instead of as a separate remote user.
+
+It is deliberately cautious: both addresses must be verified, the Mattermost
+account must be active and not already linked to another Matrix account, and
+people who already have a remote account are left as they are (link them with
+`/matrix link`). It does not obtain the person's Matrix token, so Mattermost
+messages still come from their ghost until they run `!mattermost login` or sign
+in through shared login.

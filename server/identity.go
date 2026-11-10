@@ -172,15 +172,20 @@ func (s *identityStore) Redeem(code, matrixUserID string) (*IdentityLink, error)
 		return nil, errors.New("unknown or expired code")
 	}
 
-	if old, ok := s.LinkForMatrixUser(matrixUserID); ok && old.MattermostUserID != ic.MattermostUserID {
+	return s.linkAccounts(ic.MattermostUserID, matrixUserID)
+}
+
+// linkAccounts links the two accounts, replacing any earlier link of either.
+func (s *identityStore) linkAccounts(mattermostUserID, matrixUserID string) (*IdentityLink, error) {
+	if old, ok := s.LinkForMatrixUser(matrixUserID); ok && old.MattermostUserID != mattermostUserID {
 		_ = s.Unlink(old.MattermostUserID)
 	}
-	if old, ok := s.Link(ic.MattermostUserID); ok && old.MatrixUserID != matrixUserID {
+	if old, ok := s.Link(mattermostUserID); ok && old.MatrixUserID != matrixUserID {
 		_ = s.kv.Delete(kvstore.BuildMatrixUserKey(old.MatrixUserID))
 	}
 
 	link := &IdentityLink{
-		MattermostUserID: ic.MattermostUserID,
+		MattermostUserID: mattermostUserID,
 		MatrixUserID:     matrixUserID,
 		LinkedAt:         time.Now().Unix(),
 	}
