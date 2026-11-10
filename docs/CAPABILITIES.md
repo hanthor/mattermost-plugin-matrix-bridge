@@ -132,7 +132,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
 | Matrix widget showing the Mattermost channel | Mattermost → Matrix | ❌ | Plugin can serve a widget page; the bot sets im.vector.modular.widgets. |
-| Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | 🟡 | help, whoami, link, login, logout, unlink work in DMs with the bot. Room linking from Matrix is not implemented yet. |
+| Bridge bot commands in Matrix (!mattermost …) | Matrix → Mattermost | ✅ | In a direct message with the bot: help, whoami, link, login, logout, unlink. In a bridged or unbridged room: rooms, status, link-room <team>/<channel> and unlink-room, run as the linked Mattermost account through the same slash commands (so Mattermost's permissions apply) and needing moderator rights in the room. |
 | Channel shows the linked room in Mattermost | Mattermost → Matrix | ✅ | The bridge panel (app bar icon) shows the channel's room, who is in it and a link to open it. There is no button in the channel header itself. |
 | Post menu: Open in Matrix and Copy Matrix event ID | Mattermost → Matrix | ✅ | Both actions appear on posts that were synced to Matrix. Open in Matrix uses Element Web when its address is configured and matrix.to otherwise. The server route is tested against a real homeserver; the menu itself is covered by webapp unit tests only. |
 | Matrix clients show where a room is bridged to | Mattermost → Matrix | ✅ | A mapped room carries the bridge-information state event (m.bridge and Element's uk.half-shot.bridge) naming the Mattermost team, channel and link; it is emptied when the channel is unmapped. Needs the bot to be allowed to send state events, so rooms mapped with /matrix map where the bot is not a moderator keep no event (the doctor says so). Direct messages carry none. |
@@ -175,7 +175,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 80
-- 🟡 partial: 6
+- ✅ supported: 81
+- 🟡 partial: 5
 - ❌ gap: 11
 - — n/a: 0

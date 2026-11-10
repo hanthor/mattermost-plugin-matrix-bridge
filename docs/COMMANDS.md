@@ -531,6 +531,15 @@ message from the room where it can; otherwise delete it yourself. `!mattermost l
 Bridge-bot commands available in Matrix: `help`, `whoami`, `link <code>`,
 `login <token>`, `logout`, `unlink`.
 
+**Room management** (your Matrix account must be linked; send them in the room
+itself): `!mattermost rooms` lists the bridged channels you are in,
+`!mattermost status` says whether this room is bridged and to what,
+`!mattermost link-room <team>/<channel>` bridges this room to a channel, and
+`!mattermost unlink-room` stops. The last two run `/matrix map` and
+`/matrix unmap` as your linked Mattermost account, so Mattermost's permissions
+apply (you must be allowed to manage that channel), and you need moderator
+rights (power level 50, or being the room's creator) in the Matrix room.
+
 ## Calls: `/matrix call`
 
 Audio and video are not relayed between Mattermost Calls and Matrix: both

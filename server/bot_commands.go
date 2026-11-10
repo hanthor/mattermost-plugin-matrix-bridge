@@ -19,7 +19,8 @@ const botHelpText = `Mattermost bridge commands:
 • !mattermost link <code> — link this Matrix account to a Mattermost account (get the code with /matrix link in Mattermost)
 • !mattermost login <access_token> — let the bridge post as this Matrix account instead of a ghost (double puppeting)
 • !mattermost logout — stop using this account's token
-• !mattermost unlink — remove the link`
+• !mattermost unlink — remove the link
+• !mattermost rooms, status, link-room, unlink-room — manage bridged rooms (send "!mattermost help rooms" in a room)`
 
 // isBridgeBotEvent reports whether a member event concerns the bridge bot.
 func (p *Plugin) isBridgeBotEvent(event MatrixEvent) bool {
@@ -56,7 +57,12 @@ func isBotCommand(event MatrixEvent) bool {
 // same room as the bot.
 func (p *Plugin) handleBotCommand(event MatrixEvent) {
 	body, _ := event.Content["body"].(string)
-	reply := p.executeBotCommand(event.Sender, body)
+	var reply string
+	if fields := strings.Fields(body); isRoomBotCommand(fields) {
+		reply = p.executeRoomBotCommand(event, fields)
+	} else {
+		reply = p.executeBotCommand(event.Sender, body)
+	}
 	if reply == "" || p.matrixClient == nil {
 		return
 	}
@@ -86,6 +92,9 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 
 	switch strings.ToLower(fields[1]) {
 	case "help":
+		if len(fields) > 2 && strings.EqualFold(fields[2], "rooms") {
+			return botRoomsHelp
+		}
 		return botHelpText
 
 	case "whoami":

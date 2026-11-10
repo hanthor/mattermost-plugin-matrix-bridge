@@ -82,6 +82,9 @@ func (c *Client) PingAppservice(registrationID string) (int64, error) {
 
 // BotPowerLevel returns the power level of a user in a room, as the bridge bot sees it.
 func (c *Client) BotPowerLevel(roomID, userID string) (int, error) {
+	if creator, err := c.isRoomCreator(roomID, userID); err == nil && creator {
+		return creatorPowerLevel, nil
+	}
 	var levels struct {
 		Users        map[string]int `json:"users"`
 		UsersDefault int            `json:"users_default"`
@@ -114,6 +117,47 @@ func (c *Client) BotIsInRoom(roomID string) (bool, error) {
 	for _, r := range joined.JoinedRooms {
 		if r == roomID {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// creatorPowerLevel stands for the unlimited power room creators have in room
+// version 12 and later.
+const creatorPowerLevel = 1 << 53
+
+// isRoomCreator reports whether the user created the room (or was named an
+// additional creator) in a room version where creators hold unlimited power
+// and are not listed in the power levels.
+func (c *Client) isRoomCreator(roomID, userID string) (bool, error) {
+	var state []struct {
+		Type    string `json:"type"`
+		Sender  string `json:"sender"`
+		Content struct {
+			RoomVersion       string   `json:"room_version"`
+			AdditionalCreator []string `json:"additional_creators"`
+		} `json:"content"`
+	}
+	status, err := c.getJSON(c.serverURL+"/_matrix/client/v3/rooms/"+url.PathEscape(roomID)+"/state", &state)
+	if err != nil || status != http.StatusOK {
+		return false, err
+	}
+	for _, ev := range state {
+		if ev.Type != "m.room.create" {
+			continue
+		}
+		version := ev.Content.RoomVersion
+		if version == "" || version == "1" || version == "2" || version == "3" || version == "4" || version == "5" ||
+			version == "6" || version == "7" || version == "8" || version == "9" || version == "10" || version == "11" {
+			return false, nil // creators are ordinary entries in the power levels
+		}
+		if ev.Sender == userID {
+			return true, nil
+		}
+		for _, extra := range ev.Content.AdditionalCreator {
+			if extra == userID {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
