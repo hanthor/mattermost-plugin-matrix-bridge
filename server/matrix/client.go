@@ -1956,9 +1956,13 @@ func (c *Client) sendTextMessage(req MessageRequest, rootEventID string) (*SendE
 
 	// Add threading if provided (takes priority over post grouping)
 	if req.ThreadEventID != "" {
+		// Clients without thread support show the message as a reply to the
+		// thread's root (the fallback in the Matrix spec).
 		content["m.relates_to"] = map[string]any{
-			"rel_type": "m.thread",
-			"event_id": req.ThreadEventID,
+			"rel_type":        "m.thread",
+			"event_id":        req.ThreadEventID,
+			"is_falling_back": true,
+			"m.in_reply_to":   map[string]any{"event_id": req.ThreadEventID},
 		}
 	} else if rootEventID != "" {
 		// Add relation to root event if no threading (for post grouping)
@@ -2009,9 +2013,13 @@ func (c *Client) sendFileMessage(req MessageRequest, file FileAttachment, rootEv
 
 	// Add threading if provided (takes priority over post grouping)
 	if req.ThreadEventID != "" {
+		// Clients without thread support show the message as a reply to the
+		// thread's root (the fallback in the Matrix spec).
 		content["m.relates_to"] = map[string]any{
-			"rel_type": "m.thread",
-			"event_id": req.ThreadEventID,
+			"rel_type":        "m.thread",
+			"event_id":        req.ThreadEventID,
+			"is_falling_back": true,
+			"m.in_reply_to":   map[string]any{"event_id": req.ThreadEventID},
 		}
 	} else if rootEventID != "" {
 		// Add relation to root event if no threading (for post grouping)

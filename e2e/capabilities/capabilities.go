@@ -67,6 +67,8 @@ var All = []Capability{
 	{ID: "messages.delete.in", Area: "Messages", Name: "Redactions", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
 	{ID: "messages.thread", Area: "Messages", Name: "Threads / replies", Direction: MattermostToMatrix, Status: Supported, Notes: "m.thread relation."},
 	{ID: "messages.thread.in", Area: "Messages", Name: "Threads / replies", Direction: MatrixToMattermost, Status: Supported, Notes: "m.thread and m.in_reply_to land in the post's thread."},
+	{ID: "messages.reply_fallback", Area: "Messages", Name: "Reply fallbacks keep context on both sides", Direction: MattermostToMatrix, Status: Supported, Notes: "Thread messages sent to Matrix also carry m.in_reply_to with is_falling_back, so clients without thread support show a reply to the thread's root."},
+	{ID: "messages.reply_fallback.in", Area: "Messages", Name: "Matrix replies keep the quoted message in Mattermost", Direction: MatrixToMattermost, Status: Supported, Notes: "A Matrix reply to a message that is not the thread's root appears in the thread with the replied-to message quoted (author and first line), since Mattermost threads have no reply-to."},
 	{ID: "messages.mentions", Area: "Messages", Name: "User mentions", Direction: MattermostToMatrix, Status: Supported, Notes: "m.mentions and pills."},
 	{ID: "messages.mentions.in", Area: "Messages", Name: "User mentions", Direction: MatrixToMattermost, Status: Supported, Notes: ""},
 	{ID: "messages.channel_mentions", Area: "Messages", Name: "@channel / @here ↔ @room", Direction: MattermostToMatrix, Status: Unsupported, Notes: "@channel should set m.mentions.room; @room should become @channel."},

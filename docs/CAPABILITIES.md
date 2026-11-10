@@ -18,6 +18,8 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Redactions | Matrix → Mattermost | ✅ |  |
 | Threads / replies | Mattermost → Matrix | ✅ | m.thread relation. |
 | Threads / replies | Matrix → Mattermost | ✅ | m.thread and m.in_reply_to land in the post's thread. |
+| Reply fallbacks keep context on both sides | Mattermost → Matrix | ✅ | Thread messages sent to Matrix also carry m.in_reply_to with is_falling_back, so clients without thread support show a reply to the thread's root. |
+| Matrix replies keep the quoted message in Mattermost | Matrix → Mattermost | ✅ | A Matrix reply to a message that is not the thread's root appears in the thread with the replied-to message quoted (author and first line), since Mattermost threads have no reply-to. |
 | User mentions | Mattermost → Matrix | ✅ | m.mentions and pills. |
 | User mentions | Matrix → Mattermost | ✅ |  |
 | @channel / @here ↔ @room | Mattermost → Matrix | ❌ | @channel should set m.mentions.room; @room should become @channel. |
@@ -141,7 +143,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 49
+- ✅ supported: 51
 - 🟡 partial: 4
 - ❌ gap: 25
 - — n/a: 0
