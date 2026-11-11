@@ -135,6 +135,13 @@
                 "secret": true
             },
             {
+                "key": "welcome_email",
+                "display_name": "Email people their Matrix ID",
+                "type": "bool",
+                "help_text": "When /matrix welcome tells someone their Matrix ID in a direct message, also send it by email. Needs Mattermost's email (SMTP) settings to work; a failed email is logged and never stops the welcome. Off by default.",
+                "default": false
+            },
+            {
                 "key": "auto_link_by_email",
                 "display_name": "Link people by verified email",
                 "type": "bool",

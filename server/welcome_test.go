@@ -72,3 +72,23 @@ func TestWelcomeAccounts(t *testing.T) {
 		assert.Len(t, notices, 2)
 	})
 }
+
+func TestWelcomeEmail(t *testing.T) {
+	hs := newFakeSynapse(t)
+	ada := &model.User{Id: "mm-ada", Username: "ada", Email: "ada@example.com"}
+	p, api := newMirrorTestBridge(t, hs, ada)
+	cfg := p.getConfiguration().Clone()
+	cfg.WelcomeEmail = true
+	p.setConfiguration(cfg)
+
+	var body string
+	api.On("SendMail", "ada@example.com", "Your Matrix account", mock.Anything).Run(func(a mock.Arguments) {
+		body = a.String(2)
+	}).Return((*model.AppError)(nil)).Once()
+	p.emailWelcome(welcomePlan{userID: "mm-ada", matrixID: "@ada:example.com"})
+	assert.Contains(t, body, "@ada:example.com")
+
+	// A mail failure is not an error for the caller.
+	api.On("SendMail", mock.Anything, mock.Anything, mock.Anything).Return(model.NewAppError("SendMail", "x", nil, "smtp off", 500)).Once()
+	p.emailWelcome(welcomePlan{userID: "mm-ada", matrixID: "@ada:example.com"})
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"sort"
 	"strings"
 
@@ -186,5 +187,22 @@ func (p *Plugin) sendWelcomeMessage(pl welcomePlan) error {
 	if _, appErr := p.API.CreatePost(&model.Post{UserId: botID, ChannelId: dm.Id, Type: bridgeNoticePostType, Message: text}); appErr != nil {
 		return errors.Wrap(appErr, "could not send the welcome")
 	}
+	if p.getConfiguration().WelcomeEmail {
+		p.emailWelcome(pl)
+	}
 	return nil
+}
+
+// emailWelcome sends the same news by email. It is a courtesy: Mattermost's
+// mail settings may be off, so a failure is logged and nothing else.
+func (p *Plugin) emailWelcome(pl welcomePlan) {
+	user, appErr := p.API.GetUser(pl.userID)
+	if appErr != nil || user == nil || user.Email == "" {
+		return
+	}
+	body := fmt.Sprintf("<p>Hello %s,</p><p>You now have a Matrix account: <b>%s</b>. Your messages and direct messages are already there.</p><p>To sign in from any Matrix client, run <code>/matrix claim</code> in Mattermost, or use your organisation's shared login.</p>",
+		html.EscapeString(user.Username), html.EscapeString(pl.matrixID))
+	if mailErr := p.API.SendMail(user.Email, "Your Matrix account", body); mailErr != nil {
+		p.logger.LogWarn("Could not email the Matrix welcome", "error", mailErr.Error(), "user_id", pl.userID)
+	}
 }
