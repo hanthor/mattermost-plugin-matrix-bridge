@@ -55,17 +55,26 @@ agreed to, channels that are not mapped, private channels nobody mapped.
 ## Retention and erasure
 
 - **Mattermost data retention** deletes old posts in the database without
-  telling the plugin, so their Matrix copies stay. **Not done:** a job that
-  redacts Matrix events whose post no longer exists.
+  telling the plugin, so their Matrix copies stay. **Decision:** not automated.
+  The plugin API gives no way to learn which posts the job removed, and the
+  bridge does not keep a room for each post it could match against; a periodic
+  scan would have to compare every bridged event with Mattermost. An
+  organisation that needs the Matrix copies to follow retention sets the same
+  retention on the Matrix side (the next item).
 - **Matrix room retention** (`m.room.retention`) removes events on the
   homeserver without telling the bridge; the Mattermost copies stay.
   **Not done:** mirroring the channel's retention policy at mapping time.
 - **Deleting a post** in either system is carried to the other (a redaction in
   Matrix).
 - **Deactivating a Mattermost user** deactivates their mirror account or ghost
-  (users.deactivation). **Not done:** erasing their bridged events when they are
-  anonymised or deleted for a data-protection request. Today an administrator
-  redacts them in Matrix by hand or with the homeserver's admin tools.
+  (users.deactivation).
+- **Erasing a person** (a data-protection request): `/matrix erase <username>`
+  (system administrators; preview, then `confirm`) redacts the messages the
+  person's bridge account sent in bridged rooms, takes the account out of the
+  rooms and, for a mirror account with a Matrix admin token, deactivates and
+  erases it on the homeserver (privacy.erase). It does not touch Mattermost's
+  own data, and it cannot redact messages sent as a person's own linked Matrix
+  account.
 - **Federation.** Once an event reaches another homeserver, redaction asks that
   server to remove it; it cannot be forced.
 

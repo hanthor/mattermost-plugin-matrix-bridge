@@ -88,6 +88,8 @@ func (m *mockPlugin) MigrateTeam(_, _, _ string, _ bool) (string, error) { retur
 
 func (m *mockPlugin) BackfillStructure() int { return 0 }
 
+func (m *mockPlugin) EraseUser(_, _ string, _ bool) (string, error) { return "", nil }
+
 func (m *mockPlugin) WelcomeAccounts(_ string, _ bool) (string, error) { return "", nil }
 
 func (m *mockPlugin) MirrorStatus() MirrorStatus {
