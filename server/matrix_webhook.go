@@ -86,7 +86,11 @@ func (p *Plugin) handleMatrixTransaction(w http.ResponseWriter, r *http.Request)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		p.logger.LogError("Failed to read Matrix webhook body", "error", err, "txn_id", txnID)
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		// The caller usually hung up (a homeserver restarting mid-request). The
+		// plugin RPC response writer then has no header map, and http.Error would
+		// panic setting one and take the whole plugin down; answer with the
+		// status alone.
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 

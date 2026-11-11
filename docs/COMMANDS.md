@@ -856,7 +856,9 @@ how to claim it, and brings their bridged direct-message rooms (`m.direct`) and
 favourite channels (`m.favourite`) into the Matrix account, so their sidebar
 looks the same. Without `confirm` it only says how many people would be
 welcomed. It is safe to repeat and never messages a person twice; claimed
-accounts are left alone.
+accounts are left alone. With the **Email people their Matrix ID** setting on,
+the same news is also emailed through Mattermost's mail settings; a failed email
+is logged and never stops the welcome.
 
 ## `/matrix erase <username> [confirm]`
 
