@@ -167,6 +167,25 @@ func TestMASSharedLogin(t *testing.T) {
 		assert.Equal(t, id, again)
 	})
 
+	t.Run("a personal session gives the bridge a token for the person's own account", func(t *testing.T) {
+		require.NotEmpty(t, adaMASID)
+		token, err := masAdmin.PersonalSession(ctx, adaMASID, "Mattermost bridge")
+		require.NoError(t, err)
+		require.NotEmpty(t, token)
+
+		req, err := http.NewRequest(http.MethodGet, stack.SynapseBase+"/_matrix/client/v3/account/whoami", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := client.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = res.Body.Close() }()
+		raw, _ := io.ReadAll(res.Body)
+		t.Logf("whoami with the personal session: %d %s", res.StatusCode, raw)
+		require.Equal(t, http.StatusOK, res.StatusCode, string(raw))
+		assert.Equal(t, "@ada:"+masServerName, gjson.GetBytes(raw, "user_id").Str)
+		capabilities.Verify(t, "identity.sso_token", true)
+	})
+
 	t.Run("the account can be linked to the person at the identity provider", func(t *testing.T) {
 		require.NotEmpty(t, adaMASID)
 		sub := probeSubject(t, stack, "ada@example.com")

@@ -17,7 +17,7 @@ const botHelpText = `Mattermost bridge commands:
 • !mattermost help — this message
 • !mattermost whoami — show which Mattermost account this Matrix account is linked to
 • !mattermost link <code> — link this Matrix account to a Mattermost account (get the code with /matrix link in Mattermost)
-• !mattermost login <access_token> — let the bridge post as this Matrix account instead of a ghost (double puppeting)
+• !mattermost login [access_token] — let the bridge post as this Matrix account instead of a ghost (double puppeting); the token is optional when the homeserver uses Matrix Authentication Service
 • !mattermost logout — stop using this account's token
 • !mattermost unlink — remove the link
 • !mattermost rooms, status, link-room, unlink-room — manage bridged rooms (send "!mattermost help rooms" in a room)`
@@ -134,13 +134,25 @@ func (p *Plugin) executeBotCommand(sender, body string) string {
 		return fmt.Sprintf("✅ Linked to Mattermost user %s. Your Matrix messages in bridged rooms now post as that account. Send `!mattermost login <access_token>` if you also want Mattermost messages to appear from this Matrix account.", username)
 
 	case "login":
-		if len(fields) < 3 {
-			return "Usage: `!mattermost login <access_token>` (Element: Settings → Help & About → Access Token)."
-		}
 		if p.matrixClient == nil {
 			return "❌ The bridge is not connected to Matrix."
 		}
-		token := fields[2]
+		var token string
+		if len(fields) < 3 {
+			// Without a token, a homeserver that delegates sign-in to MAS can
+			// hand the bridge one for this account directly.
+			if !p.getConfiguration().masConfigured() {
+				return "Usage: `!mattermost login <access_token>` (Element: Settings → Help & About → Access Token)."
+			}
+			var err error
+			token, err = p.tokenFromMAS(sender)
+			if err != nil {
+				p.logger.LogWarn("Could not get an access token from MAS", "error", err, "matrix_user_id", sender)
+				return "❌ The bridge could not get a token from the sign-in service for this account. Send `!mattermost login <access_token>` instead."
+			}
+		} else {
+			token = fields[2]
+		}
 		owner, err := p.matrixClient.WhoAmI(token)
 		if err != nil {
 			return "❌ That access token was rejected by the homeserver."

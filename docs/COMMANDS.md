@@ -524,12 +524,16 @@ To also have your Mattermost messages appear from your own Matrix account
 (double puppeting), send the bot `!mattermost login <access_token>` (Element:
 Settings → Help & About → Access Token). The token is verified against the
 homeserver and must belong to you, and is stored encrypted. The bot removes your
-message from the room where it can; otherwise delete it yourself. `!mattermost logout` removes it,
+message from the room where it can; otherwise delete it yourself. When the
+homeserver signs people in through Matrix Authentication Service and the bridge
+has its admin client (docs/MAS_SETUP.md), send just `!mattermost login`: the
+bridge asks MAS for a personal session of your own account, so nothing is pasted
+(identity.sso_token). `!mattermost logout` removes it,
 `!mattermost whoami` shows the current state, and `/matrix unlink` (or
 `!mattermost unlink`) removes the link.
 
 Bridge-bot commands available in Matrix: `help`, `whoami`, `link <code>`,
-`login <token>`, `logout`, `unlink`.
+`login [token]`, `logout`, `unlink`.
 
 **Room management** (your Matrix account must be linked; send them in the room
 itself): `!mattermost rooms` lists the bridged channels you are in,

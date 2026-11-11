@@ -209,6 +209,49 @@ func (c *Client) LinkUpstream(ctx context.Context, userID, providerID, subject, 
 	return fmt.Errorf("MAS could not link the account to the identity provider: %d %s", status, truncate(body))
 }
 
+// matrixAPIScope is the scope that lets a token use the Matrix client API.
+const matrixAPIScope = "urn:matrix:client:api:*"
+
+// PersonalSession gives the bridge an access token for a Matrix account that
+// belongs to a person who signs in through MAS: a personal session acting as
+// that user, valid for the Matrix client API. With it the bridge can send as
+// the person's own account (double puppeting) without them pasting a token.
+// It must only be asked for after the person proved they own the account.
+func (c *Client) PersonalSession(ctx context.Context, userID, name string) (string, error) {
+	payload := map[string]any{"actor_user_id": userID, "human_name": name, "scope": matrixAPIScope}
+	status, body, err := c.do(ctx, http.MethodPost, "/api/admin/v1/personal-sessions", payload)
+	if err != nil {
+		return "", err
+	}
+	if status != http.StatusOK && status != http.StatusCreated {
+		return "", fmt.Errorf("MAS could not create a personal session: %d %s", status, truncate(body))
+	}
+	var r struct {
+		Data struct {
+			Attributes struct {
+				AccessToken string `json:"access_token"`
+			} `json:"attributes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &r); err != nil || r.Data.Attributes.AccessToken == "" {
+		return "", fmt.Errorf("MAS created a personal session but returned no token: %s", truncate(body))
+	}
+	return r.Data.Attributes.AccessToken, nil
+}
+
+// UserIDByUsername finds the MAS ID of a user by their localpart.
+func (c *Client) UserIDByUsername(ctx context.Context, localpart string) (string, error) {
+	status, body, err := c.do(ctx, http.MethodGet, "/api/admin/v1/users/by-username/"+url.PathEscape(localpart), nil)
+	if err != nil {
+		return "", err
+	}
+	var r singleResponse
+	if status != http.StatusOK || json.Unmarshal(body, &r) != nil || r.Data.ID == "" {
+		return "", fmt.Errorf("MAS has no user %q: %d %s", localpart, status, truncate(body))
+	}
+	return r.Data.ID, nil
+}
+
 func truncate(b []byte) string {
 	s := strings.TrimSpace(string(b))
 	if len(s) > 300 {
