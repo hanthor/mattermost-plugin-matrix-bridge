@@ -161,12 +161,12 @@ func TestSharedReusesOneClientPerSettings(t *testing.T) {
 func TestPersonalSessionReturnsTokenForTheUser(t *testing.T) {
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/oauth2/token":
+		switch r.URL.Path {
+		case "/oauth2/token":
 			_, _ = w.Write([]byte(`{"access_token":"admin","expires_in":300}`))
-		case r.URL.Path == "/api/admin/v1/users/by-username/ada":
+		case "/api/admin/v1/users/by-username/ada":
 			_, _ = w.Write([]byte(`{"data":{"id":"01ADA"}}`))
-		case r.URL.Path == "/api/admin/v1/personal-sessions":
+		case "/api/admin/v1/personal-sessions":
 			_ = json.NewDecoder(r.Body).Decode(&gotBody)
 			_, _ = w.Write([]byte(`{"data":{"attributes":{"access_token":"mat_secret"}}}`))
 		default:
