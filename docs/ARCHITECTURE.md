@@ -812,6 +812,21 @@ small and contained to one file.
 hand-written client lacks (for example sliding sync or a new room version
 handling): move that area onto mautrix then, not the whole client.
 
+### Integration images stay links, not files (#72)
+
+An integration's attachment can carry an `image_url` (a chart, a build badge).
+The bridge writes that address into the message text; it does not download the
+image and upload it to Matrix as a file.
+
+**Decision.** Do not fetch it. The address is chosen by whoever configures the
+integration, and fetching it would make the Mattermost server request any URL
+on their behalf, including addresses inside the organisation's network (a
+server-side request forgery path). A person's own uploaded files are different:
+they live in Mattermost and are copied as files already.
+
+**Revisit when** an administrator-set allow-list of hosts exists to fetch from,
+or Mattermost offers a safe proxy for external images that the plugin can call.
+
 ## Future Enhancements
 
 ### Features (Implementation Status)
