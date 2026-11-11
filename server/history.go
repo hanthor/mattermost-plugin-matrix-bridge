@@ -198,7 +198,7 @@ func (p *Plugin) runHistoryImport(channelID, roomID string, plan *historyPlan) {
 	consecutive := 0
 	for i, post := range plan.posts {
 		user, appErr := p.API.GetUser(post.UserId)
-		if appErr != nil || user == nil || user.IsRemote() || user.IsBot {
+		if appErr != nil || user == nil || user.IsRemote() || (user.IsBot && !p.getConfiguration().HistoryIncludeBots) {
 			report.Skipped++
 			continue
 		}

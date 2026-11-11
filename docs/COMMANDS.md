@@ -578,6 +578,11 @@ that stopped (three failures in a row stop a run) or add messages written since.
 While it runs, `/matrix history` shows progress; afterwards it shows what the
 last run did.
 
+What bots and integrations posted (CI, alerts, webhooks) is left out unless the
+**Import bot and integration posts in /matrix history** setting is on; then each
+bot arrives as its own Matrix account, and a webhook that overrides its name
+keeps it.
+
 Attachments are uploaded with their message (files above the size limit are
 skipped) and reactions are replayed from the people who reacted, with their
 original times. Not carried across: earlier versions of edited messages (the

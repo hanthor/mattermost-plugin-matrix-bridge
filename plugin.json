@@ -135,6 +135,13 @@
                 "secret": true
             },
             {
+                "key": "history_include_bots",
+                "display_name": "Import bot and integration posts in /matrix history",
+                "type": "bool",
+                "help_text": "When /matrix history copies a channel's past messages, also copy what bots and integrations (CI, alerts, webhooks) posted. They arrive as the bot's own Matrix account, and webhooks that override their name keep it. Off by default.",
+                "default": false
+            },
+            {
                 "key": "welcome_email",
                 "display_name": "Email people their Matrix ID",
                 "type": "bool",
