@@ -157,3 +157,35 @@ func TestSharedReusesOneClientPerSettings(t *testing.T) {
 	assert.Same(t, Shared("https://a", "i", "s"), Shared("https://a", "i", "s"))
 	assert.NotSame(t, Shared("https://a", "i", "s"), Shared("https://b", "i", "s"))
 }
+
+func TestPersonalSessionReturnsTokenForTheUser(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/oauth2/token":
+			_, _ = w.Write([]byte(`{"access_token":"admin","expires_in":300}`))
+		case r.URL.Path == "/api/admin/v1/users/by-username/ada":
+			_, _ = w.Write([]byte(`{"data":{"id":"01ADA"}}`))
+		case r.URL.Path == "/api/admin/v1/personal-sessions":
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			_, _ = w.Write([]byte(`{"data":{"attributes":{"access_token":"mat_secret"}}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "id", "secret")
+	id, err := c.UserIDByUsername(context.Background(), "ada")
+	require.NoError(t, err)
+	assert.Equal(t, "01ADA", id)
+
+	tok, err := c.PersonalSession(context.Background(), id, "Mattermost bridge")
+	require.NoError(t, err)
+	assert.Equal(t, "mat_secret", tok)
+	assert.Equal(t, "01ADA", gotBody["actor_user_id"])
+	assert.Equal(t, matrixAPIScope, gotBody["scope"])
+
+	_, err = c.UserIDByUsername(context.Background(), "nobody")
+	assert.Error(t, err)
+}
