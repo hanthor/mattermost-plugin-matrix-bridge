@@ -188,6 +188,35 @@ func TestHistoryImportSkipsBotsAndMatrixUsers(t *testing.T) {
 	assert.Equal(t, 1, p.ChannelHistoryStatus(historyChannel).Skipped)
 }
 
+func TestHistoryImportIncludesBotsWhenAsked(t *testing.T) {
+	hs := newFakeSynapse(t)
+	ada := &model.User{Id: "mm-ada", Username: "ada"}
+	bot := &model.User{Id: "mm-bot", Username: "bot", IsBot: true}
+	p, api := newMirrorTestBridge(t, hs, ada, bot)
+	p.configuration.MatrixServerURL = "https://example.com"
+	p.configuration.HistoryIncludeBots = true
+	p.mattermostToMatrixBridge.fileTracker = NewPendingFileTracker()
+	p.mattermostToMatrixBridge.postTracker = NewPostTracker(100)
+	require.NoError(t, p.kvstore.Set(kvstore.BuildChannelMappingKey(historyChannel), []byte("!room:example.com")))
+	posts := []*model.Post{oldPost("p1", "mm-bot", "I am a bot", 5), oldPost("p2", "mm-ada", "I am a person", 4)}
+	list := &model.PostList{Order: []string{"p2", "p1"}, Posts: map[string]*model.Post{"p1": posts[0], "p2": posts[1]}}
+	api.On("GetPostsForChannel", historyChannel, 0, historyPageSize).Return(list, nil)
+	api.On("GetPostsForChannel", historyChannel, mock.Anything, historyPageSize).Return(&model.PostList{}, nil).Maybe()
+	api.On("UpdatePost", mock.Anything).Return(func(post *model.Post) *model.Post { return post }, nil).Maybe()
+	api.On("GetReactions", mock.Anything).Return([]*model.Reaction{}, nil).Maybe()
+	api.On("KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
+	api.On("KVDelete", mock.Anything).Return(nil).Maybe()
+	api.On("KVGet", mock.Anything).Return(nil, nil).Maybe()
+
+	require.NoError(t, p.StartChannelHistory(historyChannel, 0))
+	waitForHistory(t, p)
+	sent := hs.messages()
+	require.Len(t, sent, 2)
+	assert.Equal(t, "I am a bot", sent[0].Body)
+	assert.Equal(t, "I am a person", sent[1].Body)
+	assert.Equal(t, 0, p.ChannelHistoryStatus(historyChannel).Skipped)
+}
+
 func TestHistoryImportRefusesToRunTwiceAtOnce(t *testing.T) {
 	p, _, _ := historyFixture(t, oldPost("p1", "mm-ada", "one", 3))
 	p.configuration.MatrixServerURL = "https://example.com"
