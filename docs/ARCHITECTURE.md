@@ -818,6 +818,43 @@ small and contained to one file.
 hand-written client lacks (for example sliding sync or a new room version
 handling): move that area onto mautrix then, not the whole client.
 
+### "Ghost" stays in the code's names (#76)
+
+Several identifiers (`ghost_user_*` storage keys, `getGhostUser`,
+`InviteAndJoinGhostUser`, `GhostUserID`) now mean "the account the bridge
+controls for a person": a ghost, or a mirror account in mirror mode.
+`server/mirror.go` documents this at the top.
+
+**Decision.** Do not rename them wholesale.
+
+- *Ghost* is still a real thing in the product: the `@_mattermost_<id>` account
+  used when mirror mode is off, named that way in the settings, the commands
+  (`/matrix migrate ghosts-to-mirror`) and every guide. A rename would make the
+  code disagree with what people read.
+- The storage keys are persisted data. Renaming them needs a migration that
+  copies every key and keeps both readable for a release, which is risk without
+  user benefit.
+- The identifiers appear more than 300 times in 67 files; a mechanical rename
+  would bury real changes in review for the same reason it adds little clarity.
+
+**Instead.** New code that handles "either kind of account" uses `account`
+wording and says so in its comment; the explanation in `mirror.go` stays the
+single place that defines the term. **Revisit when** the storage layer moves off
+the key-value store (see "Storage") and the keys change anyway: rename then.
+
+### Bridges and the Matrix client (#76)
+
+A configuration change builds a new Matrix client, and the two bridges, the
+history and encryption code each hold the client they were built with. That was
+a real bug once (a stale client after a settings change).
+
+**Decision.** Keep rebuilding the bridges when the client changes
+(`initBridges`, called from `OnConfigurationChange`) rather than threading a
+client getter through every constructor. The rebuild is in one place, a test
+covers it, and the bridges stay simple values. **Revisit when** a third long-lived
+object needs the client and the rebuild list grows: then give them a shared
+accessor.
+
 ### Integration images stay links, not files (#72)
 
 An integration's attachment can carry an `image_url` (a chart, a build badge).
