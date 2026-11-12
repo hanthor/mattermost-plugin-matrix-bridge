@@ -47,14 +47,19 @@ device.
 
 ## What works
 
-- Messages in both directions (tested). Edits, replies, threads and reactions
-  take the same encrypt/decrypt path but have no encrypted-room test of their own.
+- Messages in both directions (tested).
 - Attachments (tested): files are encrypted before upload, so the media repository holds
   ciphertext; encrypted files from Matrix are decrypted before they are posted.
 - Encrypted rooms can be mapped with `/matrix map` and joined with `/matrix join`.
 - Edits, reactions, replies and attachments work in encrypted rooms in both
   directions, and the bridge keeps reading a room's keys across a plugin
   restart. All of this is tested against a real homeserver.
+- A room that **turns encryption on after it was bridged**: the next post from
+  Mattermost is sent encrypted, and encrypted messages from Matrix are read
+  (tested).
+- When a member **leaves** an encrypted room, the bridge starts a new room key,
+  so the person who left cannot read what it sends afterwards (tested: the key
+  stays the same while nobody leaves, and changes after a leave).
 
 ## Limits
 
