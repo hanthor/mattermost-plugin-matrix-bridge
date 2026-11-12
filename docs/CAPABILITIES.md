@@ -190,10 +190,11 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Capability | Direction | Status | Notes |
 |---|---|---|---|
 | Map and use a room that lives on another homeserver | Matrix → Mattermost | ✅ | /matrix map #room:other.server joins the room across federation; messages, edits, reactions and files from people on that server arrive, and Mattermost posts reach them. Tested with a second Synapse; other homeserver implementations are not tested yet. |
+| A remote homeserver being unreachable does not stop the bridge | Mattermost → Matrix | ✅ | The bridge only talks to its own homeserver. While a remote member's server is down, Mattermost posts are accepted at normal speed and reach everyone on the bridge's server; the remote person's messages flow again once their server is back. Synapse retries delivery to a server that was down with a back-off, so the remote person may see the missed messages later than the others. |
 
 ## Totals
 
-- ✅ supported: 96
+- ✅ supported: 97
 - 🟡 partial: 4
 - ❌ gap: 5
 - — n/a: 0
