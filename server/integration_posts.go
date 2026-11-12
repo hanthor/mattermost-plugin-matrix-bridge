@@ -25,6 +25,14 @@ func postMessageText(post *model.Post) string {
 	}
 	text := strings.Join(parts, "\n\n")
 	if text == "" {
+		// A recording or transcript from the Calls plugin has the file attached
+		// and no text of its own.
+		switch post.Type {
+		case callRecordingPostType:
+			return "🎙️ Call recording"
+		case callTranscriptionPostType:
+			return "📝 Call transcript"
+		}
 		return post.Message
 	}
 	// Without a per-message profile the integration's name goes in the text,

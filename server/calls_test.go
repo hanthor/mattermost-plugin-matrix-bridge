@@ -398,3 +398,43 @@ func TestCallPostWorkIsSerialized(t *testing.T) {
 	defer callPostLocksMu.Unlock()
 	assert.Empty(t, callPostLocks, "locks are released when unused")
 }
+
+func TestCallRecordingIsRelayedInTheCallsThread(t *testing.T) {
+	hs := newRecordingHomeserver(t)
+	p, api := newCallsTestPlugin(t, hs, "")
+	ada := &model.User{Id: "mm-ada", Username: "ada", FirstName: "Ada", LastName: "Admin"}
+	seedGhost(t, p, api, ada)
+	bridge := p.mattermostToMatrixBridge
+	bridge.fileTracker = NewPendingFileTracker()
+	bridge.postTracker = NewPostTracker(100)
+
+	start := callPost("call1", map[string]any{"start_at": float64(1_000_000), "end_at": float64(0), "participants": []any{"mm-ada"}})
+	require.NoError(t, bridge.SyncPostToMatrix(start, callTestChannel))
+	notices := hs.puts("/send/m.room.message/")
+	require.Len(t, notices, 1)
+
+	api.On("GetPost", "call1").Return(start, nil).Maybe()
+	api.On("GetProfileImage", mock.Anything).Return(nil, &model.AppError{Message: "none"}).Maybe()
+	api.On("UpdatePost", mock.Anything).Return(func(post *model.Post) *model.Post { return post }, nil).Maybe()
+
+	for _, tc := range []struct {
+		name, postType, want string
+	}{
+		{"recording", callRecordingPostType, "🎙️ Call recording"},
+		{"transcript", callTranscriptionPostType, "📝 Call transcript"},
+	} {
+		before := len(hs.puts("/send/m.room.message/"))
+		rec := &model.Post{
+			Id: "rec-" + tc.name, UserId: "mm-ada", ChannelId: callTestChannel, RootId: "call1",
+			Type: tc.postType, Props: model.StringInterface{"call_post_id": "call1"},
+		}
+		require.NoError(t, bridge.SyncPostToMatrix(rec, callTestChannel), tc.name)
+		sent := hs.puts("/send/m.room.message/")
+		require.Len(t, sent, before+1, tc.name)
+		last := sent[len(sent)-1]
+		assert.Equal(t, tc.want, last.Body["body"], tc.name)
+		relates, _ := last.Body["m.relates_to"].(map[string]any)
+		assert.Equal(t, "m.thread", relates["rel_type"], "%s is threaded under the call's announcement", tc.name)
+		assert.NotEmpty(t, relates["event_id"], tc.name)
+	}
+}

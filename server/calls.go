@@ -24,8 +24,12 @@ import (
 // docs/CALLS_AND_MIRROR_MODE.md.
 
 const (
-	callPostType       = "custom_calls"       // posted by the Mattermost Calls plugin
-	matrixCallPostType = "custom_matrix_call" // rendered by this plugin's webapp
+	callPostType = "custom_calls" // posted by the Mattermost Calls plugin
+	// The Calls plugin posts a finished recording or transcript in the call's
+	// thread, with the file attached.
+	callRecordingPostType     = "custom_calls_recording"
+	callTranscriptionPostType = "custom_calls_transcription"
+	matrixCallPostType        = "custom_matrix_call" // rendered by this plugin's webapp
 
 	callStateEventType   = "com.mattermost.bridge.call"
 	widgetStateEventType = "im.vector.modular.widgets"
@@ -166,6 +170,16 @@ type mattermostCallRecord struct {
 	// Participants is a fingerprint of the participant list last published.
 	Participants string `json:"participants"`
 	Ended        bool   `json:"ended"`
+}
+
+// callNoticeEventID returns the Matrix event of the announcement for a call
+// the bridge announced, or "" when the post is not such a call.
+func (b *MattermostToMatrixBridge) callNoticeEventID(callPostID string) string {
+	var rec mattermostCallRecord
+	if !loadJSON(b.kvstore, mattermostCallKeyPrefix+callPostID, &rec) {
+		return ""
+	}
+	return rec.NoticeEventID
 }
 
 // syncCallPost mirrors a Mattermost Calls post into the room: an m.notice with

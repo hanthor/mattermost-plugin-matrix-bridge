@@ -594,6 +594,12 @@ func (b *MattermostToMatrixBridge) createPostInMatrix(post *model.Post, matrixRo
 				}
 			}
 			if threadEventID == "" {
+				// A call announced by the bridge has no event ID on its post (the
+				// Calls plugin owns that post); its recordings and transcripts
+				// thread under the announcement.
+				threadEventID = b.callNoticeEventID(post.RootId)
+			}
+			if threadEventID == "" {
 				b.logger.LogWarn("Root post has no Matrix event ID for threading", "post_id", post.Id, "root_id", post.RootId)
 				// Continue without threading - send as regular message
 			}
