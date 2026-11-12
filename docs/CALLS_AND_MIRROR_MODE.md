@@ -111,6 +111,42 @@ A configuration setting `calls_mode` selects `off`, `presence` (Tier 1) or
 Call. Mattermost Calls keeps working as before for Mattermost-only
 conversations; the bridge only mirrors it.
 
+### Verifying a call deployment (manual checklist, #46)
+
+The bridge's side of `/matrix call` is tested: the widget state, the room
+announcement, the card, the URL expansion. What is **not** verified by any
+automated test is the other side: a running Element Call with its LiveKit
+backend, and how Element renders the widget. The end-to-end stack cannot run it
+(the media server image is not available to the test environment), so check it
+by hand when you deploy, and treat the URL placeholder in the settings as an
+example only.
+
+You need: Element Call served over HTTPS, a LiveKit server with its JWT
+service, the homeserver advertising the focus in `/.well-known/matrix/client`
+(`org.matrix.msc4143.rtc_foci`), and the homeserver options Element Call asks
+for in its own self-hosting guide (check the current guide; they change).
+
+1. Set **Calls** to *Presence and Element Call* and the **Element Call URL** to
+   your deployment's room address, then run `/matrix call` in a bridged
+   channel.
+2. In Element, open the room: you should see the call widget and a **Join
+   call** banner. If the widget shows an error page, the URL format is wrong
+   for your Element Call version; copy the address Element Call itself uses for
+   a room and rebuild the template from it.
+3. Click **Join in Element** on the card in Mattermost: it should open Element
+   Call on the same room, with your Matrix name when you are linked or have a
+   mirror account.
+4. Join from Element as a second person: the card in Mattermost should list
+   both of you, and show the duration when the call ends.
+5. As a Mattermost user with no Matrix account, try the card's link: it should
+   offer guest join if your homeserver allows it, or explain why not.
+6. End the call: the room announcement and the card should both show it ended.
+
+Write down which step failed and with which Element Call and homeserver
+versions, and keep the template that worked in your own runbook. Once someone
+has run this against a real deployment, the recommended template and the
+capability status (`calls.join`) can be updated from what was observed.
+
 ### Things to get right
 
 - **Rooms the bot does not own.** Setting widget state needs power level 50
