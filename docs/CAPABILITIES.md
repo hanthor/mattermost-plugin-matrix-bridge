@@ -90,7 +90,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Call shown as a card in the channel (participants, duration, join button) | Matrix → Mattermost | ✅ | m.rtc.member and org.matrix.msc3401.call.member state become a custom_matrix_call post that is updated as people join and leave. |
 | One call both sides can join | Mattermost → Matrix | 🟡 | /matrix call adds a widget to the room and posts a card with the configured Element Call URL. The bridge does not verify the call service itself; docs/CALLS_AND_MIRROR_MODE.md has a manual checklist for a real deployment (the test environment cannot run the media server). |
 | Audio and video relayed between Mattermost Calls and MatrixRTC | Mattermost → Matrix | ❌ | Both sides run their own media servers and signalling; a relay would be a full WebRTC endpoint on each side. Not planned. |
-| Call recordings and transcripts | Mattermost → Matrix | 🟡 | The Calls plugin posts a finished recording or transcript in the call's thread (custom_calls_recording, custom_calls_transcription) with the file attached. The bridge relays that post like any other with a short caption, as a file in the thread of the call's announcement. Unit-tested against the post format the Calls plugin's source uses; not verified against a running Calls plugin (the end-to-end stack does not run one), so it stays Partial. |
+| Call recordings and transcripts | Mattermost → Matrix | ❌ | Not claimed: no end-to-end test can verify it (the stack does not run the Mattermost Calls plugin). The bridge does carry a recording or transcript the Calls plugin posts (custom_calls_recording, custom_calls_transcription, file attached) to the room with a caption, in the thread of the call's announcement; that is unit-tested against the post format in the plugin's source, and becomes Supported once someone verifies it against a running Calls plugin. |
 
 ## Mirror mode
 
@@ -195,6 +195,6 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 ## Totals
 
 - ✅ supported: 97
-- 🟡 partial: 5
-- ❌ gap: 4
+- 🟡 partial: 4
+- ❌ gap: 5
 - — n/a: 0
