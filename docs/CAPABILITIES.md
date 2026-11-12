@@ -160,6 +160,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Structure backfill (users, teams, channels) | Mattermost → Matrix | ✅ | /matrix backfill creates ghosts, spaces and rooms. /matrix backfill structure goes through every bridged channel and brings its room up to date: name and topic (restoring a room that drifted), bridge information and widget, channel admins as power levels, pinned posts, and the custom emoji as the room's emoji pack (MSC2545). It is safe to repeat. Direct and group messages are not backfilled: they are bridged only for people who opted in with /matrix dm. |
 | Message history import with original timestamps | Mattermost → Matrix | 🟡 | /matrix history (preview, then confirm) replays a channel's posts into its room oldest first, as their authors, with the original time, threads intact and safe to repeat. Not yet: attachments, reactions, edits history, direct messages, a bulk mode for very large histories. Accounts that use their own token (double puppeting) show the import time. |
 | History import: attachments and reactions | Mattermost → Matrix | ✅ | Files are uploaded with their message and reactions are replayed from the people who reacted, all with their original times. Edits are imported as the latest text. |
+| History import into an encrypted room | Mattermost → Matrix | ✅ | /matrix history into a room with end-to-end encryption sends the past messages encrypted (the homeserver holds only ciphertext), as their authors, with the time they were written. |
 
 ## Operations
 
@@ -193,10 +194,11 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Map and use a room that lives on another homeserver | Matrix → Mattermost | ✅ | /matrix map #room:other.server joins the room across federation; messages, edits, reactions and files from people on that server arrive, and Mattermost posts reach them. Tested with a second Synapse; other homeserver implementations are not tested yet. |
 | A remote homeserver being unreachable does not stop the bridge | Mattermost → Matrix | ✅ | The bridge only talks to its own homeserver. While a remote member's server is down, Mattermost posts are accepted at normal speed and reach everyone on the bridge's server; the remote person's messages flow again once their server is back. Synapse retries delivery to a server that was down with a back-off, so the remote person may see the missed messages later than the others. |
+| Encrypted room with a member from another homeserver | Matrix → Mattermost | ✅ | In an end-to-end encrypted bridged room, a member on a different homeserver reads what Mattermost posts and what they send is read by the bridge: room keys and device lists cross federation. |
 
 ## Totals
 
-- ✅ supported: 99
+- ✅ supported: 101
 - 🟡 partial: 4
 - ❌ gap: 5
 - — n/a: 0

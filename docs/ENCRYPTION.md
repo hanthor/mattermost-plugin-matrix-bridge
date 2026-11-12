@@ -57,6 +57,11 @@ device.
 - A room that **turns encryption on after it was bridged**: the next post from
   Mattermost is sent encrypted, and encrypted messages from Matrix are read
   (tested).
+- `/matrix history` into an encrypted room sends the past messages encrypted,
+  as their authors and with the time they were written (tested).
+- A member on **another homeserver** in an encrypted bridged room reads what
+  Mattermost posts, and what they send is read by the bridge: room keys and
+  device lists cross federation (tested).
 - When a member **leaves** an encrypted room, the bridge starts a new room key,
   so the person who left cannot read what it sends afterwards (tested: the key
   stays the same while nobody leaves, and changes after a leave).
