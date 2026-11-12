@@ -142,6 +142,37 @@ func (m *Manager) keysAreOnServer(ctx context.Context) bool {
 	return ok && len(dev.Keys) > 0
 }
 
+// ErrAlreadyCrossSigned is returned when the bridge bot's cross-signing
+// identity already exists on the homeserver.
+var ErrAlreadyCrossSigned = errors.New("the bridge's device already has a cross-signing identity; it is restored with the recovery key shown when it was created, not replaced")
+
+// CrossSign gives the bridge bot a cross-signing identity and signs its device
+// with it, so clients stop showing the warning shield on its messages. It
+// returns the recovery key, which is the only way to restore the identity on a
+// new device and which the bridge does not keep. It fails when the bot already
+// has cross-signing keys on the server.
+func (m *Manager) CrossSign(ctx context.Context) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return "", errors.New("the encryption device is stopped")
+	}
+	// Never replace an identity that exists: clients that trust it would see the
+	// bridge's keys change, and the old recovery key would stop working.
+	resp, err := m.client.QueryKeys(ctx, &mautrix.ReqQueryKeys{DeviceKeys: mautrix.DeviceKeysRequest{m.opts.BotUserID: {}}})
+	if err != nil {
+		return "", errors.Wrap(err, "could not check whether the bridge already has a cross-signing identity")
+	}
+	if _, exists := resp.MasterKeys[m.opts.BotUserID]; exists {
+		return "", ErrAlreadyCrossSigned
+	}
+	key, err := m.mach.GenerateAndVerifyWithRecoveryKey(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "could not cross-sign the bridge device")
+	}
+	return key, nil
+}
+
 // DeviceID is the bridge bot's device.
 func (m *Manager) DeviceID() id.DeviceID { return m.deviceID }
 

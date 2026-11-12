@@ -37,6 +37,22 @@ func (p *Plugin) cryptoManager() *e2ee.Manager {
 // end-to-end encryption can be bridged while the bot has a working device.
 func (p *Plugin) EncryptionSupported() bool { return p.cryptoManager() != nil }
 
+// CrossSignBridgeDevice implements command.PluginAccessor: it verifies the bot's
+// device with a new cross-signing identity and returns the recovery key to show
+// once. Only system administrators may ask.
+func (p *Plugin) CrossSignBridgeDevice(userID string) (string, error) {
+	if !p.API.HasPermissionTo(userID, model.PermissionManageSystem) {
+		return "", errors.New("only system administrators can do this")
+	}
+	mgr := p.cryptoManager()
+	if mgr == nil {
+		return "", errors.New("encryption is not running; turn on Enable end-to-end encryption first")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	return mgr.CrossSign(ctx)
+}
+
 // stopEncryption shuts the bot's device down.
 func (p *Plugin) stopEncryption() {
 	p.encryption.mu.Lock()

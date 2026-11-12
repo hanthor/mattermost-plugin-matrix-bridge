@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	"github.com/matrix-org/complement/b"
+	"github.com/matrix-org/complement/client"
 
 	"github.com/mattermost/mattermost-plugin-matrix-bridge/e2e/capabilities"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 )
@@ -150,6 +152,45 @@ func TestEncryptedRoomsAreBridged(t *testing.T) {
 		})
 		reply := WaitForPostWithMessage(t, carolClient, channel.Id, "an encrypted reply")
 		assert.NotEmpty(t, reply.Id)
+	})
+
+	t.Run("the bridge's device is verified and the recovery key is shown once", func(t *testing.T) {
+		preview, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix encryption-verify")
+		require.NoError(t, err)
+		assert.Contains(t, preview.Text, "recovery key")
+		assert.NotContains(t, preview.Text, "```", "the preview shows no key")
+
+		resp, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix encryption-verify confirm")
+		require.NoError(t, err)
+		require.Contains(t, resp.Text, "The bridge's device is verified", resp.Text)
+		assert.Contains(t, resp.Text, "```", "the recovery key is in the reply")
+
+		// The homeserver now holds the bot's cross-signing keys, and its device
+		// carries a signature from the self-signing key.
+		bot := h.BridgeBotUserID()
+		res := alice.MustDo(t, http.MethodPost, []string{"_matrix", "client", "v3", "keys", "query"},
+			client.WithJSONBody(t, map[string]any{"device_keys": map[string]any{bot: []string{}}}))
+		parsed := gjson.ParseBytes(client.ParseJSON(t, res))
+		assert.NotEmpty(t, parsed.Get("master_keys."+gjson.Escape(bot)).Raw, "master key published")
+		selfSigning := parsed.Get("self_signing_keys." + gjson.Escape(bot) + ".keys")
+		require.True(t, selfSigning.Exists(), "self-signing key published: %s", parsed.Raw)
+		var selfKeyID string
+		selfSigning.ForEach(func(k, _ gjson.Result) bool { selfKeyID = k.Str; return false })
+		signed := false
+		parsed.Get("device_keys." + gjson.Escape(bot)).ForEach(func(_, device gjson.Result) bool {
+			if device.Get("signatures." + gjson.Escape(bot) + "." + gjson.Escape(selfKeyID)).Exists() {
+				signed = true
+			}
+			return true
+		})
+		assert.True(t, signed, "the bot's device is signed by its self-signing key: %s", parsed.Raw)
+
+		// Asking again does not replace the identity.
+		again, _, err := h.Admin.ExecuteCommand(ctx, channel.Id, "/matrix encryption-verify confirm")
+		require.NoError(t, err)
+		assert.NotContains(t, again.Text, "```")
+		assert.Contains(t, again.Text, "already has a cross-signing identity")
+		capabilities.Verify(t, "rooms.encryption.verified_device", signed)
 	})
 
 	t.Run("after a plugin restart the bridge still reads the room's keys", func(t *testing.T) {

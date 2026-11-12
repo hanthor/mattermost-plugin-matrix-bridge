@@ -70,6 +70,8 @@ func (m *mockPlugin) ChannelHistoryStatus(_ string) HistoryReport { return Histo
 
 func (m *mockPlugin) EncryptionSupported() bool { return false }
 
+func (m *mockPlugin) CrossSignBridgeDevice(string) (string, error) { return "EsT1 2345", nil }
+
 func (m *mockPlugin) RepairMembership(string) (string, error)         { return "", nil }
 func (m *mockPlugin) InviteMatrixUser(string, string) (string, error) { return "", nil }
 func (m *mockPlugin) ImportMatrixHistory(string, string, int, bool) (string, error) {
@@ -659,4 +661,16 @@ func TestChannelNameFallback(t *testing.T) {
 		// The actual room name resolution happens in executeCreateRoomCommand
 		assert.Equal("", capturedRoomName)
 	}
+}
+
+func TestEncryptionVerifyShowsTheKeyOnlyOnConfirm(t *testing.T) {
+	h := &Handler{plugin: &mockPlugin{}}
+
+	preview := h.executeEncryptionVerify(&model.CommandArgs{Command: "/matrix encryption-verify"})
+	assert.Contains(t, preview.Text, "recovery key")
+	assert.NotContains(t, preview.Text, "EsT1", "a preview never shows a key")
+
+	done := h.executeEncryptionVerify(&model.CommandArgs{Command: "/matrix encryption-verify confirm"})
+	assert.Contains(t, done.Text, "EsT1 2345")
+	assert.Contains(t, done.Text, "shown once")
 }
