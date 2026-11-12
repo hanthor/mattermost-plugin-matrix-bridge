@@ -178,6 +178,11 @@ joining or writing, the bridge reads the verified email addresses of their
 Matrix account from the homeserver and, if a Mattermost account with the same
 verified address exists, links the two: their Matrix messages then post as the
 real Mattermost account instead of as a separate remote user.
+When the homeserver signs people in through Matrix Authentication Service and the
+MAS admin client is configured (docs/MAS_SETUP.md), the bridge also asks MAS for
+a session of the person's own account at that moment, so their Mattermost
+messages appear from it too, with no command. If MAS cannot provide one, the
+link still holds and the person can run `!mattermost login`.
 
 It is deliberately cautious: both addresses must be verified, the Mattermost
 account must be active and not already linked to another Matrix account, and

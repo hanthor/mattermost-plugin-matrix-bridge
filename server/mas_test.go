@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -45,6 +46,10 @@ func newFakeMASServer(t *testing.T) *fakeMASServer {
 			f.users[name] = req
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"data":{"id":"01` + name + `"}}`))
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/admin/v1/users/by-username/"):
+			_, _ = w.Write([]byte(`{"data":{"id":"01` + strings.TrimPrefix(r.URL.Path, "/api/admin/v1/users/by-username/") + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/admin/v1/personal-sessions":
+			_, _ = w.Write([]byte(`{"data":{"attributes":{"access_token":"mat_personal"}}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/admin/v1/upstream-oauth-links":
 			f.links = append(f.links, req)
 			w.WriteHeader(http.StatusCreated)
