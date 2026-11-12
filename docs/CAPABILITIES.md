@@ -88,7 +88,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 |---|---|---|---|
 | Call announced in the room (who started, who is in, join link, ended) | Mattermost → Matrix | ✅ | A Mattermost Calls post becomes a notice with a join link and a com.mattermost.bridge.call state event; the notice is edited when the call ends. |
 | Call shown as a card in the channel (participants, duration, join button) | Matrix → Mattermost | ✅ | m.rtc.member and org.matrix.msc3401.call.member state become a custom_matrix_call post that is updated as people join and leave. |
-| One call both sides can join | Mattermost → Matrix | 🟡 | /matrix call adds a widget to the room and posts a card with the configured Element Call URL. The bridge does not verify the call service itself. |
+| One call both sides can join | Mattermost → Matrix | 🟡 | /matrix call adds a widget to the room and posts a card with the configured Element Call URL. The bridge does not verify the call service itself; docs/CALLS_AND_MIRROR_MODE.md has a manual checklist for a real deployment (the test environment cannot run the media server). |
 | Audio and video relayed between Mattermost Calls and MatrixRTC | Mattermost → Matrix | ❌ | Both sides run their own media servers and signalling; a relay would be a full WebRTC endpoint on each side. Not planned. |
 | Call recordings and transcripts | Mattermost → Matrix | ❌ | The Calls plugin keeps them in the call's thread; not relayed yet. |
 
