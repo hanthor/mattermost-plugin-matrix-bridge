@@ -36,6 +36,29 @@ func TestAutoLinkByEmail(t *testing.T) {
 		require.True(t, linked)
 		assert.Equal(t, "@ada:example.com", link.MatrixUserID)
 	})
+	t.Run("with MAS the link also gives the bridge the person's own token", func(t *testing.T) {
+		p, hs := setup(t, true, nil)
+		hs.whoami = "@ada:example.com"
+		mas := newFakeMASServer(t)
+		withMAS(p, mas)
+		p.configuration.MatrixServerDomain = "example.com"
+		_, ok := p.matrixToMattermostBridge.autoLinkByEmail("@ada:example.com")
+		require.True(t, ok)
+		link, linked := p.identity().Link("mm-ada")
+		require.True(t, linked)
+		assert.True(t, link.Puppeted(), "the person's own account sends their messages")
+	})
+	t.Run("a token for the wrong account is not used", func(t *testing.T) {
+		p, hs := setup(t, true, nil)
+		hs.whoami = "@someone-else:example.com"
+		mas := newFakeMASServer(t)
+		withMAS(p, mas)
+		p.configuration.MatrixServerDomain = "example.com"
+		_, ok := p.matrixToMattermostBridge.autoLinkByEmail("@ada:example.com")
+		require.True(t, ok)
+		link, _ := p.identity().Link("mm-ada")
+		assert.False(t, link.Puppeted())
+	})
 	t.Run("it does nothing unless switched on", func(t *testing.T) {
 		p, _ := setup(t, false, nil)
 		_, ok := p.matrixToMattermostBridge.autoLinkByEmail("@ada:example.com")

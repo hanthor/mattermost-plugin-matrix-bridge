@@ -15,11 +15,15 @@ import (
 // It is only called when the person asks for it from that account itself (a
 // direct message to the bridge bot), which is the proof of ownership.
 func (p *Plugin) tokenFromMAS(matrixUserID string) (string, error) {
-	cfg := p.getConfiguration()
+	return masPersonalToken(p.getConfiguration(), matrixUserID)
+}
+
+// masPersonalToken is tokenFromMAS for callers that hold a configuration.
+func masPersonalToken(cfg *configuration, matrixUserID string) (string, error) {
 	if !cfg.masConfigured() {
 		return "", errors.New("MAS is not configured")
 	}
-	localpart, ok := p.localpartOnThisServer(matrixUserID)
+	localpart, ok := localpartOnServer(cfg.MatrixServerDomain, matrixUserID)
 	if !ok {
 		return "", errors.New("the account is not on this homeserver")
 	}
@@ -36,12 +40,15 @@ func (p *Plugin) tokenFromMAS(matrixUserID string) (string, error) {
 // localpartOnThisServer returns the localpart of a Matrix ID that belongs to
 // the homeserver the bridge is attached to.
 func (p *Plugin) localpartOnThisServer(matrixUserID string) (string, bool) {
+	return localpartOnServer(p.getConfiguration().MatrixServerDomain, matrixUserID)
+}
+
+func localpartOnServer(domain, matrixUserID string) (string, bool) {
 	id := strings.TrimPrefix(matrixUserID, "@")
 	i := strings.Index(id, ":")
 	if i <= 0 {
 		return "", false
 	}
-	domain := p.getConfiguration().MatrixServerDomain
 	if domain == "" || !strings.EqualFold(id[i+1:], domain) {
 		return "", false
 	}

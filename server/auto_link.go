@@ -39,7 +39,31 @@ func (b *MatrixToMattermostBridge) autoLinkByEmail(matrixUserID string) (string,
 			continue
 		}
 		b.logger.LogInfo("Linked a Matrix person to the Mattermost account with the same verified email", "user_id", user.Id, "matrix_user_id", matrixUserID)
+		b.puppetThroughMAS(store, cfg, matrixUserID)
 		return user.Id, true
 	}
 	return "", false
+}
+
+// puppetThroughMAS completes the automatic link: when the homeserver signs
+// people in through MAS, the bridge asks it for a session of the person's own
+// account, so their Mattermost messages appear from it without any command.
+// The verified email that justified the link is the proof of ownership. It is
+// best effort: without it the person is linked and uses a ghost, as before.
+func (b *MatrixToMattermostBridge) puppetThroughMAS(store *identityStore, cfg *configuration, matrixUserID string) {
+	if !cfg.masConfigured() {
+		return
+	}
+	token, err := masPersonalToken(cfg, matrixUserID)
+	if err != nil {
+		b.logger.LogDebug("No own-account token from MAS for an automatic link", "error", err, "matrix_user_id", matrixUserID)
+		return
+	}
+	if owner, err := b.matrixClient.WhoAmI(token); err != nil || owner != matrixUserID {
+		b.logger.LogWarn("The MAS token did not belong to the linked account; not using it", "matrix_user_id", matrixUserID)
+		return
+	}
+	if _, err := store.SetToken(matrixUserID, token); err != nil {
+		b.logger.LogWarn("Could not store the own-account token from MAS", "error", err, "matrix_user_id", matrixUserID)
+	}
 }
