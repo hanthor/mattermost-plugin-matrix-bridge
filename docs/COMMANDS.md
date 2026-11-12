@@ -556,6 +556,9 @@ both sides (see the Calls setting in the plugin configuration):
 - A call in the Matrix room (Element Call, any MatrixRTC client) appears in
   the channel as a card with the participants, the duration and a **Join in
   Element** button.
+- A recording or transcript the Calls plugin posts after a call is carried to the
+  room as a file, in the thread of the call's announcement (not verified against
+  a running Calls plugin; see CAPABILITIES.md).
 
 With **Calls** set to *Presence and Element Call* and an **Element Call URL**
 configured, `/matrix call [title]` starts a call that both sides can join: the
