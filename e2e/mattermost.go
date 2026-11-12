@@ -88,6 +88,8 @@ type BridgeConfig struct {
 	Encryption bool
 	// DirectMessages allows opt-in bridging of direct and group messages.
 	DirectMessages bool
+	// EncryptDirectRooms makes the rooms created for them start encrypted.
+	EncryptDirectRooms bool
 	// MASURL is the Matrix Authentication Service address; the SSO token
 	// route is only served when it is set.
 	MASURL string
@@ -242,6 +244,7 @@ func (cfg BridgeConfig) settings() map[string]any {
 		"enable_sync":            true,
 		"enable_encryption":      cfg.Encryption,
 		"enable_direct_messages": cfg.DirectMessages,
+		"encrypt_direct_rooms":   cfg.EncryptDirectRooms,
 		"rate_limiting_mode":     "disabled",
 		"enable_mirror_mode":     cfg.MirrorMode,
 		"matrix_admin_token":     cfg.AdminToken,

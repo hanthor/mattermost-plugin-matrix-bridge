@@ -89,6 +89,13 @@
                 "default": false
             },
             {
+                "key": "encrypt_direct_rooms",
+                "display_name": "Create Direct Message Rooms Encrypted",
+                "type": "bool",
+                "help_text": "When Bridge Encrypted Rooms is on, rooms the bridge creates for direct and group messages (after everyone agreed with /matrix dm on) start with end-to-end encryption, so Matrix server administrators cannot read them. Needs the encryption device to be running; ignored otherwise. Off by default.",
+                "default": false
+            },
+            {
                 "key": "enable_realtime",
                 "display_name": "Send Typing, Presence and Read Receipts",
                 "type": "bool",

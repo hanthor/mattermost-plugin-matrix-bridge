@@ -136,6 +136,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | Archive ↔ tombstone/leave | Mattermost → Matrix | ✅ | Archiving a channel posts a notice in the room and the bridge bot leaves; restoring the channel rejoins and says so. |
 | Tombstone ↔ archive | Matrix → Mattermost | ✅ | A tombstoned room archives its channel. |
 | Direct and group messages between Mattermost users | Mattermost → Matrix | ✅ | Opt-in: an administrator turns on Bridge Direct Messages and everyone in a conversation runs /matrix dm on; then new messages go to a private Matrix room. /matrix dm off unbridges. Earlier messages are not copied. |
+| Direct and group message rooms start encrypted | Mattermost → Matrix | ✅ | With Bridge Encrypted Rooms and Create Direct Message Rooms Encrypted both on, the room the bridge creates for a direct or group conversation (after everyone agreed with /matrix dm on) has end-to-end encryption from the start, so the homeserver holds only ciphertext. Off by default; ignored while the encryption device is not running. |
 | Direct messages | Matrix → Mattermost | ❌ | Mattermost refuses direct channels with remote users ("Cannot create a direct channel with a remote user"), so a DM started in Matrix cannot be created; needs a different account model for Matrix users. |
 | Team ↔ space | Mattermost → Matrix | ✅ | Spaces are created by /matrix backfill and rooms are added to them; a person who joins or leaves the team has their account join or leave the space. |
 | End-to-end encrypted rooms: reading | Matrix → Mattermost | ✅ | With "Bridge Encrypted Rooms" on, the bridge bot holds a device and the room keys, decrypts what Matrix people send, and posts it. Encryption ends at the bridge (docs/ENCRYPTION.md). Off by default; with it off, encrypted rooms are refused instead. |
@@ -198,7 +199,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 101
+- ✅ supported: 102
 - 🟡 partial: 4
 - ❌ gap: 5
 - — n/a: 0

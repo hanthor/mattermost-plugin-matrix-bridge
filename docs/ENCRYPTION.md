@@ -54,6 +54,11 @@ device.
 - Edits, reactions, replies and attachments work in encrypted rooms in both
   directions, and the bridge keeps reading a room's keys across a plugin
   restart. All of this is tested against a real homeserver.
+- **Direct and group message rooms can start encrypted.** With **Create Direct
+  Message Rooms Encrypted** on (off by default; it needs **Bridge Encrypted
+  Rooms**), the room the bridge creates after everyone agreed with `/matrix dm
+  on` has end-to-end encryption from the start (tested). If the encryption
+  device is not running when a room is created, the room is created plain.
 - A room that **turns encryption on after it was bridged**: the next post from
   Mattermost is sent encrypted, and encrypted messages from Matrix are read
   (tested).

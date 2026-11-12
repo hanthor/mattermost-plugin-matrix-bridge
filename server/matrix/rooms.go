@@ -612,6 +612,17 @@ func (c *Client) CreateDirectRoom(ghostUserIDs []string, roomName string) (strin
 		roomData["name"] = roomName
 	}
 
+	// Start encrypted when the bridge is set up for it, so the homeserver
+	// never holds these conversations in the clear.
+	if c.encryptDirectRooms != nil && c.encryptDirectRooms() {
+		state, _ := roomData["initial_state"].([]map[string]any)
+		roomData["initial_state"] = append(state, map[string]any{
+			"type":      "m.room.encryption",
+			"state_key": "",
+			"content":   map[string]any{"algorithm": "m.megolm.v1.aes-sha2"},
+		})
+	}
+
 	// For group DMs (more than 2 users), adjust settings
 	if len(ghostUserIDs) > 2 {
 		if roomName == "" {
@@ -1025,4 +1036,10 @@ func (c *Client) RemoveMattermostChannelID(roomID string) error {
 	}
 
 	return nil
+}
+
+// SetEncryptDirectRooms installs the check CreateDirectRoom makes to decide
+// whether a new direct or group room starts with end-to-end encryption.
+func (c *Client) SetEncryptDirectRooms(fn func() bool) {
+	c.encryptDirectRooms = fn
 }

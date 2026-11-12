@@ -29,6 +29,7 @@ type configuration struct {
 	EnableSync                bool   `json:"enable_sync"`
 	EnableDirectMessages      bool   `json:"enable_direct_messages"`       // Bridge direct and group messages whose participants all agreed
 	EnableEncryption          bool   `json:"enable_encryption"`            // Bridge end-to-end encrypted Matrix rooms (bridge bot holds the keys)
+	EncryptDirectRooms        bool   `json:"encrypt_direct_rooms"`         // Create bridged direct and group message rooms encrypted (needs EnableEncryption)
 	EnableRealtime            bool   `json:"enable_realtime"`              // Send typing, presence, custom status and read receipts to Matrix
 	InviteCreatesChannelsTeam string `json:"invite_creates_channels_team"` // Team in which inviting the bot to a room creates a channel; empty = off
 	RealtimePollSeconds       int    `json:"realtime_poll_seconds"`        // How often status and read state are checked (default 30)
