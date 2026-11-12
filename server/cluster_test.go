@@ -77,6 +77,9 @@ func TestUnrelatedConfigurationChangesDoNotRebuildTheBridge(t *testing.T) {
 	override.MatrixUsernamePrefix = "changed"
 	require.NoError(t, p.OnConfigurationChange())
 	assert.NotSame(t, client, p.matrixClient)
+	// The bridges use the new client, not the one they were built with.
+	assert.Same(t, p.matrixClient, p.mattermostToMatrixBridge.matrixClient, "the outbound bridge holds the current client")
+	assert.Same(t, p.matrixClient, p.matrixToMattermostBridge.matrixClient, "the inbound bridge holds the current client")
 }
 
 func TestAClusterEventDropsTheCachedMapping(t *testing.T) {
