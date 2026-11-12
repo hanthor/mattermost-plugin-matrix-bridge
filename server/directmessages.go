@@ -107,7 +107,7 @@ func (p *Plugin) DirectMessages(userID, action string) (string, error) {
 		if err := p.kvstore.Set(dmConsentKeyPrefix+userID, []byte("1")); err != nil {
 			return "", err
 		}
-		return "✅ **Direct messages can be bridged.**\n\nFrom now on, in a direct or group conversation where everyone has run `/matrix dm on`, new messages are copied to a private Matrix room that only the people in the conversation can join. Matrix server administrators can read what is in that room. Earlier messages are not copied. Turn it off any time with `/matrix dm off`.", nil
+		return dmConsentText(p.directRoomsEncrypted()), nil
 
 	case "off":
 		if err := p.kvstore.Delete(dmConsentKeyPrefix + userID); err != nil {
@@ -171,4 +171,21 @@ func (p *Plugin) unbridgeDirectChannels(userID string) int {
 // markDirectChannelBridged records that the bridge made a room for a channel.
 func (b *BridgeUtils) markDirectChannelBridged(channelID string) {
 	_ = b.kvstore.Set(dmBridgedKeyPrefix+channelID, []byte("1"))
+}
+
+// directRoomsEncrypted reports whether rooms created for direct and group
+// conversations start with end-to-end encryption right now.
+func (p *Plugin) directRoomsEncrypted() bool {
+	cfg := p.getConfiguration()
+	return cfg.EnableEncryption && cfg.EncryptDirectRooms && p.cryptoManager() != nil
+}
+
+// dmConsentText is what a person agrees to with /matrix dm on. It must say who
+// can read the room, which depends on whether it is encrypted.
+func dmConsentText(encrypted bool) string {
+	who := "Matrix server administrators can read what is in that room."
+	if encrypted {
+		who = "The room is end-to-end encrypted, so Matrix server administrators cannot read it; the bridge itself still handles the text of each message to copy it across."
+	}
+	return "✅ **Direct messages can be bridged.**\n\nFrom now on, in a direct or group conversation where everyone has run `/matrix dm on`, new messages are copied to a private Matrix room that only the people in the conversation can join. " + who + " Earlier messages are not copied. Turn it off any time with `/matrix dm off`."
 }

@@ -15,7 +15,7 @@ done**.
 | Channel membership | Who joins and leaves a mapped channel |
 | Display name and avatar | Sent when **Sync user profiles** is on; refreshed on the person's next activity and by a 15-minute sweep |
 | In mirror mode, the Mattermost username | It becomes the Matrix username (`@ada:server`) |
-| Direct and group messages | **Only** when every participant agreed with `/matrix dm`; the consent text says homeserver administrators can read the room |
+| Direct and group messages | **Only** when every participant agreed with `/matrix dm`; the consent text says whether homeserver administrators can read the room (they can unless the rooms start encrypted) |
 | Message history | Only when an administrator runs `/matrix history` for a channel |
 
 | From Matrix to Mattermost | Notes |
@@ -32,8 +32,11 @@ agreed to, channels that are not mapped, private channels nobody mapped.
   by the bridge is public or invite-only according to the channel's type;
   check the preset before bridging a private channel.
 - **Homeserver administrators** can read every unencrypted room on their server.
-  Bridged direct-message rooms are readable by them; end-to-end encryption for
-  those rooms is a follow-up (#67).
+  Bridged direct-message rooms are readable by them unless **Create Direct
+  Message Rooms Encrypted** is on (it needs **Bridge Encrypted Rooms**): then the
+  rooms start with end-to-end encryption and administrators see only
+  ciphertext. The consent text people agree to with `/matrix dm on` says which
+  of the two applies.
 - **The bridge** reads plain text of every bridged message, including in
   encrypted rooms: the bridge bot holds the room keys (see ENCRYPTION.md).
 - **Mattermost administrators** can read personal Matrix access tokens only in

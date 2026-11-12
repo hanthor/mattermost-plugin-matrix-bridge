@@ -113,3 +113,14 @@ func TestDirectMessageStatusReflectsAgreement(t *testing.T) {
 	status, _ = p.DirectMessages("mm-ada", "status")
 	assert.Contains(t, status, "You agreed")
 }
+
+func TestDMConsentTextSaysWhoCanRead(t *testing.T) {
+	plain := dmConsentText(false)
+	assert.Contains(t, plain, "Matrix server administrators can read")
+	assert.NotContains(t, plain, "cannot read")
+
+	encrypted := dmConsentText(true)
+	assert.Contains(t, encrypted, "end-to-end encrypted")
+	assert.Contains(t, encrypted, "cannot read")
+	assert.NotContains(t, encrypted, "administrators can read what is in that room")
+}

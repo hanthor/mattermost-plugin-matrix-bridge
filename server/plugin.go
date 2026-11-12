@@ -238,6 +238,9 @@ func (p *Plugin) initMatrixClient() {
 	if mgr := p.cryptoManager(); mgr != nil {
 		p.matrixClient.SetRoomCrypto(mgr)
 	}
+	// Decided when a room is created: encryption has to be running by then, or
+	// the bridge could not send into the room it just made.
+	p.matrixClient.SetEncryptDirectRooms(p.directRoomsEncrypted)
 	if config.MatrixServerDomain != "" {
 		// The homeserver's server_name may differ from the hostname in the URL.
 		p.matrixClient.SetServerDomain(config.MatrixServerDomain)

@@ -178,14 +178,17 @@ func (l *testLogger) LogError(message string, keyValuePairs ...any) {
 
 // Client represents a Matrix HTTP client for communicating with Matrix servers.
 type Client struct {
-	serverURL    string
-	asToken      string // Application Service token for all operations
-	remoteID     string // Plugin remote ID for metadata
-	httpClient   *http.Client
-	logger       Logger
-	serverDomain string      // explicit server domain for testing
-	puppetToken  string      // when set, requests act as a real user with this token instead of impersonating via the AS token
-	sent         *sentEvents // events this client sent, shared by puppet copies, to recognise their echoes
+	// encryptDirectRooms, when set and true, makes new direct rooms start
+	// encrypted.
+	encryptDirectRooms func() bool
+	serverURL          string
+	asToken            string // Application Service token for all operations
+	remoteID           string // Plugin remote ID for metadata
+	httpClient         *http.Client
+	logger             Logger
+	serverDomain       string      // explicit server domain for testing
+	puppetToken        string      // when set, requests act as a real user with this token instead of impersonating via the AS token
+	sent               *sentEvents // events this client sent, shared by puppet copies, to recognise their echoes
 
 	// Rate limiting
 	rateLimitConfig     RateLimitConfig

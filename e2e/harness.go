@@ -136,6 +136,8 @@ type HarnessOptions struct {
 	Encryption bool
 	// DirectMessages allows opt-in bridging of direct and group messages.
 	DirectMessages bool
+	// EncryptDirectRooms makes the rooms created for them start encrypted.
+	EncryptDirectRooms bool
 	// Federation deploys a second, ordinary homeserver (RemoteHSName) that
 	// federates with hs1, so rooms and people on another server can be tested.
 	Federation bool
@@ -178,6 +180,7 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 		ElementCallURL:     opts.ElementCallURL,
 		Encryption:         opts.Encryption,
 		DirectMessages:     opts.DirectMessages,
+		EncryptDirectRooms: opts.EncryptDirectRooms,
 	}
 	if opts.MirrorMode {
 		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})
