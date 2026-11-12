@@ -18,6 +18,7 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix dm`](#matrix-dm) | Agree to bridge your direct and group messages | `/matrix dm on` |
 | [`/matrix doctor`](#matrix-doctor) | Check the setup and this channel, with what to fix | `/matrix doctor` |
+| [`/matrix encryption-verify`](#matrix-encryption-verify-confirm) | Verify the bridge's encryption device; shows a recovery key once | `/matrix encryption-verify confirm` |
 | [`/matrix repair`](#matrix-repair) | Make this channel's room match its members | `/matrix repair` |
 | [`/matrix retry`](#matrix-retry) | Send changes that could not be delivered again | `/matrix retry` |
 | [`/matrix migrate-team`](#matrix-migrate-team) | Cut a team over to Matrix: report, read-only channels, archive | `/matrix migrate-team report` |
@@ -852,6 +853,15 @@ ADVANCED COMMANDS
 /matrix unmap                          Remove mapping
 /matrix migrate                        Fix mappings
 ```
+
+## `/matrix encryption-verify [confirm]`
+
+System administrators, with end-to-end encryption on. Gives the bridge bot a
+cross-signing identity and signs its device, so Matrix clients stop showing a
+warning shield on messages that come from Mattermost. Without `confirm` it only
+explains. With `confirm` it prints a **recovery key once**, which the bridge
+does not keep: save it in a password manager. It refuses to run if the identity
+already exists. See [ENCRYPTION.md](ENCRYPTION.md).
 
 ## `/matrix welcome [confirm]`
 

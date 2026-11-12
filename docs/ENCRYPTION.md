@@ -17,8 +17,10 @@ Mattermost sends.
 > stores ciphertext.
 
 Matrix clients show messages from Mattermost users as sent by the bridge's
-device, which is not verified, so Element may show a grey shield on them. That
-is accurate: the sender is the bridge, not the person's own device.
+device, which is not verified until an administrator runs
+`/matrix encryption-verify confirm` (below), so Element may show a grey shield
+on them. That is accurate: the sender is the bridge, not the person's own
+device.
 
 ## Turning it on
 
@@ -65,9 +67,14 @@ is accurate: the sender is the bridge, not the person's own device.
   Instead of nothing, the channel gets a short notice from the sender, once per
   message, saying a message could not be decrypted. `/matrix history
   from-matrix` counts such events in its preview.
-- **Key backup and verification** are not implemented; the bridge device is not
-  cross-signed. Losing the stored keys means starting a new device, after which
-  older messages stay unreadable to the bridge.
+- **Verification.** `/matrix encryption-verify confirm` (system administrators)
+  gives the bridge bot a cross-signing identity and signs its device, so clients
+  stop warning about it. It prints a **recovery key once**; the bridge does not
+  store it, so save it in a password manager. It refuses to run again once the
+  identity exists, so it can never replace one that people already trust.
+- **Key backup** is not implemented. Losing the stored keys (and the recovery
+  key) means starting a new device, after which older messages stay unreadable
+  to the bridge.
 
 ## If something is wrong
 

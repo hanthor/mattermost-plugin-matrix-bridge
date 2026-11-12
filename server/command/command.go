@@ -184,6 +184,9 @@ type PluginAccessor interface {
 	// EncryptionSupported reports whether the bridge can read and send into
 	// end-to-end encrypted rooms (it is set up for it and running).
 	EncryptionSupported() bool
+	// CrossSignBridgeDevice verifies the bridge bot's device and returns the
+	// recovery key, to be shown once and not stored.
+	CrossSignBridgeDevice(userID string) (string, error)
 
 	// Mirror mode: account mode and claiming (see docs/CALLS_AND_MIRROR_MODE.md)
 	MirrorStatus() MirrorStatus
@@ -517,6 +520,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	invite := model.NewAutocompleteData("invite", "@user:server", "Invite a Matrix user to this channel's room")
 	invite.AddTextArgument("The Matrix user ID, for example @ada:example.org", "@user:server", "")
 	matrixData.AddCommand(invite)
+	matrixData.AddCommand(model.NewAutocompleteData("encryption-verify", "[confirm]", "Verify the bridge's encryption device so clients stop warning about it (shows a recovery key once)"))
 	matrixData.AddCommand(model.NewAutocompleteData("doctor", "", "Check the bridge setup and this channel, with what to fix"))
 	matrixData.AddCommand(model.NewAutocompleteData("retry", "", "Replay changes that could not be delivered across the bridge"))
 	dmCmd := model.NewAutocompleteData("dm", "[on|off|status]", "Allow your direct messages to be bridged to Matrix (only if everyone in the conversation agrees)")
@@ -1426,6 +1430,8 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
 	case "doctor":
 		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: c.plugin.Doctor(args.ChannelId)}
+	case "encryption-verify":
+		return c.executeEncryptionVerify(args)
 	case "retry":
 		n, err := c.plugin.RetryDeadLetters()
 		if err != nil {
@@ -1475,7 +1481,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "welcome", "erase", "retry", "doctor":
+	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "welcome", "erase", "retry", "doctor", "encryption-verify":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}
@@ -2188,4 +2194,23 @@ func (c *Handler) deliveryStatus() string {
 		return ""
 	}
 	return fmt.Sprintf("\n- ⚠️ **%d changes could not be delivered across the bridge** and were set aside. Run `/matrix retry` to try them again; the log says why they failed.", n)
+}
+
+// executeEncryptionVerify previews, or with confirm carries out, the
+// cross-signing of the bridge bot's device. The recovery key is shown once in
+// the reply and is not kept anywhere by the bridge.
+func (c *Handler) executeEncryptionVerify(args *model.CommandArgs) *model.CommandResponse {
+	reply := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+	if !strings.Contains(" "+args.Command+" ", " confirm ") {
+		return reply("This gives the bridge's encryption device a verified identity, so Matrix clients stop showing a warning shield on messages that come from Mattermost.\n\n" +
+			"It produces a **recovery key** that is shown **once** and is **not stored** by the bridge: save it in your password manager. Without it, losing the bridge's stored state means a new device and unreadable history.\n\n" +
+			"Run `/matrix encryption-verify confirm` to do it.")
+	}
+	key, err := c.plugin.CrossSignBridgeDevice(args.UserId)
+	if err != nil {
+		return reply("❌ " + err.Error())
+	}
+	return reply("✅ The bridge's device is verified.\n\nRecovery key (shown once, save it now):\n```\n" + key + "\n```")
 }

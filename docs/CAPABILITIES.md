@@ -141,6 +141,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | End-to-end encrypted rooms: reading | Matrix → Mattermost | ✅ | With "Bridge Encrypted Rooms" on, the bridge bot holds a device and the room keys, decrypts what Matrix people send, and posts it. Encryption ends at the bridge (docs/ENCRYPTION.md). Off by default; with it off, encrypted rooms are refused instead. |
 | End-to-end encrypted rooms: writing | Mattermost → Matrix | ✅ | Mattermost posts are encrypted with the bot's room key before they leave, so the homeserver only holds ciphertext. Messages, reactions and attachments; Matrix clients show the sender as the bridge's device, not as verified. |
 | A message the bridge cannot decrypt is announced | Matrix → Mattermost | ✅ | When an encrypted message cannot be read (the bridge was not given its key, for example because it was sent before the bridge joined), the channel gets a short notice from the sender instead of nothing, once per message. |
+| The bridge's encryption device can be verified | Mattermost → Matrix | ✅ | /matrix encryption-verify confirm (system administrators) gives the bridge bot a cross-signing identity and signs its device, so clients stop warning about messages that come from Mattermost. The recovery key is shown once in the reply and is not stored by the bridge; losing it and the bridge's stored state means a new device. Not yet: server-side key backup. |
 
 ## Integration
 
@@ -192,7 +193,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 95
+- ✅ supported: 96
 - 🟡 partial: 4
 - ❌ gap: 5
 - — n/a: 0
