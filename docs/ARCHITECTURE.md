@@ -120,7 +120,9 @@ UserHasJoinedChannel(c *plugin.Context, channelMember *model.ChannelMember, acto
 - Plugin API
 - Bridge Services
 
-### 2. Matrix Client (`server/matrix/client.go`)
+### 2. Matrix Client (`server/matrix/`)
+
+The client is split by concern: `client.go` (types, constructor, request helpers), `rooms.go`, `accounts.go` (ghost and registered users, profiles), `events.go` (sending and reading events), `media.go`, `server_info.go`.
 
 Handles all communication with the Matrix homeserver via Client-Server API.
 
@@ -157,7 +159,9 @@ ResolveRoomAlias(alias string) (string, error)
 - Connection pooling
 - Request logging
 
-### 3. Bridge Service (`server/sync_to_matrix.go`, `server/sync_from_matrix.go`)
+### 3. Bridge Service (`server/sync_to_matrix*.go`, `server/sync_to_mattermost*.go`)
+
+Each direction is split the same way: the main file holds the post flow, and `_accounts`/`_users`, `_reactions`, `_mentions`, `_compare`, `_members`, `_lookup` and `_convert` files hold the rest.
 
 Translates events between Mattermost and Matrix formats.
 
@@ -242,7 +246,9 @@ BuildMatrixUserMappingKey(matrixID string) string     // "matrix_user_mapping_<i
 BuildRemoteUserKey(matrixID string) string            // "remote_user_<id>"
 ```
 
-### 6. Command Handler (`server/command/command.go`)
+### 6. Command Handler (`server/command/`)
+
+`command.go` dispatches and checks permissions; `types.go` holds the interfaces and report types, and the commands live in `room_commands.go`, `admin_commands.go`, `account_commands.go` and `history_command.go`.
 
 Processes slash commands and provides user interface.
 
@@ -788,7 +794,7 @@ migrations in `server/migrations.go` are the migration path.
 
 ### Two Matrix clients: keep the split, with a documented boundary (#76)
 
-The plugin has a hand-written Matrix client (`server/matrix/client.go`: requests,
+The plugin has a hand-written Matrix client (`server/matrix/`: requests,
 retry, rate limiting, media, room creation, application-service masquerading)
 and links mautrix-go for end-to-end encryption (`server/e2ee`).
 
