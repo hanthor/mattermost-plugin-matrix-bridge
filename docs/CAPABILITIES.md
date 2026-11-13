@@ -142,9 +142,10 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 | End-to-end encrypted rooms: reading | Matrix → Mattermost | ✅ | With "Bridge Encrypted Rooms" on, the bridge bot holds a device and the room keys, decrypts what Matrix people send, and posts it. Encryption ends at the bridge (docs/ENCRYPTION.md). Off by default; with it off, encrypted rooms are refused instead. |
 | End-to-end encrypted rooms: writing | Mattermost → Matrix | ✅ | Mattermost posts are encrypted with the bot's room key before they leave, so the homeserver only holds ciphertext. Messages, reactions and attachments; Matrix clients show the sender as the bridge's device, not as verified. |
 | A message the bridge cannot decrypt is announced | Matrix → Mattermost | ✅ | When an encrypted message cannot be read (the bridge was not given its key, for example because it was sent before the bridge joined), the channel gets a short notice from the sender instead of nothing, once per message. |
-| The bridge's encryption device can be verified | Mattermost → Matrix | ✅ | /matrix encryption-verify confirm (system administrators) gives the bridge bot a cross-signing identity and signs its device, so clients stop warning about messages that come from Mattermost. The recovery key is shown once in the reply and is not stored by the bridge; losing it and the bridge's stored state means a new device. Not yet: server-side key backup. |
+| The bridge's encryption device can be verified | Mattermost → Matrix | ✅ | /matrix encryption-verify confirm (system administrators) gives the bridge bot a cross-signing identity and signs its device, so clients stop warning about messages that come from Mattermost. The recovery key is shown once in the reply and is not stored by the bridge; losing it and the bridge's stored state means a new device. |
 | Encryption turned on in a room that is already bridged | Mattermost → Matrix | ✅ | When a bridged room turns end-to-end encryption on, the next Mattermost post is sent encrypted (never as plaintext) and encrypted messages from Matrix are read. |
 | A new room key after a member leaves | Mattermost → Matrix | ✅ | While nobody leaves, the bridge reuses the room key; after a member leaves an encrypted room it starts a new one, so the person who left cannot read later messages. |
+| Encryption keys are backed up and restored | Matrix → Mattermost | ✅ | With Back Up Encryption Keys on, the bridge keeps a copy of its room keys on the homeserver, encrypted with a backup key it keeps sealed in Mattermost's database. After losing its whole encryption state it restores them and reads messages it could not read on its own. The sealed key sits next to the state it protects: /matrix encryption-backup-key shows it for safekeeping elsewhere, and the Encryption Backup Key setting supplies it after losing the database (tested on the real stack, with a control that shows nothing comes back without the backup) or rotating the appservice token (unit-tested only). /matrix history from-matrix reads encrypted events it holds keys for. |
 
 ## Integration
 
@@ -199,7 +200,7 @@ Legend: ✅ supported · 🟡 partial · ❌ gap · — not applicable
 
 ## Totals
 
-- ✅ supported: 102
+- ✅ supported: 103
 - 🟡 partial: 4
 - ❌ gap: 5
 - — n/a: 0

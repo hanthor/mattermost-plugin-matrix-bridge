@@ -151,6 +151,16 @@ func (c *Client) InviteUserToRoom(roomID, userID string) error {
 			return nil // Not an error - user is already in the room
 		}
 
+		// Homeservers word this refusal differently ("already joined",
+		// "cannot invite user that is joined or banned"), so a forbidden invite is
+		// settled by asking what the person's membership actually is.
+		if matrixErr.ErrCode == "M_FORBIDDEN" {
+			if state, err := c.membershipOf(roomID, userID); err == nil && (state == "join" || state == "invite") {
+				c.logger.LogDebug("User already joined or invited to Matrix room, skipping", "room_id", roomID, "user_id", userID, "membership", state)
+				return nil
+			}
+		}
+
 		c.logger.LogWarn("Failed to invite user to Matrix room", "status_code", resp.StatusCode, "matrix_error", matrixErr.ErrCode, "error_message", matrixErr.ErrMsg, "room_id", roomID, "user_id", userID)
 		return matrixErr
 	}
@@ -1042,4 +1052,40 @@ func (c *Client) RemoveMattermostChannelID(roomID string) error {
 // whether a new direct or group room starts with end-to-end encryption.
 func (c *Client) SetEncryptDirectRooms(fn func() bool) {
 	c.encryptDirectRooms = fn
+}
+
+// membershipOf returns a person's membership of a room ("join", "invite",
+// "leave", "ban", ...) as the bridge bot can see it, or "" when they have none.
+func (c *Client) membershipOf(roomID, userID string) (string, error) {
+	if c.serverURL == "" || c.asToken == "" {
+		return "", errors.New("matrix client not configured")
+	}
+	requestURL := c.serverURL + "/_matrix/client/v3/rooms/" + url.PathEscape(roomID) + "/state/m.room.member/" + url.PathEscape(userID)
+	req, err := http.NewRequest("GET", requestURL, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create membership request")
+	}
+	req.Header.Set("Authorization", "Bearer "+c.asToken)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to send membership request")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read membership response")
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get membership: %d %s", resp.StatusCode, string(body))
+	}
+	var ev struct {
+		Membership string `json:"membership"`
+	}
+	if err := json.Unmarshal(body, &ev); err != nil {
+		return "", errors.Wrap(err, "failed to parse membership")
+	}
+	return ev.Membership, nil
 }

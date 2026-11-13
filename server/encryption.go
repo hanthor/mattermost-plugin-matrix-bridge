@@ -53,6 +53,22 @@ func (p *Plugin) CrossSignBridgeDevice(userID string) (string, error) {
 	return mgr.CrossSign(ctx)
 }
 
+// EncryptionBackupKey implements command.PluginAccessor: the key protecting the
+// bridge's key backup, for a system administrator.
+func (p *Plugin) EncryptionBackupKey(userID string) (string, error) {
+	if !p.API.HasPermissionTo(userID, model.PermissionManageSystem) {
+		return "", errors.New("only system administrators can do this")
+	}
+	mgr := p.cryptoManager()
+	if mgr == nil {
+		return "", errors.New("encryption is not running; turn on Bridge Encrypted Rooms first")
+	}
+	if !mgr.BackupEnabled() {
+		return "", errors.New("key backup is not running; turn on Back Up Encryption Keys (and check the log if it is on)")
+	}
+	return mgr.BackupKey()
+}
+
 // stopEncryption shuts the bot's device down.
 func (p *Plugin) stopEncryption() {
 	p.encryption.mu.Lock()
@@ -95,6 +111,11 @@ func (p *Plugin) startEncryption() {
 				Box:       secretbox.New(secretFor(p.API, cfg), "e2ee-pickle-key"),
 				Log:       zerolog.New(pluginLogWriter{p.logger}).Level(zerolog.InfoLevel),
 				IsManaged: func(u id.UserID) bool { return p.isBridgeAccount(string(u)) },
+				// The backup key is sealed with its own purpose, so it cannot be
+				// opened with the pickle key's box.
+				BackupBox: secretbox.New(secretFor(p.API, cfg), "e2ee-backup-key"),
+				KeyBackup: cfg.EncryptionKeyBackup,
+				BackupKey: cfg.EncryptionBackupKey,
 			})
 			if err == nil {
 				p.encryption.mu.Lock()
@@ -172,6 +193,41 @@ func toMautrixEvent(ev MatrixEvent) (*event.Event, error) {
 // decryptMatrixEvent turns an m.room.encrypted event into the event it holds.
 // It reports false when the event cannot be read, in which case it should be
 // dropped.
+// readOldEncryptedEvent decrypts an event from a room's history with the keys
+// the bridge holds now. It is quiet: no waiting for a key that is not coming and
+// no notice in the channel, which is what decryptMatrixEvent does for live
+// events. It reports false when the event cannot be read.
+func (p *Plugin) readOldEncryptedEvent(ev MatrixEvent) (MatrixEvent, bool) {
+	mgr := p.cryptoManager()
+	if mgr == nil {
+		return ev, false
+	}
+	in, err := toMautrixEvent(ev)
+	if err != nil {
+		return ev, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	dec, err := mgr.DecryptNow(ctx, in)
+	if err != nil {
+		return ev, false
+	}
+	content := dec.Content.VeryRaw
+	if len(content) == 0 {
+		if content, err = json.Marshal(&dec.Content); err != nil {
+			return ev, false
+		}
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(content, &parsed); err != nil {
+		return ev, false
+	}
+	out := ev
+	out.Type = dec.Type.Type
+	out.Content = parsed
+	return out, true
+}
+
 func (p *Plugin) decryptMatrixEvent(ev MatrixEvent) (MatrixEvent, bool) {
 	mgr := p.cryptoManager()
 	if mgr == nil {

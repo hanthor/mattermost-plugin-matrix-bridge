@@ -18,6 +18,7 @@ Complete reference for all `/matrix` slash commands available in the Mattermost-
 | [`/matrix status`](#matrix-status) | Check bridge status | `/matrix status` |
 | [`/matrix dm`](#matrix-dm) | Agree to bridge your direct and group messages | `/matrix dm on` |
 | [`/matrix doctor`](#matrix-doctor) | Check the setup and this channel, with what to fix | `/matrix doctor` |
+| [`/matrix encryption-backup-key`](#matrix-encryption-backup-key) | Show the key protecting the bridge's encryption key backup | `/matrix encryption-backup-key` |
 | [`/matrix encryption-verify`](#matrix-encryption-verify-confirm) | Verify the bridge's encryption device; shows a recovery key once | `/matrix encryption-verify confirm` |
 | [`/matrix repair`](#matrix-repair) | Make this channel's room match its members | `/matrix repair` |
 | [`/matrix retry`](#matrix-retry) | Send changes that could not be delivered again | `/matrix retry` |
@@ -608,7 +609,8 @@ new messages.
 
 Each run reads up to 2,000 events (default 200) and skips what is already
 imported, the bridge's own messages, and events the bridge cannot read
-(encrypted rooms without keys; they are counted in the preview). Run it again
+(encrypted events are read when the bridge holds the room key, including keys
+restored from its key backup; the rest are counted in the preview). Run it again
 for older history. Only system administrators can run it; the person who
 started it is told when it finishes.
 
@@ -866,6 +868,15 @@ warning shield on messages that come from Mattermost. Without `confirm` it only
 explains. With `confirm` it prints a **recovery key once**, which the bridge
 does not keep: save it in a password manager. It refuses to run if the identity
 already exists. See [ENCRYPTION.md](ENCRYPTION.md).
+
+## `/matrix encryption-backup-key`
+
+System administrators, with **Back Up Encryption Keys** on. Shows the key that
+protects the bridge's encryption key backup on the homeserver, once, in a reply
+only you see. Keep it somewhere safe, apart from Mattermost's database: after
+the bridge loses its database, putting it in **Encryption Backup Key** lets the
+bridge restore its room keys. Anyone who has this key and the homeserver's data
+can read the backed-up keys. See [ENCRYPTION.md](ENCRYPTION.md).
 
 ## `/matrix welcome [confirm]`
 

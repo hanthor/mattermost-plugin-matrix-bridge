@@ -38,6 +38,15 @@ type Options struct {
 	IsManaged func(id.UserID) bool
 	// Box seals the key that protects the stored Olm state; nil leaves it plain.
 	Box *secretbox.Box
+	// KeyBackup keeps a copy of every room key on the homeserver (backup.go).
+	// BackupKey, when set and no key is stored yet, is the backup key to use
+	// instead of making a new one: it is how an administrator restores after
+	// losing the whole key-value store.
+	KeyBackup bool
+	BackupKey string
+	// BackupBox seals the backup key in the key-value store; it should not be
+	// the same box as Box, so that one purpose cannot open the other's secret.
+	BackupBox *secretbox.Box
 }
 
 // Manager is the bridge bot's encryption device.
@@ -52,6 +61,11 @@ type Manager struct {
 	shareMu  sync.Mutex
 	closed   bool
 	deviceID id.DeviceID
+
+	// freshDevice is set when start created a new device rather than resuming
+	// the one in the store.
+	freshDevice bool
+	backup      *backupState
 }
 
 // New creates (or restores) the bot's device and uploads its keys.
@@ -77,6 +91,13 @@ func New(ctx context.Context, opts Options) (*Manager, error) {
 		store.Close()
 		return nil, err
 	}
+	if opts.KeyBackup {
+		// A backup that cannot start is reported, not fatal: the bridge still
+		// reads and writes encrypted rooms without it.
+		if err := m.setupBackup(ctx, m.freshDevice); err != nil {
+			opts.Log.Warn().Err(err).Msg("could not start the key backup")
+		}
+	}
 	return m, nil
 }
 
@@ -90,6 +111,7 @@ func (m *Manager) start(ctx context.Context) error {
 		}
 	}
 	isExisting := deviceID != ""
+	m.freshDevice = !isExisting
 
 	if m.opts.MSC4190 {
 		if err := m.client.CreateDeviceMSC4190(ctx, deviceID, deviceDisplayName); err != nil {
@@ -185,6 +207,7 @@ func (m *Manager) Close() {
 	}
 	m.closed = true
 	m.mu.Unlock()
+	m.stopBackup()
 	m.store.Close()
 }
 
@@ -249,6 +272,9 @@ func (m *Manager) HandleExtras(ctx context.Context, x *Extras) {
 		}
 		m.mach.HandleToDeviceEvent(ctx, evt)
 	}
+	if len(toDevice) > 0 {
+		m.KickBackup() // new room keys may have arrived
+	}
 	if dl := x.deviceLists(); dl != nil {
 		m.mach.HandleDeviceLists(ctx, dl, "")
 	}
@@ -293,6 +319,17 @@ func (m *Manager) Decrypt(ctx context.Context, evt *event.Event) (*event.Event, 
 	return m.mach.DecryptMegolmEvent(ctx, evt)
 }
 
+// DecryptNow reads an m.room.encrypted event with the keys the bridge holds
+// now, without waiting for a missing one. It is for reading old events, where
+// a key that is not here is not about to arrive.
+func (m *Manager) DecryptNow(ctx context.Context, evt *event.Event) (*event.Event, error) {
+	evt.Type.Class = event.MessageEventType
+	if err := evt.Content.ParseRaw(evt.Type); err != nil && !errors.Is(err, event.ErrContentAlreadyParsed) {
+		return nil, errors.Wrap(err, "could not parse the encrypted event")
+	}
+	return m.mach.DecryptMegolmEvent(ctx, evt)
+}
+
 func isMissingKey(err error) bool {
 	return errors.Is(err, crypto.ErrNoSessionFound) || errors.Is(err, crypto.ErrGroupSessionWithheld)
 }
@@ -319,6 +356,7 @@ func (m *Manager) Prepare(ctx context.Context, roomID, eventType string, content
 	if err != nil {
 		return eventType, content, errors.Wrap(err, "could not encrypt the event")
 	}
+	m.KickBackup() // a new room key of the bot's own may have been made
 	return event.EventEncrypted.Type, enc, nil
 }
 
