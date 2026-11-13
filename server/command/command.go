@@ -149,6 +149,7 @@ func buildMatrixAutocompleteData() *model.AutocompleteData {
 	invite := model.NewAutocompleteData("invite", "@user:server", "Invite a Matrix user to this channel's room")
 	invite.AddTextArgument("The Matrix user ID, for example @ada:example.org", "@user:server", "")
 	matrixData.AddCommand(invite)
+	matrixData.AddCommand(model.NewAutocompleteData("encryption-backup-key", "", "Show the key that protects the bridge's encryption key backup, to keep elsewhere"))
 	matrixData.AddCommand(model.NewAutocompleteData("encryption-verify", "[confirm]", "Verify the bridge's encryption device so clients stop warning about it (shows a recovery key once)"))
 	matrixData.AddCommand(model.NewAutocompleteData("doctor", "", "Check the bridge setup and this channel, with what to fix"))
 	matrixData.AddCommand(model.NewAutocompleteData("retry", "", "Replay changes that could not be delivered across the bridge"))
@@ -415,6 +416,8 @@ func (c *Handler) executeMatrixCommand(args *model.CommandArgs) *model.CommandRe
 		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: c.plugin.Doctor(args.ChannelId)}
 	case "encryption-verify":
 		return c.executeEncryptionVerify(args)
+	case "encryption-backup-key":
+		return c.executeEncryptionBackupKey(args)
 	case "retry":
 		n, err := c.plugin.RetryDeadLetters()
 		if err != nil {
@@ -464,7 +467,7 @@ func (c *Handler) checkCommandPermission(args *model.CommandArgs, subcommand str
 	}
 
 	switch subcommand {
-	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "welcome", "erase", "retry", "doctor", "encryption-verify":
+	case "map_user", "backfill", "migrate", "metrics", "history", "migrate-team", "welcome", "erase", "retry", "doctor", "encryption-verify", "encryption-backup-key":
 		if !isSystemAdmin() {
 			return deny("❌ Only system administrators can run `/matrix " + subcommand + "`.")
 		}

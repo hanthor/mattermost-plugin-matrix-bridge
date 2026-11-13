@@ -72,6 +72,8 @@ func (m *mockPlugin) EncryptionSupported() bool { return false }
 
 func (m *mockPlugin) CrossSignBridgeDevice(string) (string, error) { return "EsT1 2345", nil }
 
+func (m *mockPlugin) EncryptionBackupKey(string) (string, error) { return "backupkey123", nil }
+
 func (m *mockPlugin) RepairMembership(string) (string, error)         { return "", nil }
 func (m *mockPlugin) InviteMatrixUser(string, string) (string, error) { return "", nil }
 func (m *mockPlugin) ImportMatrixHistory(string, string, int, bool) (string, error) {
@@ -673,4 +675,12 @@ func TestEncryptionVerifyShowsTheKeyOnlyOnConfirm(t *testing.T) {
 	done := h.executeEncryptionVerify(&model.CommandArgs{Command: "/matrix encryption-verify confirm"})
 	assert.Contains(t, done.Text, "EsT1 2345")
 	assert.Contains(t, done.Text, "shown once")
+}
+
+func TestEncryptionBackupKeyIsShownInACodeBlockWithAdvice(t *testing.T) {
+	h := &Handler{plugin: &mockPlugin{}}
+	resp := h.executeEncryptionBackupKey(&model.CommandArgs{Command: "/matrix encryption-backup-key"})
+	assert.Contains(t, resp.Text, "backupkey123")
+	assert.Contains(t, resp.Text, "apart from Mattermost's database")
+	assert.Equal(t, model.CommandResponseTypeEphemeral, resp.ResponseType, "only the administrator sees it")
 }

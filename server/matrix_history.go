@@ -66,9 +66,17 @@ func (p *Plugin) planMatrixHistory(channelID string, limit int) (*matrixHistoryP
 				continue
 			}
 			event.RoomID = roomID
+			if event.Type == "m.room.encrypted" {
+				// Read it if the bridge holds the room key (it kept it, or got it
+				// back from its key backup); otherwise count it as unreadable.
+				dec, ok := p.readOldEncryptedEvent(event)
+				if !ok {
+					plan.encrypted++
+					continue
+				}
+				event = dec
+			}
 			switch event.Type {
-			case "m.room.encrypted":
-				plan.encrypted++
 			case "m.room.message", "m.reaction":
 				if p.isBridgeAccount(event.Sender) {
 					plan.byBridge++

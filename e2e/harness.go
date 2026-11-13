@@ -138,6 +138,8 @@ type HarnessOptions struct {
 	DirectMessages bool
 	// EncryptDirectRooms makes the rooms created for them start encrypted.
 	EncryptDirectRooms bool
+	// EncryptionKeyBackup backs the bridge's room keys up to the homeserver.
+	EncryptionKeyBackup bool
 	// Federation deploys a second, ordinary homeserver (RemoteHSName) that
 	// federates with hs1, so rooms and people on another server can be tested.
 	Federation bool
@@ -171,16 +173,17 @@ func NewHarnessWithOptions(t *testing.T, opts HarnessOptions) *Harness {
 	h.Admin, h.AdminUser = mm.CreateAdmin(t, ctx)
 	h.Team = mm.CreateTeam(t, ctx, h.Admin, "e2e")
 	cfg := BridgeConfig{
-		MatrixServerURL:    fmt.Sprintf("http://%s:8008", HSName),
-		MatrixServerDomain: HSName,
-		ASToken:            asToken,
-		HSToken:            hsToken,
-		MirrorMode:         opts.MirrorMode,
-		CallsMode:          opts.CallsMode,
-		ElementCallURL:     opts.ElementCallURL,
-		Encryption:         opts.Encryption,
-		DirectMessages:     opts.DirectMessages,
-		EncryptDirectRooms: opts.EncryptDirectRooms,
+		MatrixServerURL:     fmt.Sprintf("http://%s:8008", HSName),
+		MatrixServerDomain:  HSName,
+		ASToken:             asToken,
+		HSToken:             hsToken,
+		MirrorMode:          opts.MirrorMode,
+		CallsMode:           opts.CallsMode,
+		ElementCallURL:      opts.ElementCallURL,
+		Encryption:          opts.Encryption,
+		DirectMessages:      opts.DirectMessages,
+		EncryptDirectRooms:  opts.EncryptDirectRooms,
+		EncryptionKeyBackup: opts.EncryptionKeyBackup,
 	}
 	if opts.MirrorMode {
 		admin := deployment.Register(t, HSName, helpers.RegistrationOpts{LocalpartSuffix: "matrixadmin", IsAdmin: true})

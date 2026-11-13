@@ -180,6 +180,9 @@ type PluginAccessor interface {
 	// CrossSignBridgeDevice verifies the bridge bot's device and returns the
 	// recovery key, to be shown once and not stored.
 	CrossSignBridgeDevice(userID string) (string, error)
+	// EncryptionBackupKey returns the key that protects the bridge's key
+	// backup on the homeserver, for an administrator to keep elsewhere.
+	EncryptionBackupKey(userID string) (string, error)
 
 	// Mirror mode: account mode and claiming (see docs/CALLS_AND_MIRROR_MODE.md)
 	MirrorStatus() MirrorStatus

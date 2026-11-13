@@ -87,9 +87,24 @@ device.
   stop warning about it. It prints a **recovery key once**; the bridge does not
   store it, so save it in a password manager. It refuses to run again once the
   identity exists, so it can never replace one that people already trust.
-- **Key backup** is not implemented. Losing the stored keys (and the recovery
-  key) means starting a new device, after which older messages stay unreadable
-  to the bridge.
+- **Key backup** (off by default: **Back Up Encryption Keys**). The bridge keeps
+  a copy of its room keys on the homeserver, encrypted with a backup key it
+  keeps **sealed in Mattermost's database** (the same protection as the other
+  secrets, see OPERATIONS.md). If the bridge loses its encryption state, it
+  starts a new device, restores the keys, and can read earlier messages again;
+  `/matrix history from-matrix` then imports the ones it could not read before
+  (tested, with a control that shows nothing comes back without the backup).
+  - The sealed key sits next to the state it protects, so it covers losing the
+    encryption state (a failed save, a partial restore), **not** losing the whole
+    database. For that, run `/matrix encryption-backup-key` (system
+    administrators) once, keep the key somewhere safe apart from Mattermost, and
+    after a loss put it in **Encryption Backup Key** in the plugin settings
+    (tested). The same setting recovers after the appservice token was rotated,
+    which makes the sealed key unreadable.
+  - Whoever has the backup key and the homeserver's data can read the backed-up
+    keys, and with them the messages. Treat the key like the recovery key.
+  - Without backup, losing the stored keys (and the recovery key) means a new
+    device and earlier messages the bridge cannot read.
 
 ## If something is wrong
 

@@ -161,3 +161,18 @@ func (c *Handler) executeEncryptionVerify(args *model.CommandArgs) *model.Comman
 	}
 	return reply("✅ The bridge's device is verified.\n\nRecovery key (shown once, save it now):\n```\n" + key + "\n```")
 }
+
+// executeEncryptionBackupKey shows the key that protects the bridge's key
+// backup. It is what restores the room keys after the bridge loses its whole
+// database, so it is shown only to a system administrator, on request.
+func (c *Handler) executeEncryptionBackupKey(args *model.CommandArgs) *model.CommandResponse {
+	reply := func(text string) *model.CommandResponse {
+		return &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: text}
+	}
+	key, err := c.plugin.EncryptionBackupKey(args.UserId)
+	if err != nil {
+		return reply("❌ " + err.Error())
+	}
+	return reply("The key that protects the bridge's encryption key backup:\n```\n" + key + "\n```\n" +
+		"Keep it somewhere safe, apart from Mattermost's database. With it the bridge can restore its room keys from the homeserver after losing its database (put it in **Encryption Backup Key** in the plugin settings). Anyone who has it and the homeserver's data can read the backed-up keys.")
+}

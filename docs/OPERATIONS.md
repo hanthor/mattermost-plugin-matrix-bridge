@@ -146,6 +146,7 @@ The behaviours above are covered by unit tests that simulate a second node.
 |---|---|---|
 | Personal Matrix access tokens (`!mattermost login`) | Key-value store | Sealed with AES-256-GCM; the key is derived from the appservice token in the plugin settings, which is kept apart from the key-value store. Tokens from earlier versions are sealed the next time they are read. |
 | Encryption key for the bot's Olm/Megolm state | Key-value store | Sealed in the same way. The state itself is encrypted with that key. |
+| Backup key for the bridge's encryption key backup (when **Back Up Encryption Keys** is on) | Key-value store | Sealed in the same way (with its own purpose). `/matrix encryption-backup-key` shows it to a system administrator; see [ENCRYPTION.md](ENCRYPTION.md). |
 | Appservice, homeserver, metrics, admin and MAS secrets | Plugin settings | Declared secret, so the System Console masks them. |
 
 A copy of the key-value store alone (a database dump of that table, a support
@@ -157,7 +158,9 @@ with a personal token then fall back to a ghost until they send
 `!mattermost login` again, and the encryption state cannot be opened: the bridge
 refuses to start encryption rather than create a new device silently. Plan a
 rotation for a quiet time, and see [ENCRYPTION.md](ENCRYPTION.md) before
-rotating when encrypted rooms are bridged.
+rotating when encrypted rooms are bridged. With key backup on and the backup key
+saved elsewhere, the bridge can restore its room keys after a rotation by
+supplying that key in **Encryption Backup Key**.
 
 ## Public routes
 

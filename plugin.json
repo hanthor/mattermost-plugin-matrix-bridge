@@ -89,6 +89,21 @@
                 "default": false
             },
             {
+                "key": "encryption_key_backup",
+                "display_name": "Back Up Encryption Keys",
+                "type": "bool",
+                "help_text": "When Bridge Encrypted Rooms is on, keep a copy of the bridge's room keys on the Matrix homeserver, encrypted with a backup key the bridge keeps sealed in Mattermost's database. If the bridge loses its encryption state, it restores the keys and can read earlier messages again. The sealed key sits next to the state it protects: to survive losing the whole database, copy the key with /matrix encryption-backup-key and put it in Encryption Backup Key below. Off by default.",
+                "default": false
+            },
+            {
+                "key": "encryption_backup_key",
+                "display_name": "Encryption Backup Key",
+                "type": "text",
+                "help_text": "Only for recovery: the backup key shown by /matrix encryption-backup-key, supplied after the bridge lost its database so it can restore its room keys from the homeserver. Leave empty otherwise. Used only when the bridge has no backup key of its own stored.",
+                "default": "",
+                "secret": true
+            },
+            {
                 "key": "encrypt_direct_rooms",
                 "display_name": "Create Direct Message Rooms Encrypted",
                 "type": "bool",
