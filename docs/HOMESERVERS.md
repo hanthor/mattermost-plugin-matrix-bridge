@@ -20,21 +20,31 @@ Run it with `make e2e-tuwunel`.
 
 ## Results on Tuwunel
 
-On the full suite 47 of 57 tests passed on the first run. One failure was a
-bridge bug and is fixed: the bridge recognised "already in the room" by
-Synapse's error text, so inviting someone who was already joined failed on
-Tuwunel. It now reads the person's membership.
+`make e2e-tuwunel` (also a CI job) runs the whole suite. After the fixes below,
+every test passes except the ones skipped for the reasons listed.
 
-Known differences, skipped by `make e2e-tuwunel` where noted:
+Fixed in the bridge: it recognised "already in the room" by Synapse's error
+text, so inviting someone who was already joined failed on Tuwunel. It now
+reads the person's membership.
 
-- **Structure backfill** (skipped): the room's initial name arrives after
-  `/matrix backfill structure` and renames the channel back, so the test's
-  ordering does not hold. The bridge's own rename succeeds.
-- **Archive** (skipped): the bridge's leave call succeeds but the bot's
-  membership does not show `leave` within the test's wait. The cause is not
-  confirmed.
-- **Typing, presence and the outage test**: failed in the first run and have not
-  been classified; they still run.
+Fixed in the test setup, not the bridge:
+
+- **Typing.** Complement writes the registration with `push_ephemeral`;
+  Tuwunel reads the spec's `receive_ephemeral` (the registration the plugin
+  offers for download has it). The Tuwunel image adds it at start.
+- **Outage test** read the room with a start token (`from=s0`) that Tuwunel
+  rejects; it now reads back from the end of the room.
+- **Moderation test** waited on a sync that matched at once; it now waits on the
+  account's membership.
+
+Skipped, with the reason:
+
+| Test | Reason |
+|---|---|
+| `TestPresenceFromMatrix` | Tuwunel does not push presence to appservices (only typing and read receipts), so Matrix presence cannot reach Mattermost. A Tuwunel limit. |
+| `TestBackfillStructure` | The room's initial name arrives after `/matrix backfill structure` and renames the channel back, so the test's ordering does not hold. The bridge's own rename succeeds. |
+| `TestArchivingAChannelTellsTheRoom`, and the archive probe in `TestCapabilityGaps` | The bridge's leave call succeeds but the bot's membership does not show `leave` within the wait. The cause is not confirmed. |
+| `TestRoomKeyChangesWhenAMemberLeaves` | The room key changed although nobody left. The encryption library starts a new key on any membership event that does not say what it replaced; the likely cause is that Tuwunel's events lack that field. Not confirmed. The extra key is harmless, but the "unchanged" check fails. |
 
 This is a compatibility check, not a support statement: encryption in
 particular is only tested against Synapse (it needs MSC3202 and related

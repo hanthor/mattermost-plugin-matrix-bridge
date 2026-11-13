@@ -1,6 +1,8 @@
 # Complement-ready Tuwunel: Debian with a shell and openssl, the prebuilt
 # Tuwunel binary, and Tuwunel's own Complement configuration.
-FROM ghcr.io/matrix-construct/tuwunel:latest AS tuwunel
+# Pinned by digest; bump it on purpose.
+ARG TUWUNEL_IMAGE=ghcr.io/matrix-construct/tuwunel@sha256:3dde1e9b3503c68218f95415ec3ebff522bd945065ba76019d408543540d1730
+FROM ${TUWUNEL_IMAGE} AS tuwunel
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends bash openssl ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
