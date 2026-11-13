@@ -136,7 +136,7 @@ func (m *Manager) ensureBackupVersion(ctx context.Context, key *backup.MegolmBac
 		return latest.Version, nil
 	}
 	var httpErr mautrix.HTTPError
-	if err != nil && !(errors.As(err, &httpErr) && httpErr.RespError != nil && httpErr.RespError.ErrCode == "M_NOT_FOUND") {
+	if err != nil && (!errors.As(err, &httpErr) || httpErr.RespError == nil || httpErr.RespError.ErrCode != "M_NOT_FOUND") {
 		return "", err
 	}
 	created, err := m.client.CreateKeyBackupVersion(ctx, &mautrix.ReqRoomKeysVersionCreate[backup.MegolmAuthData]{
