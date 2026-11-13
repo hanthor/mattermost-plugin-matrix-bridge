@@ -1,5 +1,8 @@
 # Include custom targets and environment variables here
 
+# Tests that fail on Tuwunel for reasons that are not bridge bugs (docs/HOMESERVERS.md).
+TUWUNEL_SKIP ?= ^(TestArchivingAChannelTellsTheRoom|TestBackfillStructure)$$
+
 # Complement-compatible homeserver image used by the end-to-end suite.
 COMPLEMENT_BASE_IMAGE ?= ghcr.io/element-hq/synapse/complement-synapse:develop
 
@@ -7,6 +10,17 @@ COMPLEMENT_BASE_IMAGE ?= ghcr.io/element-hq/synapse/complement-synapse:develop
 .PHONY: e2e
 e2e: dist
 	cd e2e && COMPLEMENT_BASE_IMAGE=$(COMPLEMENT_BASE_IMAGE) $(GO) test -count=1 -v -timeout 60m ./... $(E2E_TEST_FLAGS)
+
+## Builds a Complement image of Tuwunel (see docs/HOMESERVERS.md).
+.PHONY: e2e-tuwunel-image
+e2e-tuwunel-image:
+	docker build -t local/complement-tuwunel e2e/homeservers/tuwunel
+
+## Runs the end-to-end suite against Tuwunel instead of Synapse. Tests that
+## need Synapse-only behaviour are listed in docs/HOMESERVERS.md and skipped.
+.PHONY: e2e-tuwunel
+e2e-tuwunel: dist e2e-tuwunel-image
+	cd e2e && COMPLEMENT_BASE_IMAGE=local/complement-tuwunel $(GO) test -count=1 -v -timeout 60m ./... -skip '$(TUWUNEL_SKIP)'
 
 ## Checks that the end-to-end suite compiles without running it.
 .PHONY: e2e-check
