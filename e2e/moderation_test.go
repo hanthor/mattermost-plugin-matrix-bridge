@@ -52,7 +52,9 @@ func TestModerationCrossesTheBridge(t *testing.T) {
 	t.Run("a Matrix moderator kicking a Mattermost person's account removes them from the channel", func(t *testing.T) {
 		_, _, err := h.Admin.AddChannelMember(ctx, channel.Id, carol.Id)
 		require.NoError(t, err)
-		alice.MustSyncUntil(t, client.SyncReq{}, client.SyncJoinedTo(carolGhost, roomID))
+		WaitFor(t, bridgeTimeout, "the account to rejoin the room", func() bool {
+			return member(carolGhost).Get("membership").Str == "join"
+		})
 		require.True(t, inChannel(carol.Id))
 
 		alice.MustDo(t, "POST", []string{"_matrix", "client", "v3", "rooms", roomID, "kick"}, client.WithJSONBody(t, map[string]any{"user_id": carolGhost, "reason": "off topic"}))

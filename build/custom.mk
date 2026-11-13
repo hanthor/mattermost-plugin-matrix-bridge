@@ -1,7 +1,7 @@
 # Include custom targets and environment variables here
 
 # Tests that fail on Tuwunel for reasons that are not bridge bugs (docs/HOMESERVERS.md).
-TUWUNEL_SKIP ?= ^(TestArchivingAChannelTellsTheRoom|TestBackfillStructure)$$
+TUWUNEL_SKIP ?= ^(TestArchivingAChannelTellsTheRoom|TestBackfillStructure|TestPresenceFromMatrix|TestRoomKeyChangesWhenAMemberLeaves)$$|^TestCapabilityGaps$$/^archiving_the_channel_tombstones_the_room$$
 
 # Complement-compatible homeserver image used by the end-to-end suite.
 COMPLEMENT_BASE_IMAGE ?= ghcr.io/element-hq/synapse/complement-synapse:develop

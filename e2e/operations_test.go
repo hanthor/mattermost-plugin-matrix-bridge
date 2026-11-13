@@ -184,7 +184,7 @@ func TestMattermostChangesSurviveAHomeserverOutage(t *testing.T) {
 	var order []string
 	WaitFor(t, 3*time.Minute, "both posts to reach the room", func() bool {
 		res := back.Do(t, http.MethodGet, []string{"_matrix", "client", "v3", "rooms", roomID, "messages"},
-			client.WithQueries(url.Values{"dir": {"f"}, "limit": {"100"}, "from": {"s0"}}))
+			client.WithQueries(url.Values{"dir": {"b"}, "limit": {"100"}}))
 		defer func() { _ = res.Body.Close() }()
 		if res.StatusCode != http.StatusOK {
 			return false
@@ -196,6 +196,11 @@ func TestMattermostChangesSurviveAHomeserverOutage(t *testing.T) {
 			}
 			return true
 		})
+		// Newest first; read back from the end of the room, which every
+		// homeserver accepts (not all take a start token).
+		for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
+			order[i], order[j] = order[j], order[i]
+		}
 		return len(order) >= 2
 	})
 	assert.Equal(t, []string{"first post during the outage", "second post during the outage"}, order)
