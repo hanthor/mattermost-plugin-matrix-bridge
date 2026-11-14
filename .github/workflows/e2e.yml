@@ -92,6 +92,55 @@ jobs:
         if: failure()
         run: docker ps -a --format '{{.Names}}' | xargs -r -I{} sh -c 'echo "=== {} ==="; docker logs {} 2>&1 | tail -n 300'
 
+  mattermost-versions:
+    name: Mattermost ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest server the plugin declares (plugin.json min_server_version),
+          # and the unlicensed Team Edition image with no enterprise code at all.
+          - name: 10.7.1 (minimum supported)
+            image: mattermost/mattermost-enterprise-edition:10.7.1
+          - name: 12.1.0 Team Edition
+            image: mattermost/mattermost-team-edition:12.1.0
+    env:
+      COMPLEMENT_BASE_IMAGE: ghcr.io/element-hq/synapse/complement-synapse@sha256:1b63e5c885f581d14d6b48a99f1c0835a5011efbbae1da11f067e8bc4db2a862
+      E2E_MATTERMOST_IMAGE: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            e2e/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Pull images
+        run: |
+          docker pull "$COMPLEMENT_BASE_IMAGE"
+          docker pull "$E2E_MATTERMOST_IMAGE"
+          docker pull postgres:16-alpine
+
+      - name: Build plugin bundle
+        run: make dist
+
+      - name: Run the core sync tests
+        run: make e2e E2E_TEST_FLAGS="-run 'TestMatrixToMattermost|TestMattermostToMatrix|TestMattermostClientView|TestModerationCrossesTheBridge|TestDirectMessagesOptIn'"
+
+      - name: Upload Mattermost and homeserver logs on failure
+        if: failure()
+        run: docker ps -a --format '{{.Names}}' | xargs -r -I{} sh -c 'echo "=== {} ==="; docker logs {} 2>&1 | tail -n 300'
+
   mattermost-ui:
     name: Mattermost web client
     runs-on: ubuntu-latest

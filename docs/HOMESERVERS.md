@@ -50,7 +50,20 @@ This is a compatibility check, not a support statement: encryption in
 particular is only tested against Synapse (it needs MSC3202 and related
 options, see [ENCRYPTION.md](ENCRYPTION.md)).
 
-## Not yet covered
+## Mattermost versions
 
-- Mattermost Team Edition and a matrix of Mattermost versions.
+CI runs the core sync tests (Matrix to Mattermost, Mattermost to Matrix, the
+connected-client view, moderation and the direct message opt-in) on:
+
+| Server | Why |
+|---|---|
+| 10.7.1 Enterprise image, no license | The oldest server the plugin declares (`min_server_version` in `plugin.json`). |
+| 12.1.0 Team Edition image | No enterprise code at all. |
+
+The full suite runs on the pinned 12.1.0 Enterprise image. Shared Channels needs
+a license and is only exercised when `E2E_MM_LICENSE` is set.
+
+## Not covered
+
 - Dendrite and other homeservers.
+- The full suite on the older server and on Team Edition (only the core tests above).
