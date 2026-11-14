@@ -262,11 +262,31 @@ func TestMattermostClientView(t *testing.T) {
 
 	t.Run("a typing Matrix user shows as typing", func(t *testing.T) {
 		require.NotNil(t, root)
+		// Keep the typing indicator alive, but stop (and wait) when this
+		// subtest ends: a goroutine that outlives it would call t after the
+		// test completed and panic the whole run.
+		stop := make(chan struct{})
+		var sending sync.WaitGroup
+		sending.Add(1)
 		go func() {
+			defer sending.Done()
 			for i := 0; i < 5; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
 				alice.MustSendTyping(t, roomID, true, 30000)
-				time.Sleep(time.Second)
+				select {
+				case <-stop:
+					return
+				case <-time.After(time.Second):
+				}
 			}
+		}()
+		defer func() {
+			close(stop)
+			sending.Wait()
 		}()
 		ev := carolWS.wait(t, "the typing indicator", func(ev *model.WebSocketEvent) bool {
 			return ev.EventType() == model.WebsocketEventTyping && ev.GetBroadcast().ChannelId == channel.Id && ev.GetData()["user_id"] == root.UserId
